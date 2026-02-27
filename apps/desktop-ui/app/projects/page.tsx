@@ -428,7 +428,7 @@ function ProjectsContent() {
     <AppShell>
       <div className="flex-1 flex flex-col min-w-0 bg-linear-bg">
         <div className="border-b border-linear-border">
-          <div className="px-4 sm:px-6 py-4">
+          <div className="pl-[72px] pr-4 sm:pr-6 lg:px-6 py-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
               <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto">
                 <h1 className="text-xl font-semibold text-linear-text flex-shrink-0">Projects</h1>

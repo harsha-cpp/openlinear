@@ -258,7 +258,7 @@ export default function InboxPage() {
 
   return (
     <AppShell>
-      <header className="h-14 border-b border-linear-border flex items-center px-4 sm:px-6 bg-linear-bg gap-2 sm:gap-4" data-tauri-drag-region>
+      <header className="h-14 border-b border-linear-border flex items-center pl-[72px] pr-4 sm:pr-6 lg:px-6 bg-linear-bg gap-2 sm:gap-4" data-tauri-drag-region>
         <div className="flex items-center gap-3 min-w-0">
           <Inbox className="w-5 h-5 text-linear-text-secondary flex-shrink-0" />
           <h1 className="text-lg font-semibold truncate">Inbox</h1>

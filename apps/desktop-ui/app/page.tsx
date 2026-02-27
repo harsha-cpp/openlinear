@@ -73,7 +73,7 @@ function HomeContent() {
     if (projects.length === 0) {
       return (
         <AppShell>
-          <header className="min-h-14 border-b border-linear-border flex items-center px-4 sm:px-6 py-2 sm:py-0 bg-linear-bg gap-2 sm:gap-4" data-tauri-drag-region>
+          <header className="min-h-14 border-b border-linear-border flex items-center pl-[72px] pr-4 sm:pr-6 lg:px-6 py-2 sm:py-0 bg-linear-bg gap-2 sm:gap-4" data-tauri-drag-region>
             <div className="flex items-center gap-4 min-w-0">
               <h1 className="text-lg font-semibold truncate">Dashboard</h1>
             </div>
@@ -100,7 +100,7 @@ function HomeContent() {
     // Returning user with projects — show project selector
     return (
       <AppShell>
-          <header className="min-h-14 border-b border-linear-border flex items-center px-4 sm:px-6 py-2 sm:py-0 bg-linear-bg gap-2 sm:gap-4" data-tauri-drag-region>
+          <header className="min-h-14 border-b border-linear-border flex items-center pl-[72px] pr-4 sm:pr-6 lg:px-6 py-2 sm:py-0 bg-linear-bg gap-2 sm:gap-4" data-tauri-drag-region>
           <div className="flex items-center gap-4 min-w-0">
             <h1 className="text-lg font-semibold truncate">Dashboard</h1>
           </div>
@@ -167,7 +167,7 @@ function HomeContent() {
 
   return (
     <AppShell>
-      <header className="min-h-14 border-b border-linear-border flex flex-wrap items-center px-3 sm:px-6 py-2 sm:py-0 bg-linear-bg gap-2 sm:gap-4" data-tauri-drag-region>
+      <header className="min-h-14 border-b border-linear-border flex flex-wrap items-center pl-[72px] pr-3 sm:pr-6 lg:px-6 py-2 sm:py-0 bg-linear-bg gap-2 sm:gap-4" data-tauri-drag-region>
         <div className="flex items-center gap-4 min-w-0">
           <h1 className="text-lg font-semibold truncate">
             {headerLabel}

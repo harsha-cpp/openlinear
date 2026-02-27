@@ -1762,7 +1762,7 @@ function SettingsContent() {
 
   return (
     <AppShell>
-      <header className="h-14 border-b border-linear-border flex items-center px-4 sm:px-6 bg-linear-bg gap-2 sm:gap-4">
+      <header className="h-14 border-b border-linear-border flex items-center pl-[72px] pr-4 sm:pr-6 lg:px-6 bg-linear-bg gap-2 sm:gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <Settings className="w-4 h-4 text-linear-text-secondary flex-shrink-0" />
           <h1 className="text-lg font-semibold truncate">Settings</h1>
