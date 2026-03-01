@@ -35,20 +35,21 @@ export const ExecutionStatus = z.enum([
  * tool logs, or local file paths.
  */
 export const ExecutionMetadataSyncSchema = z.object({
+  // Versioning
+  version: z.literal('1.0').optional(),
+
   // Identifiers
   taskId: z.string(),
   runId: z.string(),
   
   // State
   status: ExecutionStatus,
+  progress: z.number().min(0).max(100).optional(),
   
   // Timing
   startedAt: z.string().datetime().optional(),
   completedAt: z.string().datetime().optional(),
   durationMs: z.number().int().min(0).optional(),
-  
-  // Progress
-  progress: z.number().int().min(0).max(100).optional(),
   
   // Git/PR references
   branch: z.string().optional(),
@@ -59,10 +60,6 @@ export const ExecutionMetadataSyncSchema = z.object({
   // Summary
   outcome: z.string().max(500).optional(),
   errorCategory: ErrorCategory.optional(),
-  
-  // Metrics
-  filesChanged: z.number().int().min(0).optional(),
-  toolsExecuted: z.number().int().min(0).optional(),
 }).strict(); // .strict() rejects unknown keys
 
 /**
@@ -176,7 +173,7 @@ export function validateExecutionMetadataMiddleware() {
   return (req: any, res: any, next: any) => {
     const result = safeValidateExecutionMetadataSync(req.body);
     
-    if (!result.success) {
+    if (!result.success && 'error' in result) {
       // Check if error is due to unrecognized keys (forbidden fields)
       const hasUnknownKeys = result.error.errors.some(e => 
         e.message.includes('Unrecognized key') || 
@@ -193,8 +190,10 @@ export function validateExecutionMetadataMiddleware() {
       });
     }
     
-    // Attach validated data to request
-    req.validatedMetadata = result.data;
-    next();
+    if (result.success && 'data' in result) {
+      // Attach validated data to request
+      req.validatedMetadata = result.data;
+      next();
+    }
   };
 }
