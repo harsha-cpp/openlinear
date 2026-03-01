@@ -115,6 +115,9 @@ jobs:
     name: Publish NPM Package
     needs: deploy
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -127,6 +130,6 @@ jobs:
       - name: Publish @openlinear/core (openlinear)
         run: |
           cd packages/openlinear
-          npm publish --access public
+          npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
