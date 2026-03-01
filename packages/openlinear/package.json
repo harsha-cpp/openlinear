@@ -5,7 +5,8 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kaizen403/openlinear"
+    "url": "git+https://github.com/kaizen403/openlinear.git",
+    "directory": "packages/openlinear"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
