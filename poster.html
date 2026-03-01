@@ -5,360 +5,251 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OpenLinear Neovim Poster</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Inter:wght@400;700;900&display=swap');
-
-        :root {
-            --bg-color: #0b0b12;
-            --surface: #13131f;
-            --primary: #8b5cf6;
-            --secondary: #3b82f6;
-            --accent: #10b981;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --border: rgba(255, 255, 255, 0.08);
-        }
-
         body {
-            background-color: var(--bg-color);
-            background-image: 
-                radial-gradient(circle at 15% 50%, rgba(139, 92, 246, 0.15), transparent 25%),
-                radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.15), transparent 25%);
-            color: var(--text-main);
-            font-family: 'Inter', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background-color: #ffffff;
+            color: #111111;
             margin: 0;
             padding: 40px;
             display: flex;
             justify-content: center;
-            align-items: center;
-            min-height: 100vh;
         }
 
-        .poster-container {
-            background: linear-gradient(145deg, var(--surface) 0%, #0a0a10 100%);
-            border: 1px solid var(--border);
-            border-radius: 24px;
-            padding: 60px 80px;
-            width: 1200px;
-            box-shadow: 
-                0 30px 60px rgba(0,0,0,0.6),
-                0 0 120px rgba(139, 92, 246, 0.2) inset,
-                0 0 0 1px rgba(255,255,255,0.05);
-            position: relative;
-            overflow: hidden;
-        }
-
-        /* Techy background grid */
-        .poster-container::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-image: linear-gradient(var(--border) 1px, transparent 1px),
-            linear-gradient(90deg, var(--border) 1px, transparent 1px);
-            background-size: 40px 40px;
-            opacity: 0.2;
-            z-index: 0;
-            pointer-events: none;
+        .poster {
+            width: 100%;
+            max-width: 1400px;
         }
 
         .header {
-            position: relative;
-            z-index: 1;
             text-align: center;
-            margin-bottom: 60px;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 40px;
+            margin-bottom: 40px;
+            border-bottom: 2px solid #111;
+            padding-bottom: 16px;
         }
 
         .header h1 {
-            font-family: 'JetBrains Mono', monospace;
+            font-size: 32px;
             font-weight: 800;
-            font-size: 5rem;
-            margin: 0;
-            letter-spacing: -2px;
-            background: linear-gradient(to right, #fff, var(--text-muted));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
             text-transform: uppercase;
+            letter-spacing: 4px;
+            margin: 0 0 8px 0;
         }
 
         .header .subtitle {
-            font-size: 1.5rem;
-            color: var(--primary);
-            font-weight: 700;
-            letter-spacing: 4px;
+            font-size: 14px;
+            color: #555;
             text-transform: uppercase;
-            margin-top: 10px;
+            letter-spacing: 2px;
         }
 
         .grid {
-            position: relative;
-            z-index: 1;
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 40px;
+            align-items: start;
         }
 
         .section {
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 30px;
-            backdrop-filter: blur(10px);
+            margin-bottom: 30px;
         }
 
         .section h2 {
-            font-family: 'JetBrains Mono', monospace;
-            color: var(--secondary);
-            font-size: 1.2rem;
+            font-size: 13px;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 1px;
+            color: #000;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 6px;
             margin-top: 0;
-            margin-bottom: 25px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            margin-bottom: 16px;
         }
 
-        .section h2::before {
-            content: '';
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            background-color: var(--primary);
-            border-radius: 50%;
-            box-shadow: 0 0 10px var(--primary);
-        }
-
-        .shortcut {
+        .item {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-            border-bottom: 1px dashed rgba(255,255,255,0.05);
-            padding-bottom: 8px;
-        }
-
-        .shortcut:last-child {
-            margin-bottom: 0;
-            border-bottom: none;
-            padding-bottom: 0;
+            align-items: baseline;
+            margin-bottom: 8px;
+            font-size: 13px;
         }
 
         .desc {
-            font-size: 0.95rem;
-            color: var(--text-muted);
-            font-weight: 500;
+            color: #333;
+            padding-right: 16px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .keys {
             display: flex;
-            gap: 6px;
+            gap: 4px;
+            flex-shrink: 0;
         }
 
         kbd {
-            background: rgba(0, 0, 0, 0.5);
-            border: 1px solid var(--border);
-            border-bottom: 2px solid rgba(255,255,255,0.1);
-            color: var(--accent);
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.9rem;
-            font-weight: 700;
-            padding: 4px 10px;
-            border-radius: 6px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+            background-color: #f4f4f5;
+            border: 1px solid #d4d4d8;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 11px;
+            color: #18181b;
+            font-weight: 500;
         }
 
         .footer {
-            position: relative;
-            z-index: 1;
             text-align: center;
-            margin-top: 50px;
-            font-family: 'JetBrains Mono', monospace;
-            color: var(--text-muted);
-            font-size: 0.9rem;
+            margin-top: 60px;
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
             letter-spacing: 1px;
-        }
-
-        .highlight-kbd {
-            color: #f472b6;
-            border-color: rgba(244, 114, 182, 0.3);
         }
     </style>
 </head>
 <body>
 
-    <div class="poster-container">
+    <div class="poster">
         <div class="header">
             <h1>OPENLINEAR</h1>
-            <div class="subtitle">Ultimate Neovim Workflow</div>
+            <div class="subtitle">Neovim Keybinding Reference</div>
         </div>
 
         <div class="grid">
             <div class="column">
-                <div class="section" style="margin-bottom: 40px;">
-                    <h2>Daily Essentials</h2>
-                    <div class="shortcut">
-                        <span class="desc">Find Files</span>
-                        <div class="keys"><kbd>Space</kbd><kbd>Space</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Grep Project</span>
-                        <div class="keys"><kbd>;</kbd><kbd>r</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">File Explorer</span>
-                        <div class="keys"><kbd>Space</kbd><kbd>e</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Oil File Manager</span>
-                        <div class="keys"><kbd>-</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Go to Definition</span>
-                        <div class="keys"><kbd>g</kbd><kbd>d</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Hover Docs</span>
-                        <div class="keys"><kbd>K</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Jump 10 Lines Up</span>
-                        <div class="keys"><kbd>⇧</kbd><kbd>Up</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Jump 10 Lines Down</span>
-                        <div class="keys"><kbd>⇧</kbd><kbd>Down</kbd></div>
-                    </div>
+                <div class="section">
+                    <h2>Movement</h2>
+                    <div class="item"><span class="desc">Left / Down / Up / Right</span><div class="keys"><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd></div></div>
+                    <div class="item"><span class="desc">Word Fwd / Back / End</span><div class="keys"><kbd>w</kbd><kbd>b</kbd><kbd>e</kbd></div></div>
+                    <div class="item"><span class="desc">Line Start / End</span><div class="keys"><kbd>0</kbd><kbd>$</kbd></div></div>
+                    <div class="item"><span class="desc">File Top / Bottom</span><div class="keys"><kbd>gg</kbd><kbd>G</kbd></div></div>
+                    <div class="item"><span class="desc">Half Page Up / Down</span><div class="keys"><kbd>⌃u</kbd><kbd>⌃d</kbd></div></div>
+                    <div class="item"><span class="desc">Full Page Up / Down</span><div class="keys"><kbd>⌃b</kbd><kbd>⌃f</kbd></div></div>
+                    <div class="item"><span class="desc">Jump 10 Lines Up/Dn</span><div class="keys"><kbd>⇧Up</kbd><kbd>⇧Dn</kbd></div></div>
+                    <div class="item"><span class="desc">Scroll Top/Mid/Bot</span><div class="keys"><kbd>zt</kbd><kbd>zz</kbd><kbd>zb</kbd></div></div>
+                    <div class="item"><span class="desc">Jump Back / Fwd</span><div class="keys"><kbd>⌃o</kbd><kbd>⌃m</kbd></div></div>
+                    <div class="item"><span class="desc">Match Bracket</span><div class="keys"><kbd>%</kbd></div></div>
                 </div>
 
                 <div class="section">
-                    <h2>AI Assistants</h2>
-                    <div class="shortcut">
-                        <span class="desc">Ask Avante AI</span>
-                        <div class="keys"><kbd>Space</kbd><kbd>a</kbd><kbd>a</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Edit with Avante</span>
-                        <div class="keys"><kbd>Space</kbd><kbd>a</kbd><kbd>e</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Accept Diff (Our)</span>
-                        <div class="keys"><kbd>c</kbd><kbd>o</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">99 AI Fill Body</span>
-                        <div class="keys"><kbd>Space</kbd><kbd>9</kbd><kbd>f</kbd></div>
-                    </div>
+                    <h2>Editing</h2>
+                    <div class="item"><span class="desc">Insert Before / After</span><div class="keys"><kbd>i</kbd><kbd>a</kbd></div></div>
+                    <div class="item"><span class="desc">Line Below / Above</span><div class="keys"><kbd>o</kbd><kbd>O</kbd></div></div>
+                    <div class="item"><span class="desc">Delete Line</span><div class="keys"><kbd>dd</kbd></div></div>
+                    <div class="item"><span class="desc">Yank Line</span><div class="keys"><kbd>yy</kbd></div></div>
+                    <div class="item"><span class="desc">Paste After / Before</span><div class="keys"><kbd>p</kbd><kbd>P</kbd></div></div>
+                    <div class="item"><span class="desc">Undo / Redo</span><div class="keys"><kbd>u</kbd><kbd>⌃r</kbd></div></div>
+                    <div class="item"><span class="desc">Change Line</span><div class="keys"><kbd>cc</kbd></div></div>
+                    <div class="item"><span class="desc">Change Inner Word</span><div class="keys"><kbd>ciw</kbd></div></div>
+                    <div class="item"><span class="desc">Delete Word Back</span><div class="keys"><kbd>dw</kbd></div></div>
+                    <div class="item"><span class="desc">Increment / Decrement</span><div class="keys"><kbd>+</kbd><kbd>-</kbd></div></div>
+                    <div class="item"><span class="desc">Safe Paste (No Reg)</span><div class="keys"><kbd>Spc</kbd><kbd>p</kbd></div></div>
+                    <div class="item"><span class="desc">Safe Delete (No Reg)</span><div class="keys"><kbd>Spc</kbd><kbd>d</kbd></div></div>
+                    <div class="item"><span class="desc">Safe Change (No Reg)</span><div class="keys"><kbd>Spc</kbd><kbd>c</kbd></div></div>
+                    <div class="item"><span class="desc">Toggle Comment</span><div class="keys"><kbd>g</kbd><kbd>c</kbd><kbd>c</kbd></div></div>
                 </div>
             </div>
 
             <div class="column">
-                <div class="section" style="margin-bottom: 40px;">
-                    <h2>Code Actions</h2>
-                    <div class="shortcut">
-                        <span class="desc">LSP Code Action</span>
-                        <div class="keys"><kbd>Space</kbd><kbd>c</kbd><kbd>a</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Rename Symbol</span>
-                        <div class="keys"><kbd>Space</kbd><kbd>c</kbd><kbd>r</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Format File</span>
-                        <div class="keys"><kbd>Space</kbd><kbd>c</kbd><kbd>f</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Toggle Comment</span>
-                        <div class="keys"><kbd>g</kbd><kbd>c</kbd><kbd>c</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Safe Paste</span>
-                        <div class="keys"><kbd>Space</kbd><kbd>p</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Safe Delete</span>
-                        <div class="keys"><kbd>Space</kbd><kbd>d</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Add Surround</span>
-                        <div class="keys"><kbd>y</kbd><kbd>s</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Delete Word Back</span>
-                        <div class="keys"><kbd>d</kbd><kbd>w</kbd></div>
-                    </div>
+                <div class="section">
+                    <h2>Files & Buffers</h2>
+                    <div class="item"><span class="desc">Find Files</span><div class="keys"><kbd>Spc</kbd><kbd>Spc</kbd></div></div>
+                    <div class="item"><span class="desc">Find Files (Alt)</span><div class="keys"><kbd>;</kbd><kbd>f</kbd></div></div>
+                    <div class="item"><span class="desc">Switch Buffer</span><div class="keys"><kbd>Spc</kbd><kbd>,</kbd></div></div>
+                    <div class="item"><span class="desc">List Buffers</span><div class="keys"><kbd>\</kbd></div></div>
+                    <div class="item"><span class="desc">File Explorer</span><div class="keys"><kbd>Spc</kbd><kbd>e</kbd></div></div>
+                    <div class="item"><span class="desc">Oil File Manager</span><div class="keys"><kbd>-</kbd></div></div>
+                    <div class="item"><span class="desc">Next / Prev Buffer</span><div class="keys"><kbd>Tab</kbd><kbd>⇧Tab</kbd></div></div>
+                    <div class="item"><span class="desc">Delete Buffer</span><div class="keys"><kbd>Spc</kbd><kbd>b</kbd><kbd>d</kbd></div></div>
+                    <div class="item"><span class="desc">Save / Quit</span><div class="keys"><kbd>:w</kbd><kbd>:q</kbd></div></div>
+                    <div class="item"><span class="desc">Smart Quit</span><div class="keys"><kbd>Q</kbd></div></div>
                 </div>
 
+                <div class="section">
+                    <h2>Search</h2>
+                    <div class="item"><span class="desc">Search Fwd / Back</span><div class="keys"><kbd>/</kbd><kbd>?</kbd></div></div>
+                    <div class="item"><span class="desc">Next / Prev Result</span><div class="keys"><kbd>n</kbd><kbd>N</kbd></div></div>
+                    <div class="item"><span class="desc">Search Word at Cursor</span><div class="keys"><kbd>*</kbd><kbd>#</kbd></div></div>
+                    <div class="item"><span class="desc">Grep Project</span><div class="keys"><kbd>Spc</kbd><kbd>/</kbd></div></div>
+                    <div class="item"><span class="desc">Live Grep</span><div class="keys"><kbd>;</kbd><kbd>r</kbd></div></div>
+                    <div class="item"><span class="desc">Resume Picker</span><div class="keys"><kbd>;</kbd><kbd>;</kbd></div></div>
+                    <div class="item"><span class="desc">Search TODOs</span><div class="keys"><kbd>Spc</kbd><kbd>s</kbd><kbd>t</kbd></div></div>
+                    <div class="item"><span class="desc">Command History</span><div class="keys"><kbd>Spc</kbd><kbd>:</kbd></div></div>
+                </div>
+
+                <div class="section">
+                    <h2>Surround</h2>
+                    <div class="item"><span class="desc">Add Surround</span><div class="keys"><kbd>y</kbd><kbd>s</kbd></div></div>
+                    <div class="item"><span class="desc">Delete Surround</span><div class="keys"><kbd>d</kbd><kbd>s</kbd></div></div>
+                    <div class="item"><span class="desc">Change Surround</span><div class="keys"><kbd>c</kbd><kbd>s</kbd></div></div>
+                    <div class="item"><span class="desc">Surround Selection</span><div class="keys"><kbd>S</kbd></div></div>
+                </div>
+            </div>
+
+            <div class="column">
                 <div class="section">
                     <h2>Windows & Tabs</h2>
-                    <div class="shortcut">
-                        <span class="desc">Split Horizontal</span>
-                        <div class="keys"><kbd>s</kbd><kbd>s</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Split Vertical</span>
-                        <div class="keys"><kbd>s</kbd><kbd>v</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Next Buffer</span>
-                        <div class="keys"><kbd>Tab</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Prev Buffer</span>
-                        <div class="keys"><kbd>⇧</kbd><kbd>Tab</kbd></div>
-                    </div>
+                    <div class="item"><span class="desc">Split Horizontal</span><div class="keys"><kbd>s</kbd><kbd>s</kbd></div></div>
+                    <div class="item"><span class="desc">Split Vertical</span><div class="keys"><kbd>s</kbd><kbd>v</kbd></div></div>
+                    <div class="item"><span class="desc">Focus Left/Dn/Up/Rt</span><div class="keys"><kbd>s</kbd><kbd>h/j/k/l</kbd></div></div>
+                    <div class="item"><span class="desc">Resize Width</span><div class="keys"><kbd>⌃w</kbd><kbd>&amp;lt;</kbd><kbd>&amp;gt;</kbd></div></div>
+                    <div class="item"><span class="desc">Resize Height</span><div class="keys"><kbd>⌃w</kbd><kbd>+ -</kbd></div></div>
+                    <div class="item"><span class="desc">Equalize Sizes</span><div class="keys"><kbd>⌃w</kbd><kbd>=</kbd></div></div>
+                    <div class="item"><span class="desc">Close Other Windows</span><div class="keys"><kbd>⌃w</kbd><kbd>o</kbd></div></div>
+                    <div class="item"><span class="desc">New Tab</span><div class="keys"><kbd>t</kbd><kbd>e</kbd></div></div>
+                </div>
+
+                <div class="section">
+                    <h2>LSP & Code</h2>
+                    <div class="item"><span class="desc">Go to Def / Decl</span><div class="keys"><kbd>g</kbd><kbd>d</kbd><kbd>D</kbd></div></div>
+                    <div class="item"><span class="desc">Go to References</span><div class="keys"><kbd>g</kbd><kbd>r</kbd></div></div>
+                    <div class="item"><span class="desc">Hover Docs</span><div class="keys"><kbd>K</kbd></div></div>
+                    <div class="item"><span class="desc">Code Action</span><div class="keys"><kbd>Spc</kbd><kbd>c</kbd><kbd>a</kbd></div></div>
+                    <div class="item"><span class="desc">Rename Symbol</span><div class="keys"><kbd>Spc</kbd><kbd>c</kbd><kbd>r</kbd></div></div>
+                    <div class="item"><span class="desc">Format File</span><div class="keys"><kbd>Spc</kbd><kbd>c</kbd><kbd>f</kbd></div></div>
+                    <div class="item"><span class="desc">Next Diagnostic</span><div class="keys"><kbd>⌃</kbd><kbd>j</kbd></div></div>
+                    <div class="item"><span class="desc">Toggle Trouble</span><div class="keys"><kbd>Spc</kbd><kbd>x</kbd><kbd>x</kbd></div></div>
+                    <div class="item"><span class="desc">Symbols Panel</span><div class="keys"><kbd>Spc</kbd><kbd>c</kbd><kbd>s</kbd></div></div>
+                    <div class="item"><span class="desc">Inlay Hints</span><div class="keys"><kbd>Spc</kbd><kbd>i</kbd></div></div>
                 </div>
             </div>
 
             <div class="column">
-                <div class="section" style="margin-bottom: 40px;">
-                    <h2>Harpoon & Trouble</h2>
-                    <div class="shortcut">
-                        <span class="desc">Add to Harpoon</span>
-                        <div class="keys"><kbd>Space</kbd><kbd>a</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Harpoon Menu</span>
-                        <div class="keys"><kbd>⌃</kbd><kbd>e</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Jump to Slot 1-4</span>
-                        <div class="keys"><kbd>⌃</kbd><kbd>1-4</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Toggle Trouble</span>
-                        <div class="keys"><kbd>Space</kbd><kbd>x</kbd><kbd>x</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Symbols Panel</span>
-                        <div class="keys"><kbd>Space</kbd><kbd>c</kbd><kbd>s</kbd></div>
-                    </div>
+                <div class="section">
+                    <h2>AI Assistants</h2>
+                    <div class="item"><span class="desc">Ask Avante AI</span><div class="keys"><kbd>Spc</kbd><kbd>a</kbd><kbd>a</kbd></div></div>
+                    <div class="item"><span class="desc">Edit with Avante</span><div class="keys"><kbd>Spc</kbd><kbd>a</kbd><kbd>e</kbd></div></div>
+                    <div class="item"><span class="desc">Accept Our/Their Diff</span><div class="keys"><kbd>c</kbd><kbd>o/t</kbd></div></div>
+                    <div class="item"><span class="desc">Copilot Chat</span><div class="keys"><kbd>Spc</kbd><kbd>a</kbd><kbd>c</kbd></div></div>
+                    <div class="item"><span class="desc">AI Generate Tests</span><div class="keys"><kbd>Spc</kbd><kbd>a</kbd><kbd>t</kbd></div></div>
+                    <div class="item"><span class="desc">AI Fix Code</span><div class="keys"><kbd>Spc</kbd><kbd>a</kbd><kbd>f</kbd></div></div>
+                    <div class="item"><span class="desc">AI Fill Function</span><div class="keys"><kbd>Spc</kbd><kbd>9</kbd><kbd>f</kbd></div></div>
                 </div>
 
                 <div class="section">
-                    <h2>Fun & Focus</h2>
-                    <div class="shortcut">
-                        <span class="desc">Zen Mode</span>
-                        <div class="keys"><kbd>Space</kbd><kbd>z</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Make it Rain</span>
-                        <div class="keys"><kbd>Space</kbd><kbd>f</kbd><kbd>m</kbd><kbd>l</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Hatch a Cat</span>
-                        <div class="keys"><kbd>Space</kbd><kbd>d</kbd><kbd>c</kbd></div>
-                    </div>
-                    <div class="shortcut">
-                        <span class="desc">Cook the Cat</span>
-                        <div class="keys"><kbd>Space</kbd><kbd>d</kbd><kbd>k</kbd></div>
-                    </div>
+                    <h2>Git</h2>
+                    <div class="item"><span class="desc">Lazygit</span><div class="keys"><kbd>Spc</kbd><kbd>g</kbd><kbd>g</kbd></div></div>
+                    <div class="item"><span class="desc">Git Blame</span><div class="keys"><kbd>Spc</kbd><kbd>g</kbd><kbd>b</kbd></div></div>
+                    <div class="item"><span class="desc">Diffview</span><div class="keys"><kbd>Spc</kbd><kbd>g</kbd><kbd>d</kbd></div></div>
+                    <div class="item"><span class="desc">File History</span><div class="keys"><kbd>Spc</kbd><kbd>g</kbd><kbd>h</kbd></div></div>
+                    <div class="item"><span class="desc">Next / Prev Hunk</span><div class="keys"><kbd>&rsqb;h</kbd><kbd>&lsqb;h</kbd></div></div>
+                </div>
+
+                <div class="section">
+                    <h2>Tools & Fun</h2>
+                    <div class="item"><span class="desc">Add to Harpoon</span><div class="keys"><kbd>Spc</kbd><kbd>a</kbd></div></div>
+                    <div class="item"><span class="desc">Harpoon Menu</span><div class="keys"><kbd>⌃</kbd><kbd>e</kbd></div></div>
+                    <div class="item"><span class="desc">Harpoon Slot 1-4</span><div class="keys"><kbd>⌃</kbd><kbd>1-4</kbd></div></div>
+                    <div class="item"><span class="desc">Zen Mode</span><div class="keys"><kbd>Spc</kbd><kbd>z</kbd></div></div>
+                    <div class="item"><span class="desc">Undotree</span><div class="keys"><kbd>Spc</kbd><kbd>u</kbd></div></div>
+                    <div class="item"><span class="desc">Hatch a Cat</span><div class="keys"><kbd>Spc</kbd><kbd>d</kbd><kbd>c</kbd></div></div>
+                    <div class="item"><span class="desc">Cook the Cat</span><div class="keys"><kbd>Spc</kbd><kbd>d</kbd><kbd>k</kbd></div></div>
                 </div>
             </div>
         </div>
 
         <div class="footer">
-            THEME: OWLET CHARCOAL &nbsp; | &nbsp; GENERATED BY AI &nbsp; | &nbsp; KAIZEN WORKSPACE
+            Spc = Space (Leader) &nbsp;&bull;&nbsp; ⌃ = Ctrl &nbsp;&bull;&nbsp; ⇧ = Shift
         </div>
     </div>
 
