@@ -1,0 +1,11 @@
+## Legacy Token Migration & Backfill Policy
+
+As part of the transition to local-only secret storage, the `User.accessToken` field in the cloud database is deprecated.
+
+**Policy for existing rows:**
+1. **No New Writes:** The server will no longer write OAuth access tokens to the database during login or signup.
+2. **Read-Only Transition:** Existing tokens may be read temporarily by legacy clients or migration jobs.
+3. **Safe Clearing (Backfill):** A background migration job or client-side routine should securely transfer the token to the user's local secure storage. Once verified, the cloud database row must be updated to set `accessToken: null` using the `clearLegacyToken` helper.
+4. **Final Deprecation:** Once all active users have migrated, the `accessToken` column will be destructively removed from the schema.
+
+## Enforcement

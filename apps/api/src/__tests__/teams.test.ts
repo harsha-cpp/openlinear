@@ -27,7 +27,7 @@ describe('Teams API', () => {
         githubId: 999999,
         username: 'testuser',
         email: 'test@example.com',
-        accessToken: 'fake-token',
+        accessToken: null,
       },
     });
     testUserId = user.id;
@@ -190,7 +190,7 @@ describe('Teams API', () => {
           githubId: 666666,
           username: 'seconduser',
           email: 'second@example.com',
-          accessToken: 'fake-token-2',
+          accessToken: null,
         },
       });
 

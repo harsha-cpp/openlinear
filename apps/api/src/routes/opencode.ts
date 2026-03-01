@@ -3,9 +3,6 @@ import { AuthRequest, requireAuth } from '../middleware/auth';
 import {
   getOpenCodeStatus,
   getClientForUser,
-  getContainerStatus,
-  ensureContainer,
-  destroyContainer,
 } from '../services/opencode';
 
 const router: Router = Router();
@@ -41,57 +38,10 @@ router.get('/status', (_req, res: Response) => {
 
 router.get('/setup-status', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const containerStatus = getContainerStatus(req.userId!);
-
-    let providers: Array<{ id: string; name: string; authenticated: boolean }> = [];
-    let ready = false;
-
-    if (containerStatus?.status === 'running') {
-      try {
-        const client = await getClientForUser(req.userId!);
-        const providerList = await client.provider.list();
-
-        if (providerList.data?.all) {
-          const connectedSet = new Set(providerList.data.connected ?? []);
-
-          const popularProviderIds = new Set([
-            'anthropic',
-            'openai',
-            'google',
-            'github-copilot',
-            'groq',
-            'deepseek',
-            'mistral',
-            'xai',
-            'openrouter',
-            'amazon-bedrock',
-            'opencode',
-          ]);
-
-          providers = providerList.data.all
-            .filter((provider) => popularProviderIds.has(provider.id))
-            .map((provider) => ({
-              id: provider.id,
-              name: provider.name || provider.id,
-              // Only use the `connected` set — /provider/auth returns available auth
-              // methods (oauth, api), NOT whether credentials are actually configured
-              authenticated: connectedSet.has(provider.id),
-            }));
-        }
-
-        ready = providers.some(p => p.authenticated);
-      } catch {
-        // Container running but can't query providers — still return container status
-      }
-    }
-
     res.json({
-      container: containerStatus ? {
-        status: containerStatus.status,
-        hostPort: containerStatus.hostPort,
-      } : null,
-      providers,
-      ready,
+      container: null,
+      providers: [],
+      ready: false,
     });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to get setup status' });
@@ -99,41 +49,24 @@ router.get('/setup-status', requireAuth, async (req: AuthRequest, res: Response)
 });
 
 router.get('/container', requireAuth, (req: AuthRequest, res: Response) => {
-  const status = getContainerStatus(req.userId!);
-  if (!status) {
-    res.json({ status: 'none', message: 'No container running for this user' });
-    return;
-  }
-  res.json({
-    status: status.status,
-    hostPort: status.hostPort,
-    baseUrl: status.baseUrl,
-    lastActivity: status.lastActivity.toISOString(),
-    createdAt: status.createdAt.toISOString(),
-    error: status.error,
+  res.status(403).json({ 
+    error: 'Server execution is disabled. Please execute the task from the desktop app.',
+    code: 'SERVER_EXECUTION_DISABLED'
   });
 });
 
 router.post('/container', requireAuth, async (req: AuthRequest, res: Response) => {
-  try {
-    const container = await ensureContainer(req.userId!);
-    res.json({
-      status: container.status,
-      hostPort: container.hostPort,
-      baseUrl: container.baseUrl,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to start container' });
-  }
+  res.status(403).json({ 
+    error: 'Server execution is disabled. Please execute the task from the desktop app.',
+    code: 'SERVER_EXECUTION_DISABLED'
+  });
 });
 
 router.delete('/container', requireAuth, async (req: AuthRequest, res: Response) => {
-  try {
-    await destroyContainer(req.userId!);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to destroy container' });
-  }
+  res.status(403).json({ 
+    error: 'Server execution is disabled. Please execute the task from the desktop app.',
+    code: 'SERVER_EXECUTION_DISABLED'
+  });
 });
 
 router.get('/providers', requireAuth, async (req: AuthRequest, res: Response) => {
@@ -164,13 +97,8 @@ router.post('/auth', requireAuth, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const client = await getClientForUser(req.userId!);
-    await client.auth.set({
-      path: { id: providerId },
-      body: { type: 'api', key: apiKey },
-    });
-
-    res.json({ success: true, providerId });
+    res.status(403).json({ error: 'Provider key ingestion via cloud is disabled. Keys must be stored locally.' });
+    return;
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to set auth' });
   }
@@ -238,8 +166,8 @@ router.get('/models', requireAuth, async (req: AuthRequest, res: Response) => {
     const connectedSet = new Set(providerList.data.connected ?? []);
     connectedSet.add('opencode');
 
-    let allProviders = providerList.data.all;
-    if (!allProviders.some(p => p.id === 'opencode')) {
+    let allProviders: any[] = providerList.data.all;
+    if (!allProviders.some((p: any) => p.id === 'opencode')) {
       allProviders.push({
         id: 'opencode',
         name: 'OpenCode',
@@ -248,8 +176,8 @@ router.get('/models', requireAuth, async (req: AuthRequest, res: Response) => {
     }
 
     const providers = allProviders
-      .filter((provider) => connectedSet.has(provider.id))
-      .map((provider) => {
+      .filter((provider: any) => connectedSet.has(provider.id))
+      .map((provider: any) => {
         let modelsList = Object.values(provider.models || {}).map((model: any) => ({
           id: model.id,
           provider: model.provider,

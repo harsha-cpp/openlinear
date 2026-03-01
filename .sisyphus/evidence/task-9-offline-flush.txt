@@ -1,0 +1,6 @@
+Offline Flush & Retry Test Results:
+Initial queue length: PASS
+Queue length after offline process: PASS
+Retry count incremented: PASS
+Queue length after online process: PASS
+Total fetch attempts: 3

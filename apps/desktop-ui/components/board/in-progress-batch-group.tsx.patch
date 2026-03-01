@@ -1,0 +1,34 @@
+--- apps/desktop-ui/components/board/in-progress-batch-group.tsx
++++ apps/desktop-ui/components/board/in-progress-batch-group.tsx
+@@ -4,6 +4,7 @@
+ import { TaskCard } from "./task-card"
+ import { ActiveBatch } from "./use-kanban-board"
+ import { ExecutionProgress, Task } from "@/types/task"
++import { TaskSyncState } from "@/lib/api/metadata-queue"
+ 
+ interface InProgressBatchGroupProps {
+   batch: Task[]
+@@ -11,6 +12,7 @@
+   canExecute: boolean
+   executionProgress: Record<string, ExecutionProgress>
+   selectedTaskIds: Set<string>
++  syncStates: Record<string, TaskSyncState>
+   onExecute?: (taskId: string) => Promise<void>
+   onCancel: (taskId: string) => Promise<void>
+   onDelete: (taskId: string) => Promise<void>
+@@ -24,6 +26,7 @@
+   canExecute,
+   executionProgress,
+   selectedTaskIds,
++  syncStates,
+   onExecute,
+   onCancel,
+   onDelete,
+@@ -62,6 +65,7 @@
+                   onDelete={onDelete}
+                   onTaskClick={onTaskClick}
+                   executionProgress={executionProgress[task.id]}
++                  syncState={syncStates[task.id]}
+                   selected={selectedTaskIds.has(task.id)}
+                   onToggleSelect={onToggleSelect}
+                   selectionMode={false}

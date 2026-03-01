@@ -1,0 +1,32 @@
+--- apps/desktop-ui/components/board/done-column-content.tsx
++++ apps/desktop-ui/components/board/done-column-content.tsx
+@@ -5,11 +5,13 @@
+ import { TaskCard } from "./task-card"
+ import { openExternal } from "@/lib/utils"
+ import { ExecutionProgress, Task } from "@/types/task"
++import { TaskSyncState } from "@/lib/api/metadata-queue"
+ 
+ interface DoneColumnContentProps {
+   columnTasks: Task[]
+   completedBatch: { taskIds: string[]; prUrl: string | null; mode: string } | null
+   executionProgress: Record<string, ExecutionProgress>
++  syncStates: Record<string, TaskSyncState>
+   selectedTaskIds: Set<string>
+   onDelete: (taskId: string) => Promise<void>
+   onTaskClick: (taskId: string) => Promise<void>
+@@ -21,6 +23,7 @@
+   columnTasks,
+   completedBatch,
+   executionProgress,
++  syncStates,
+   selectedTaskIds,
+   onDelete,
+   onTaskClick,
+@@ -83,6 +86,7 @@
+                       onDelete={onDelete}
+                       onTaskClick={onTaskClick}
+                       executionProgress={executionProgress[task.id]}
++                      syncState={syncStates[task.id]}
+                       selected={selectedTaskIds.has(task.id)}
+                       onToggleSelect={onToggleSelect}
+                       selectionMode={false}

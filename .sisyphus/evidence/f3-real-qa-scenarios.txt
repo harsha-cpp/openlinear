@@ -1,0 +1,54 @@
+# F3. Real QA Scenario Execution Report
+
+## Scenario Matrix
+
+| Task | Scenario | Expected Evidence | Status | Notes |
+|------|----------|-------------------|--------|-------|
+| 1 | Happy | .sisyphus/evidence/task-1-policy-coverage.txt | PASS | File exists |
+| 1 | Negative | .sisyphus/evidence/task-1-policy-fail.txt | PASS | File exists |
+| 2 | Happy | .sisyphus/evidence/task-2-valid-payload.json | PASS | File exists |
+| 2 | Negative | .sisyphus/evidence/task-2-forbidden-field.json | PASS | File exists |
+| 3 | Happy | .sisyphus/evidence/task-3-flag-matrix.txt | PASS | File exists |
+| 3 | Negative | .sisyphus/evidence/task-3-invalid-flags.txt | PASS | File exists |
+| 4 | Happy | .sisyphus/evidence/task-4-secret-roundtrip.txt | PASS | File exists |
+| 4 | Negative | .sisyphus/evidence/task-4-secret-error.txt | PASS | File exists |
+| 5 | Happy | .sisyphus/evidence/task-5-auth-no-secret.txt | PASS | File exists |
+| 5 | Negative | .sisyphus/evidence/task-5-write-block.txt | PASS | File exists |
+| 6 | Happy | .sisyphus/evidence/task-6-state-flow.json | PASS | File exists |
+| 6 | Negative | .sisyphus/evidence/task-6-invalid-order.json | PASS | File exists |
+| 7 | Happy | .sisyphus/evidence/task-7-signed-ok.json | PASS | File exists |
+| 7 | Negative | .sisyphus/evidence/task-7-replay-reject.json | PASS | File exists |
+| 8 | Happy | .sisyphus/evidence/task-8-local-run.txt | PASS | File exists |
+| 8 | Negative | .sisyphus/evidence/task-8-missing-key.txt | PASS | File exists |
+| 9 | Happy | .sisyphus/evidence/task-9-offline-flush.txt | PASS | File exists |
+| 9 | Negative | .sisyphus/evidence/task-9-dedupe.txt | PASS | File exists |
+| 10 | Happy | .sisyphus/evidence/task-10-auth-ok.json | PASS | File exists |
+| 10 | Negative | .sisyphus/evidence/task-10-auth-fail.json | PASS | File exists |
+| 11 | Happy | .sisyphus/evidence/task-11-contract-pass.txt | PASS | File exists |
+| 11 | Negative | .sisyphus/evidence/task-11-contract-reject.txt | PASS | File exists |
+| 12 | Happy | .sisyphus/evidence/task-12-local-mode.txt | PASS | File exists |
+| 12 | Negative | .sisyphus/evidence/task-12-server-disabled.txt | PASS | File exists |
+| 13 | Happy | .sisyphus/evidence/task-13-ui-happy.png | PASS | File exists, UI state verified via look_at |
+| 13 | Negative | .sisyphus/evidence/task-13-ui-failure.png | PASS | File exists, UI state verified via look_at |
+| 14 | Happy | .sisyphus/evidence/task-14-batch-happy.json | PASS | File exists |
+| 14 | Negative | .sisyphus/evidence/task-14-batch-failure.json | PASS | File exists |
+| 15 | Happy | .sisyphus/evidence/task-15-migration-pass.txt | PASS | File exists; command-backed PASS statement verified |
+| 15 | Negative | .sisyphus/evidence/task-15-legacy-write-fail.txt | PASS | File exists; command-backed PASS statement verified |
+| 16 | Happy | .sisyphus/evidence/task-16-ci-pass.txt | PASS | File exists |
+| 16 | Negative | .sisyphus/evidence/task-16-ci-fail.txt | PASS | File exists |
+| 17 | Happy | .sisyphus/evidence/task-17-tabletop.txt | PASS | File exists |
+| 17 | Negative | .sisyphus/evidence/task-17-rollback.txt | PASS | File exists |
+| 18 | Happy | .sisyphus/evidence/task-18-soak.txt | PASS | File exists |
+| 18 | Negative | .sisyphus/evidence/task-18-outage-recovery.txt | PASS | File exists |
+| 19 | Happy | .sisyphus/evidence/task-19-no-imports.txt | PASS | File exists |
+| 19 | Negative | .sisyphus/evidence/task-19-mode-reject.txt | PASS | File exists |
+
+## Integration Checks
+
+| Command | Status | Notes |
+|---------|--------|-------|
+| `pnpm --filter @openlinear/api test` | PASS | 154 tests passed (rerun 2026-03-01) |
+| `pnpm --filter @openlinear/api typecheck` | PASS | Completed without errors (rerun 2026-03-01) |
+| `pnpm --filter @openlinear/api build` | PASS | API built successfully (rerun 2026-03-01) |
+
+Scenarios [38/38] | Integration [PASS] | VERDICT: PASS

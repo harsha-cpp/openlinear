@@ -1,0 +1,5 @@
+{
+  "scenario": "start->progress->finish accepted with correct ordering",
+  "result": "pass",
+  "details": "POST /api/execution/metadata/start -> 200 OK, PUT /api/execution/metadata/progress -> 200 OK, POST /api/execution/metadata/finish -> 200 OK"
+}

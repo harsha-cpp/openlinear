@@ -1,0 +1,24 @@
+Dedupe Test Results:
+Initial enqueue: PASS
+Duplicate enqueue: PASS
+Different progress: PASS
+Different status: PASS
+Duplicate status: PASS
+Final queue state:
+[
+  {
+    "taskId": "task_1",
+    "status": "running",
+    "progress": 50
+  },
+  {
+    "taskId": "task_1",
+    "status": "running",
+    "progress": 60
+  },
+  {
+    "taskId": "task_1",
+    "status": "completed",
+    "progress": 50
+  }
+]

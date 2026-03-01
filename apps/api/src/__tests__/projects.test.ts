@@ -32,7 +32,7 @@ describe('Projects API', () => {
         githubId: 888888,
         username: 'projecttester',
         email: 'projecttest@example.com',
-        accessToken: 'fake-token',
+        accessToken: null,
       },
     });
     testUserId = user.id;

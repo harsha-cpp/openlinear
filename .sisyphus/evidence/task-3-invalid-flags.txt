@@ -1,0 +1,28 @@
+
+> @openlinear/api@0.0.1 test /home/kaizen/openlinear/apps/api
+> vitest run "src/__tests__/feature-flags-integration.test.ts"
+
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90m/home/kaizen/openlinear/apps/api[39m
+
+[90mstdout[2m | src/__tests__/feature-flags-integration.test.ts[2m > [22m[2mFeature Flags Integration[2m > [22m[2mshould initialize container manager when server execution is enabled
+[22m[39m[OpenCode] Container-per-user mode ready
+
+[90mstdout[2m | src/__tests__/feature-flags-integration.test.ts[2m > [22m[2mFeature Flags Integration[2m > [22m[2mshould skip container manager initialization when server execution is disabled
+[22m[39m[OpenCode] Server execution is disabled via feature flags. Running in local-only mode.
+
+[90mstderr[2m | src/__tests__/feature-flags-integration.test.ts[2m > [22m[2mFeature Flags Integration[2m > [22m[2mshould throw error on startup if both execution modes are disabled
+[22m[39m[OpenCode] Invalid feature flag configuration: [ [32m'At least one execution mode must be enabled'[39m ]
+
+[90mstderr[2m | src/__tests__/feature-flags-integration.test.ts[2m > [22m[2mFeature Flags Integration[2m > [22m[2mshould throw error on startup if both force and kill switch are enabled
+[22m[39m[OpenCode] Invalid feature flag configuration: [
+  [32m'Cannot enable both FORCE_LOCAL_EXECUTION and KILL_SWITCH_LOCAL_EXECUTION'[39m
+]
+
+ [32m✓[39m src/__tests__/feature-flags-integration.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m   Start at [22m 04:10:01
+[2m   Duration [22m 264ms[2m (transform 80ms, setup 0ms, import 114ms, tests 8ms, environment 0ms)[22m
+

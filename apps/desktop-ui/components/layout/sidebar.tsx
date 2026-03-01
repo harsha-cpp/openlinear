@@ -54,6 +54,7 @@ function TeamSection({ team, pathname, searchParams, onDelete }: { team: Team; p
         <div className="group/team">
             <div className="flex items-center">
                 <button
+                    type="button"
                     onClick={() => setExpanded(!expanded)}
                     className="flex items-center gap-2 flex-1 min-w-0 px-3 py-1.5 rounded-md text-[13px] font-medium text-linear-text-secondary hover:text-linear-text hover:bg-linear-bg-tertiary/50 transition-colors"
                 >
@@ -75,6 +76,7 @@ function TeamSection({ team, pathname, searchParams, onDelete }: { team: Team; p
                 <Popover open={menuOpen} onOpenChange={setMenuOpen}>
                     <PopoverTrigger asChild>
                         <button
+                            type="button"
                             className="opacity-0 group-hover/team:opacity-100 p-1 mr-2 rounded hover:bg-linear-bg-tertiary transition-all text-linear-text-tertiary hover:text-linear-text"
                             title="Team options"
                         >
@@ -91,6 +93,7 @@ function TeamSection({ team, pathname, searchParams, onDelete }: { team: Team; p
                             Edit
                         </Link>
                         <button
+                            type="button"
                             onClick={() => { setMenuOpen(false); onDelete(team.id, team.name) }}
                             className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-red-500 hover:bg-red-500/10 transition-colors w-full"
                         >
@@ -168,7 +171,7 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
 
     useEffect(() => {
         fetchInboxCount().then(setInboxCount).catch(() => setInboxCount({ total: 0, unread: 0 }))
-    }, [pathname])
+    }, [])
 
     useEffect(() => {
         loadTeams()
@@ -230,16 +233,19 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
                     {isTauri && (
                         <div className="flex items-center gap-[7px]">
                             <button
+                                type="button"
                                 onClick={handleClose}
                                 className="w-[12px] h-[12px] rounded-full bg-[#ff5f57] hover:brightness-110 transition-all flex-shrink-0"
                                 aria-label="Close"
                             />
                             <button
+                                type="button"
                                 onClick={handleMinimize}
                                 className="w-[12px] h-[12px] rounded-full bg-[#febc2e] hover:brightness-110 transition-all flex-shrink-0"
                                 aria-label="Minimize"
                             />
                             <button
+                                type="button"
                                 onClick={handleMaximize}
                                 className="w-[12px] h-[12px] rounded-full bg-[#28c840] hover:brightness-110 transition-all flex-shrink-0"
                                 aria-label="Maximize"
@@ -250,6 +256,7 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
                 </div>
                 <div className="flex items-center gap-1">
                     <button
+                        type="button"
                         onClick={onClose}
                         className="w-6 h-6 rounded flex items-center justify-center text-linear-text-tertiary hover:text-linear-text hover:bg-linear-bg-tertiary transition-colors"
                         aria-label="Collapse sidebar"
@@ -368,6 +375,7 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
                         )}
                         <span className="text-sm text-linear-text truncate flex-1">{user.username}</span>
                         <button
+                            type="button"
                             onClick={logout}
                             className="p-1.5 rounded-md hover:bg-linear-bg-tertiary transition-colors text-linear-text-tertiary hover:text-linear-text"
                             title="Sign out"

@@ -17,21 +17,19 @@ export const ExecutionStatus = z.enum([
 ]);
 
 export const ExecutionMetadataSyncSchema = z.object({
+  version: z.literal('1.0').optional(),
   taskId: z.string(),
   runId: z.string(),
   status: ExecutionStatus,
   startedAt: z.string().datetime().optional(),
   completedAt: z.string().datetime().optional(),
   durationMs: z.number().int().min(0).optional(),
-  progress: z.number().int().min(0).max(100).optional(),
   branch: z.string().optional(),
   commitSha: z.string().optional(),
   prUrl: z.string().url().optional(),
   prNumber: z.number().int().positive().optional(),
   outcome: z.string().max(500).optional(),
   errorCategory: ErrorCategory.optional(),
-  filesChanged: z.number().int().min(0).optional(),
-  toolsExecuted: z.number().int().min(0).optional(),
 }).strict();
 
 export type ExecutionMetadataSync = z.infer<typeof ExecutionMetadataSyncSchema>;

@@ -44,7 +44,6 @@ export const ExecutionMetadataSyncSchema = z.object({
   
   // State
   status: ExecutionStatus,
-  progress: z.number().min(0).max(100).optional(),
   
   // Timing
   startedAt: z.string().datetime().optional(),

@@ -1,0 +1,31 @@
+--- apps/desktop-ui/components/board/task-card.tsx
++++ apps/desktop-ui/components/board/task-card.tsx
+@@ -215,17 +215,23 @@
+             {syncState && syncState.status !== 'idle' && (
+               <div className="flex items-center gap-1 ml-2">
+                 {syncState.status === 'pending' && (
+-                  <CloudUpload className="w-3 h-3 text-linear-text-tertiary" title="Pending sync" />
++                  <span title="Pending sync" className="flex items-center">
++                    <CloudUpload className="w-3 h-3 text-linear-text-tertiary" />
++                  </span>
+                 )}
+                 {syncState.status === 'syncing' && (
+-                  <RefreshCw className="w-3 h-3 text-linear-accent animate-spin" title="Syncing metadata..." />
++                  <span title="Syncing metadata..." className="flex items-center">
++                    <RefreshCw className="w-3 h-3 text-linear-accent animate-spin" />
++                  </span>
+                 )}
+                 {syncState.status === 'synced' && (
+-                  <Cloud className="w-3 h-3 text-green-400" title="Synced to cloud" />
++                  <span title="Synced to cloud" className="flex items-center">
++                    <Cloud className="w-3 h-3 text-green-400" />
++                  </span>
+                 )}
+                 {syncState.status === 'error' && (
+-                  <div className="flex items-center gap-1 text-red-400 group/sync">
+-                    <CloudOff className="w-3 h-3" title="Sync failed" />
++                  <div className="flex items-center gap-1 text-red-400 group/sync" title="Sync failed">
++                    <CloudOff className="w-3 h-3" />
+                     <span className="text-[10px] hidden group-hover/sync:inline-block">
+                       Sync failed. <button onClick={handleRetrySync} className="underline hover:text-red-300">Retry</button>
+                     </span>

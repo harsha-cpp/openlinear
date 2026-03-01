@@ -1,0 +1,20 @@
+
+> @openlinear/api@0.0.1 test /home/kaizen/openlinear/apps/api
+> vitest run "src/__tests__/lifecycle.test.ts" "-t" "routes execution to local metadata mode when local mode enabled"
+
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90m/home/kaizen/openlinear/apps/api[39m
+
+[90mstdout[2m | src/__tests__/lifecycle.test.ts
+[22m[39m[dotenv@17.2.4] injecting env (8) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+
+[90mstdout[2m | src/__tests__/lifecycle.test.ts[2m > [22m[2mexecuteTask[2m > [22m[2mroutes execution to local metadata mode when local mode enabled
+[22m[39m[Execution] Task task-1 should be executed locally (canary/local mode)
+
+ [32m✓[39m src/__tests__/lifecycle.test.ts [2m([22m[2m2 tests[22m[2m | [22m[33m1 skipped[39m[2m)[22m[32m 9[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m1 passed[39m[22m[2m | [22m[33m1 skipped[39m[90m (2)[39m
+[2m   Start at [22m 02:32:09
+[2m   Duration [22m 585ms[2m (transform 211ms, setup 90ms, import 191ms, tests 9ms, environment 0ms)[22m
+

@@ -1,68 +1,34 @@
 import { broadcast } from '../sse';
-import {
-  initContainerManager,
-  shutdownContainerManager,
-  getClientForUser,
-  getContainerStatus,
-  listContainers,
-  touchContainer,
-  ensureContainer,
-  destroyContainer,
-  toContainerPath,
-} from './container-manager';
-
-export {
-  getClientForUser,
-  getContainerStatus,
-  touchContainer,
-  ensureContainer,
-  destroyContainer,
-  listContainers,
-  toContainerPath,
-};
+import { getFeatureFlags, validateFlagConfiguration } from '../config/feature-flags';
 
 export interface OpenCodeStatus {
-  mode: 'container-per-user';
+  mode: 'local-only';
   activeContainers: number;
-  containers: Array<{
-    userId: string;
-    status: string;
-    hostPort: number;
-    baseUrl: string;
-    lastActivity: string;
-    createdAt: string;
-  }>;
+  containers: Array<any>;
 }
 
 export function getOpenCodeStatus(): OpenCodeStatus {
-  const all = listContainers();
   return {
-    mode: 'container-per-user',
-    activeContainers: all.filter(c => c.status === 'running').length,
-    containers: all.map(c => ({
-      userId: c.userId,
-      status: c.status,
-      hostPort: c.hostPort,
-      baseUrl: c.baseUrl,
-      lastActivity: c.lastActivity.toISOString(),
-      createdAt: c.createdAt.toISOString(),
-    })),
+    mode: 'local-only',
+    activeContainers: 0,
+    containers: [],
   };
 }
 
 export async function initOpenCode(): Promise<void> {
-  try {
-    await initContainerManager();
-    broadcast('opencode:status', { status: 'ready', mode: 'container-per-user' });
-    console.log('[OpenCode] Container-per-user mode ready');
-  } catch (err) {
-    console.error('[OpenCode] Failed to initialize container manager:', err);
-    broadcast('opencode:status', { status: 'error', error: String(err) });
+  const flags = getFeatureFlags();
+  const validation = validateFlagConfiguration(flags);
+  
+  if (!validation.valid) {
+    console.error('[OpenCode] Invalid feature flag configuration:', validation.errors);
+    throw new Error(`Invalid feature flag configuration: ${validation.errors.join(', ')}`);
   }
+
+  console.log('[OpenCode] Server execution is disabled. Running in local-only mode.');
+  broadcast('opencode:status', { status: 'ready', mode: 'local-only' });
 }
 
 export async function shutdownOpenCode(): Promise<void> {
-  await shutdownContainerManager();
   broadcast('opencode:status', { status: 'stopped' });
 }
 
@@ -76,4 +42,25 @@ export function registerShutdownHandlers(): void {
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('beforeExit', () => shutdownOpenCode());
+}
+
+// Dummy implementations for removed container manager
+export function getContainerStatus(userId: string): null {
+  return null;
+}
+
+export async function ensureContainer(userId: string): Promise<any> {
+  throw new Error('Server execution is disabled. Please execute the task from the desktop app.');
+}
+
+export async function destroyContainer(userId: string): Promise<void> {
+  // No-op
+}
+
+export async function getClientForUser(userId: string, directory?: string): Promise<any> {
+  throw new Error('Server execution is disabled. Please execute the task from the desktop app.');
+}
+
+export function toContainerPath(hostPath: string): string {
+  return hostPath;
 }

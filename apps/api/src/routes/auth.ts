@@ -201,7 +201,7 @@ router.get('/github/callback', async (req: Request, res: Response) => {
     if (isConnect) {
       // Connect flow — link GitHub to existing user
       const userId = stateStr.replace('connect:', '');
-      await connectGitHubToUser(userId, githubUser, accessToken);
+      await connectGitHubToUser(userId, githubUser);
       const user = await getUserById(userId);
 
       const token = jwt.sign(
@@ -213,7 +213,7 @@ router.get('/github/callback', async (req: Request, res: Response) => {
       res.redirect(`${getFrontendUrl()}?token=${token}&connected=true`);
     } else {
       // Normal login/signup flow
-      const user = await createOrUpdateUser(githubUser, accessToken);
+      const user = await createOrUpdateUser(githubUser);
 
       const token = jwt.sign(
         { userId: user.id, username: user.username },

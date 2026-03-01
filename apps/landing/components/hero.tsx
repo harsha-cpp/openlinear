@@ -38,13 +38,11 @@ export function Hero() {
         </div>
 
         <h1 className="hero-reveal-2 font-display text-[3rem] sm:text-[3.5rem] md:text-[4.5rem] lg:text-[5.5rem] xl:text-[6rem] font-bold tracking-[-0.02em] text-white leading-[1.05] max-w-6xl">
-          Project management
+          Issue tracker
           <br />
           <span className="bg-gradient-to-r from-blue-400 via-cyan-300 to-blue-400 bg-clip-text text-transparent">
-            that actually writes
+            on autopilot.
           </span>
-          <br />
-          the code
         </h1>
 
         <p className="hero-reveal-3 mt-8 text-lg sm:text-xl text-white/50 max-w-2xl leading-relaxed">

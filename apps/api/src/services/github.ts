@@ -207,8 +207,7 @@ export async function getGitHubRepos(accessToken: string): Promise<GitHubRepo[]>
 }
 
 export async function createOrUpdateUser(
-  githubUser: GitHubUser,
-  accessToken: string
+  githubUser: GitHubUser
 ) {
   return prisma.user.upsert({
     where: { githubId: githubUser.id },
@@ -216,22 +215,19 @@ export async function createOrUpdateUser(
       username: githubUser.login,
       email: githubUser.email,
       avatarUrl: githubUser.avatar_url,
-      accessToken,
     },
     create: {
       githubId: githubUser.id,
       username: githubUser.login,
       email: githubUser.email,
       avatarUrl: githubUser.avatar_url,
-      accessToken,
     },
   });
 }
 
 export async function connectGitHubToUser(
   userId: string,
-  githubUser: GitHubUser,
-  accessToken: string
+  githubUser: GitHubUser
 ) {
   const existingGitHubUser = await prisma.user.findUnique({
     where: { githubId: githubUser.id },
@@ -245,7 +241,6 @@ export async function connectGitHubToUser(
     where: { id: userId },
     data: {
       githubId: githubUser.id,
-      accessToken,
       avatarUrl: githubUser.avatar_url,
     },
   });

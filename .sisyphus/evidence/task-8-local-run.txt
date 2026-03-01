@@ -1,0 +1,16 @@
+Emitting opencode:metadata:task_123
+{
+  "version": "1.0",
+  "taskId": "task_123",
+  "runId": "run_456",
+  "status": "running",
+  "progress": 0
+}
+Emitting opencode:metadata:task_123
+{
+  "version": "1.0",
+  "taskId": "task_123",
+  "runId": "run_456",
+  "status": "completed",
+  "progress": 100
+}

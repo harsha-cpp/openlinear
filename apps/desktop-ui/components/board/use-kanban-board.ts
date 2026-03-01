@@ -8,6 +8,7 @@ import type { Repository } from "@/lib/api"
 import { Task, ExecutionProgress, ExecutionLogEntry } from "@/types/task"
 import { API_URL, getAuthHeader } from "@/lib/api/client"
 import { getSetupStatus, hasConfiguredProviders } from "@/lib/api/opencode"
+import { metadataQueue, TaskSyncState } from "@/lib/api/metadata-queue"
 
 export const COLUMNS = [
   { id: 'todo', title: 'All Issues', status: 'todo' as const },
@@ -40,6 +41,7 @@ export interface UseKanbanBoardReturn {
   tasks: Task[]
   loading: boolean
   error: string | null
+  syncStates: Record<string, TaskSyncState>
   executionProgress: Record<string, ExecutionProgress>
   isTaskFormOpen: boolean
   setIsTaskFormOpen: (open: boolean) => void
@@ -90,6 +92,7 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [syncStates, setSyncStates] = useState<Record<string, TaskSyncState>>({})
   const [executionProgress, setExecutionProgress] = useState<Record<string, ExecutionProgress>>({})
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false)
   const [defaultStatus, setDefaultStatus] = useState<Task['status']>('todo')
@@ -166,6 +169,11 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
     setSelectedTaskIds(new Set())
     setSelectingColumns(new Set())
   }
+
+  useEffect(() => {
+    const unsubscribe = metadataQueue.subscribe(setSyncStates)
+    return unsubscribe
+  }, [])
 
   useEffect(() => {
     setSelectingColumns(prev => {
@@ -783,6 +791,7 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
     tasks,
     loading,
     error,
+    syncStates,
     executionProgress,
     isTaskFormOpen,
     setIsTaskFormOpen,

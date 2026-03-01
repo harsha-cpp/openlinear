@@ -1,0 +1,33 @@
+export async function createOrUpdateUser(
+  githubUser: GitHubUser
+) {
+  return prisma.user.upsert({
+    where: { githubId: githubUser.id },
+    update: {
+      username: githubUser.login,
+      email: githubUser.email,
+      avatarUrl: githubUser.avatar_url,
+    },
+    create: {
+      githubId: githubUser.id,
+      username: githubUser.login,
+      email: githubUser.email,
+      avatarUrl: githubUser.avatar_url,
+    },
+---
+export async function connectGitHubToUser(
+  userId: string,
+  githubUser: GitHubUser
+) {
+  const existingGitHubUser = await prisma.user.findUnique({
+    where: { githubId: githubUser.id },
+  });
+
+  if (existingGitHubUser && existingGitHubUser.id !== userId) {
+    throw new Error('This GitHub account is already linked to another user');
+  }
+
+  return prisma.user.update({
+    where: { id: userId },
+    data: {
+      githubId: githubUser.id,

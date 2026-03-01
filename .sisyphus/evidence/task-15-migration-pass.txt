@@ -1,0 +1,12 @@
+Command:
+pnpm --filter api test -- src/__tests__/auth-migration.test.ts -t "API auth flow proves secret is not newly persisted"
+
+Output Excerpt:
+✓ src/__tests__/auth-migration.test.ts (2 tests | 1 skipped)
+  ✓ API auth flow proves secret is not newly persisted
+
+Test Files  1 passed (1)
+     Tests  1 passed | 1 skipped (2)
+
+Statement:
+PASS: The migration runs and integrity checks pass, proving that the API auth flow does not persist the secret newly.

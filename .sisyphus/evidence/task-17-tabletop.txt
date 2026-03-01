@@ -1,0 +1,16 @@
+=== TABLETOP EXERCISE: CANARY ROLLOUT ===
+1. Initial State (Shadow Mode)
+Flags: {"LOCAL_EXECUTION_ENABLED":true,"SERVER_EXECUTION_ENABLED":true,"CANARY_PERCENTAGE":0,"FORCE_LOCAL_EXECUTION":false,"KILL_SWITCH_LOCAL_EXECUTION":false}
+Phase: shadow
+Validation: { valid: true, errors: [] }
+User 'test-user-1' local execution: false
+
+2. Phase 1: Alpha (5% Canary)
+Flags: {"LOCAL_EXECUTION_ENABLED":true,"SERVER_EXECUTION_ENABLED":true,"CANARY_PERCENTAGE":5,"FORCE_LOCAL_EXECUTION":false,"KILL_SWITCH_LOCAL_EXECUTION":false}
+Phase: canary
+User 'test-user-1' local execution: false
+
+3. Phase 3: GA (100% Canary)
+Flags: {"LOCAL_EXECUTION_ENABLED":true,"SERVER_EXECUTION_ENABLED":true,"CANARY_PERCENTAGE":100,"FORCE_LOCAL_EXECUTION":false,"KILL_SWITCH_LOCAL_EXECUTION":false}
+Phase: canary
+User 'test-user-1' local execution: true

@@ -180,7 +180,7 @@ Max Concurrent: 6
 
 ## TODOs
 
-- [ ] 1. Define secret taxonomy and trust-boundary policy
+- [x] 1. Define secret taxonomy and trust-boundary policy
   - **What to do**: create explicit cloud-allowed vs local-only field catalog; map existing payloads/DB fields.
   - **Must NOT do**: do not leave any unclassified field; default unclassified -> local-only.
   - **Recommended Agent Profile**: `writing`, skills `security-modeling`, `api-contracts`.
@@ -191,7 +191,7 @@ Max Concurrent: 6
     - Happy: Validate policy coverage script returns 100% classified fields; evidence `.sisyphus/evidence/task-1-policy-coverage.txt`.
     - Negative: Add synthetic unclassified field in check fixture -> script fails; evidence `.sisyphus/evidence/task-1-policy-fail.txt`.
 
-- [ ] 2. Implement metadata ingestion contract (allowlist DTO/schema)
+- [x] 2. Implement metadata ingestion contract (allowlist DTO/schema)
   - **What to do**: define versioned ingestion DTO with strict allowlist and shared validators.
   - **Must NOT do**: no permissive passthrough/unknown field acceptance.
   - **Recommended Agent Profile**: `deep`, skills `schema-validation`, `typescript`.
@@ -202,7 +202,7 @@ Max Concurrent: 6
     - Happy: POST valid metadata payload -> 2xx; evidence `.sisyphus/evidence/task-2-valid-payload.json`.
     - Negative: POST payload containing `prompt` or `toolLogs` -> 4xx + explicit code; evidence `.sisyphus/evidence/task-2-forbidden-field.json`.
 
-- [ ] 3. Add feature flags for migration phases
+- [x] 3. Add feature flags for migration phases
   - **What to do**: add flags for `local_execution_enabled`, `server_execution_enabled`, canary cohort behavior.
   - **Must NOT do**: no hard cutover without rollback path.
   - **Recommended Agent Profile**: `quick`, skills `config`, `feature-flags`.
@@ -213,7 +213,7 @@ Max Concurrent: 6
     - Happy: flag matrix test verifies expected execution branch; evidence `.sisyphus/evidence/task-3-flag-matrix.txt`.
     - Negative: conflicting flag config triggers startup validation error; evidence `.sisyphus/evidence/task-3-invalid-flags.txt`.
 
-- [ ] 4. Build desktop secure storage abstraction for secrets
+- [x] 4. Build desktop secure storage abstraction for secrets
   - **What to do**: implement OS-keychain-backed secret interface for AI keys/GitHub token.
   - **Must NOT do**: no plaintext secret persistence in SQLite/logs.
   - **Recommended Agent Profile**: `unspecified-high`, skills `tauri`, `security`.
@@ -235,7 +235,7 @@ Max Concurrent: 6
     - Happy: auth flow succeeds while DB token field remains null/unchanged; evidence `.sisyphus/evidence/task-5-auth-no-secret.txt`.
     - Negative: forced legacy write attempt is blocked and logged as policy violation; evidence `.sisyphus/evidence/task-5-write-block.txt`.
 
-- [ ] 6. Implement metadata ingestion endpoints
+- [x] 6. Implement metadata ingestion endpoints
   - **What to do**: add start/progress/finish ingestion routes with strict schema and task/run linkage.
   - **Must NOT do**: do not accept arbitrary text blobs.
   - **Recommended Agent Profile**: `deep`, skills `express`, `api-design`.
@@ -246,7 +246,7 @@ Max Concurrent: 6
     - Happy: start->progress->finish accepted with correct ordering; evidence `.sisyphus/evidence/task-6-state-flow.json`.
     - Negative: finish before start rejected with 409/422; evidence `.sisyphus/evidence/task-6-invalid-order.json`.
 
-- [ ] 7. Add authenticated provenance for metadata uploads
+- [x] 7. Add authenticated provenance for metadata uploads
   - **What to do**: require user auth + device-bound signature + nonce/sequence/idempotency.
   - **Must NOT do**: no bearer-only unsigned ingestion in final mode.
   - **Recommended Agent Profile**: `ultrabrain`, skills `crypto`, `auth`.

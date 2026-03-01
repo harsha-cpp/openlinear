@@ -148,6 +148,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
     tasks,
     loading,
     error,
+    syncStates,
     executionProgress,
     isTaskFormOpen,
     setIsTaskFormOpen,
@@ -205,6 +206,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
             onDelete={handleDelete}
             onTaskClick={handleTaskClick}
             executionProgress={executionProgress[task.id]}
+            syncState={syncStates[task.id]}
             selected={selectedTaskIds.has(task.id)}
             onToggleSelect={toggleTaskSelect}
             selectionMode={selectingColumns.has(task.status)}
@@ -306,6 +308,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
                                 activeBatch={activeBatch}
                                 canExecute={canExecute}
                                 executionProgress={executionProgress}
+                                syncStates={syncStates}
                                 selectedTaskIds={selectedTaskIds}
                                 onExecute={handleExecute}
                                 onCancel={handleCancel}
@@ -325,6 +328,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
                             columnTasks={columnTasks}
                             completedBatch={completedBatch}
                             executionProgress={executionProgress}
+                            syncStates={syncStates}
                             selectedTaskIds={selectedTaskIds}
                             onDelete={handleDelete}
                             onTaskClick={handleTaskClick}

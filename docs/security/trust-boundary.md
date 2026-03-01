@@ -6,14 +6,16 @@ This document defines the trust boundary between the local desktop environment a
 
 These fields are permitted to cross the trust boundary and be synchronized to the cloud. They consist primarily of execution metadata and non-sensitive identifiers.
 
-*   **Execution Metadata**: `taskId`, `projectId`, `sessionId`, `branchName`, `status`, `startedAt`, `executionElapsedMs`, `executionProgress`, `prUrl`, `outcome`.
+*   **Execution Metadata**: `taskId`, `projectId`, `sessionId`, `branchName`, `status`, `startedAt`, `executionStartedAt`, `executionPausedAt`, `executionElapsedMs`, `executionProgress`, `prUrl`, `outcome`, `promptSent`, `cancelled`, `batchId`, `teamId`, `number`, `identifier`, `dueDate`, `archived`, `inboxRead`, `createdAt`, `updatedAt`, `id`, `title`, `description`, `priority`, `labels`, `team`, `project`.
 *   **Non-Sensitive Context**: `filesChanged` (relative paths only), `toolsExecuted` (tool names only, no arguments or outputs).
+*   **User Metadata**: `userId`, `githubId`, `username`, `email`, `avatarUrl`, `repositories`, `teamMemberships`, `ledProjects`.
+*   **Provider Metadata**: `providerId`, `method`.
 
 ## Local-Only
 
 These fields represent the local execution context and authentication state. They must remain exclusively on the local machine and are never transmitted to the cloud.
 
-*   **Auth**: `accessToken`, `jwt`, `passwordHash`, `githubToken`, `opencodeApiKey`.
+*   **Auth**: `accessToken`, `jwt`, `passwordHash`, `githubToken`, `opencodeApiKey`, `apiKey`, `code`.
 *   **Local Execution Context**: `repoPath` (absolute local paths), `client`, `timeoutId`, `dockerContainerId`.
 
 ## Forbidden to Sync
@@ -23,6 +25,16 @@ These fields contain potentially sensitive information, raw outputs, or user-spe
 *   **Logs**: `logs`, `toolLogs`, `executionLogs`, raw terminal output, stdout/stderr streams.
 *   **User Input/Prompts**: `prompt`, `systemPrompt`, `customInstructions`.
 *   **Paths**: Absolute local paths (e.g., `/Users/name/project/...`).
+
+## Legacy Token Migration & Backfill Policy
+
+As part of the transition to local-only secret storage, the `User.accessToken` field in the cloud database is deprecated.
+
+**Policy for existing rows:**
+1. **No New Writes:** The server will no longer write OAuth access tokens to the database during login or signup.
+2. **Read-Only Transition:** Existing tokens may be read temporarily by legacy clients or migration jobs.
+3. **Safe Clearing (Backfill):** A background migration job or client-side routine should securely transfer the token to the user's local secure storage. Once verified, the cloud database row must be updated to set `accessToken: null` using the `clearLegacyToken` helper.
+4. **Final Deprecation:** Once all active users have migrated, the `accessToken` column will be destructively removed from the schema.
 
 ## Enforcement
 

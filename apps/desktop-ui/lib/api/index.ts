@@ -19,3 +19,7 @@ export { fetchMyIssues, executeTaskPublic, refreshTaskPr, fetchInboxTasks, fetch
 // Brainstorm
 export { checkBrainstormAvailability, generateBrainstormQuestions, streamBrainstormTasks, transcribeAudio } from './brainstorm';
 export type { BrainstormTask, BrainstormAvailability } from './brainstorm';
+
+// Metadata Queue
+export { metadataQueue, listenToTaskMetadata } from './metadata-queue';
+export type { ExecutionMetadataSync, QueuedMetadataEvent } from './metadata-queue';

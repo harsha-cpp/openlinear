@@ -1,0 +1,20 @@
+
+> @openlinear/api@0.0.1 test /home/kaizen/openlinear/apps/api
+> vitest run "src/__tests__/lifecycle.test.ts" "-t" "returns controlled error when server execution is disabled"
+
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90m/home/kaizen/openlinear/apps/api[39m
+
+[90mstdout[2m | src/__tests__/lifecycle.test.ts
+[22m[39m[dotenv@17.2.4] injecting env (8) from .env -- tip: 📡 add observability to secrets: https://dotenvx.com/ops
+
+[90mstdout[2m | src/__tests__/lifecycle.test.ts[2m > [22m[2mexecuteTask[2m > [22m[2mreturns controlled error when server execution is disabled
+[22m[39m[Execution] Server execution is disabled globally
+
+ [32m✓[39m src/__tests__/lifecycle.test.ts [2m([22m[2m2 tests[22m[2m | [22m[33m1 skipped[39m[2m)[22m[32m 7[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m1 passed[39m[22m[2m | [22m[33m1 skipped[39m[90m (2)[39m
+[2m   Start at [22m 02:32:12
+[2m   Duration [22m 517ms[2m (transform 184ms, setup 76ms, import 170ms, tests 7ms, environment 0ms)[22m
+

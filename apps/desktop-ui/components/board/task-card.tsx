@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Loader2, GitBranch, Code, GitPullRequest, Check, X, ExternalLink, Play, ArrowRight, Archive, Clock, CalendarDays } from "lucide-react"
+import { Loader2, GitBranch, Code, GitPullRequest, Check, X, ExternalLink, Play, ArrowRight, Archive, Clock, CalendarDays, Cloud, CloudOff, CloudUpload, RefreshCw } from "lucide-react"
 import { cn, openExternal } from "@/lib/utils"
 import { Task, ExecutionProgress, formatDuration } from "@/types/task"
+import { TaskSyncState, metadataQueue } from "@/lib/api/metadata-queue"
 
 interface TaskCardProps {
   task: Task
@@ -15,6 +16,7 @@ interface TaskCardProps {
   onMoveToInProgress?: (taskId: string) => void
   onTaskClick?: (taskId: string) => void
   executionProgress?: ExecutionProgress
+  syncState?: TaskSyncState
   selected?: boolean
   onToggleSelect?: (taskId: string) => void
   selectionMode?: boolean
@@ -47,7 +49,7 @@ const progressConfig = {
   error: { icon: X, label: 'Error', color: 'text-red-400' },
 }
 
-export function TaskCard({ task, onExecute, onCancel, onDelete, onMoveToInProgress, onTaskClick, executionProgress, selected, onToggleSelect, selectionMode, isBatchTask, isCompletedBatchTask, isDragging }: TaskCardProps) {
+export function TaskCard({ task, onExecute, onCancel, onDelete, onMoveToInProgress, onTaskClick, executionProgress, syncState, selected, onToggleSelect, selectionMode, isBatchTask, isCompletedBatchTask, isDragging }: TaskCardProps) {
   const [liveElapsedMs, setLiveElapsedMs] = useState<number>(0)
   const [cancelling, setCancelling] = useState(false)
 
@@ -105,6 +107,11 @@ export function TaskCard({ task, onExecute, onCancel, onDelete, onMoveToInProgre
   const showProgress = executionProgress && executionProgress.taskId === task.id
   const isActiveProgress = showProgress && ['cloning', 'executing', 'committing', 'creating_pr'].includes(executionProgress.status)
   const prLink = !isActiveProgress ? (executionProgress?.prUrl || task.prUrl) : null
+
+  const handleRetrySync = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    metadataQueue.processQueue()
+  }
 
   return (
     <div>
@@ -236,6 +243,33 @@ export function TaskCard({ task, onExecute, onCancel, onDelete, onMoveToInProgre
                   ? formatDuration(liveElapsedMs)
                   : formatDuration(task.executionElapsedMs)}
               </span>
+            )}
+            {syncState && syncState.status !== 'idle' && (
+              <div className="flex items-center gap-1 ml-2">
+                {syncState.status === 'pending' && (
+                  <span title="Pending sync" className="flex items-center">
+                    <CloudUpload className="w-3 h-3 text-linear-text-tertiary" />
+                  </span>
+                )}
+                {syncState.status === 'syncing' && (
+                  <span title="Syncing metadata..." className="flex items-center">
+                    <RefreshCw className="w-3 h-3 text-linear-accent animate-spin" />
+                  </span>
+                )}
+                {syncState.status === 'synced' && (
+                  <span title="Synced to cloud" className="flex items-center">
+                    <Cloud className="w-3 h-3 text-green-400" />
+                  </span>
+                )}
+                {syncState.status === 'error' && (
+                  <div className="flex items-center gap-1 text-red-400 group/sync" title="Sync failed">
+                    <CloudOff className="w-3 h-3" />
+                    <span className="text-[10px] hidden group-hover/sync:inline-block">
+                      Sync failed. <button onClick={handleRetrySync} className="underline hover:text-red-300">Retry</button>
+                    </span>
+                  </div>
+                )}
+              </div>
             )}
           </div>
           

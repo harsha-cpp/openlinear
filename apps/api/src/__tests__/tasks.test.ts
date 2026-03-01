@@ -31,7 +31,7 @@ describe('Tasks API', () => {
         githubId: 777777,
         username: 'tasktester',
         email: 'tasktest@example.com',
-        accessToken: 'fake-token',
+        accessToken: null,
       },
     });
     testUserId = user.id;
@@ -247,6 +247,60 @@ describe('Tasks API', () => {
       const res = await request(app).delete('/api/tasks/00000000-0000-0000-0000-000000000000');
 
       expect(res.status).toBe(404);
+    });
+  });
+
+  describe('Execution Auth Boundaries', () => {
+    it('returns 401 for unauthenticated execute request', async () => {
+      const task = await prisma.task.create({
+        data: { title: 'Auth Test Task', priority: 'medium' },
+      });
+
+      const res = await request(app).post(`/api/tasks/${task.id}/execute`);
+      expect(res.status).toBe(401);
+      expect(res.body.error).toBe('Unauthorized');
+    });
+
+    it('returns 401 for unauthenticated cancel request', async () => {
+      const task = await prisma.task.create({
+        data: { title: 'Auth Test Task', priority: 'medium' },
+      });
+
+      const res = await request(app).post(`/api/tasks/${task.id}/cancel`);
+      expect(res.status).toBe(401);
+      expect(res.body.error).toBe('Unauthorized');
+    });
+
+    it('returns 401 for unauthenticated running status request', async () => {
+      const task = await prisma.task.create({
+        data: { title: 'Auth Test Task', priority: 'medium' },
+      });
+
+      const res = await request(app).get(`/api/tasks/${task.id}/running`);
+      expect(res.status).toBe(401);
+      expect(res.body.error).toBe('Unauthorized');
+    });
+
+    it('returns 401 for unauthenticated logs request', async () => {
+      const task = await prisma.task.create({
+        data: { title: 'Auth Test Task', priority: 'medium' },
+      });
+
+      const res = await request(app).get(`/api/tasks/${task.id}/logs`);
+      expect(res.status).toBe(401);
+      expect(res.body.error).toBe('Unauthorized');
+    });
+
+    it('allows authenticated execute request', async () => {
+      const task = await prisma.task.create({
+        data: { title: 'Auth Test Task', priority: 'medium' },
+      });
+
+      const res = await request(app)
+        .post(`/api/tasks/${task.id}/execute`)
+        .set('Authorization', `Bearer ${authToken}`);
+      
+      expect(res.status).not.toBe(401);
     });
   });
 });

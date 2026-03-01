@@ -36,17 +36,15 @@ export async function ensureContainer(): Promise<{ status: string; hostPort: num
 }
 
 export async function setProviderApiKey(providerId: string, apiKey: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/opencode/auth`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader(),
-    },
-    body: JSON.stringify({ providerId, apiKey }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Failed to set API key');
+  const { invoke } = await import('@tauri-apps/api/core');
+  
+  let key = 'custom_api_key';
+  if (providerId === 'openai') key = 'openai_api_key';
+  else if (providerId === 'anthropic') key = 'anthropic_api_key';
+  
+  const res = await invoke<{success: boolean, error?: string}>('store_secret', { key, value: apiKey });
+  if (!res.success) {
+    throw new Error(res.error || 'Failed to save API key locally');
   }
 }
 

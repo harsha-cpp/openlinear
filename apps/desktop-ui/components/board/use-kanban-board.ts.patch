@@ -1,0 +1,46 @@
+--- apps/desktop-ui/components/board/use-kanban-board.ts
++++ apps/desktop-ui/components/board/use-kanban-board.ts
+@@ -8,6 +8,7 @@
+ import { Task, ExecutionProgress, ExecutionLogEntry } from "@/types/task"
+ import { API_URL, getAuthHeader } from "@/lib/api/client"
+ import { getSetupStatus, hasConfiguredProviders } from "@/lib/api/opencode"
++import { metadataQueue, TaskSyncState } from "@/lib/api/metadata-queue"
+ 
+ export const COLUMNS = [
+   { id: 'todo', title: 'All Issues', status: 'todo' as const },
+@@ -32,6 +33,7 @@
+   tasks: Task[]
+   loading: boolean
+   error: string | null
++  syncStates: Record<string, TaskSyncState>
+   executionProgress: Record<string, ExecutionProgress>
+   isTaskFormOpen: boolean
+   setIsTaskFormOpen: (open: boolean) => void
+@@ -71,6 +73,7 @@
+   const [tasks, setTasks] = useState<Task[]>([])
+   const [loading, setLoading] = useState(true)
+   const [error, setError] = useState<string | null>(null)
++  const [syncStates, setSyncStates] = useState<Record<string, TaskSyncState>>({})
+   const [executionProgress, setExecutionProgress] = useState<Record<string, ExecutionProgress>>({})
+   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false)
+   const [defaultStatus, setDefaultStatus] = useState<Task['status']>('todo')
+@@ -148,6 +151,11 @@
+     setSelectingColumns(new Set())
+   }
+ 
++  useEffect(() => {
++    const unsubscribe = metadataQueue.subscribe(setSyncStates)
++    return unsubscribe
++  }, [])
++
+   useEffect(() => {
+     setSelectingColumns(prev => {
+       const next = new Set(prev)
+@@ -522,6 +530,7 @@
+     tasks,
+     loading,
+     error,
++    syncStates,
+     executionProgress,
+     isTaskFormOpen,
+     setIsTaskFormOpen,

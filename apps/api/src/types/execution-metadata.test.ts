@@ -14,6 +14,7 @@ describe('ExecutionMetadataSyncSchema', () => {
   describe('valid payloads', () => {
     it('should accept minimal valid payload', () => {
       const payload = {
+        version: '1.0',
         taskId: 'tsk_123',
         runId: 'run_456',
         status: 'pending',
@@ -22,6 +23,7 @@ describe('ExecutionMetadataSyncSchema', () => {
       const result = safeValidateExecutionMetadataSync(payload);
       expect(result.success).toBe(true);
       if (result.success) {
+        expect(result.data.version).toBe('1.0');
         expect(result.data.taskId).toBe('tsk_123');
         expect(result.data.status).toBe('pending');
       }
@@ -29,21 +31,19 @@ describe('ExecutionMetadataSyncSchema', () => {
 
     it('should accept full valid payload', () => {
       const payload = {
+        version: '1.0',
         taskId: 'tsk_123',
         runId: 'run_456',
         status: 'completed',
         startedAt: '2026-02-27T10:00:00Z',
         completedAt: '2026-02-27T10:01:30Z',
         durationMs: 90000,
-        progress: 100,
         branch: 'feature/task-123',
         commitSha: 'abc123',
         prUrl: 'https://github.com/owner/repo/pull/42',
         prNumber: 42,
         outcome: 'Successfully implemented feature',
         errorCategory: undefined,
-        filesChanged: 3,
-        toolsExecuted: 12,
       };
       
       const result = safeValidateExecutionMetadataSync(payload);
@@ -193,24 +193,24 @@ describe('ExecutionMetadataSyncSchema', () => {
       expect(result.success).toBe(false);
     });
 
-    it('should reject progress over 100', () => {
-      const payload = {
-        taskId: 'tsk_123',
-        runId: 'run_456',
-        status: 'running',
-        progress: 150,
-      };
-      
-      const result = safeValidateExecutionMetadataSync(payload);
-      expect(result.success).toBe(false);
-    });
-
     it('should reject invalid datetime', () => {
       const payload = {
         taskId: 'tsk_123',
         runId: 'run_456',
         status: 'completed',
         startedAt: 'not-a-datetime',
+      };
+      
+      const result = safeValidateExecutionMetadataSync(payload);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject invalid version', () => {
+      const payload = {
+        version: '2.0',
+        taskId: 'tsk_123',
+        runId: 'run_456',
+        status: 'completed',
       };
       
       const result = safeValidateExecutionMetadataSync(payload);

@@ -56,6 +56,12 @@ jobs:
       - name: Test
         run: pnpm --filter @openlinear/api test
 
+      - name: Privacy Contract Gate
+        run: pnpm --filter @openlinear/api test -- src/__tests__/privacy-contract.test.ts
+
+      - name: Collaboration Compatibility Gate
+        run: pnpm --filter @openlinear/api test -- src/__tests__/projects.test.ts src/__tests__/teams.test.ts
+
   deploy:
     name: Deploy
     needs: checks

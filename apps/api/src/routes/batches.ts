@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '@openlinear/db';
-import { optionalAuth, AuthRequest } from '../middleware/auth';
+import { requireAuth, AuthRequest } from '../middleware/auth';
 import {
   createBatch,
   startBatch,
@@ -20,7 +20,7 @@ const CreateBatchSchema = z.object({
 
 const router: Router = Router();
 
-router.post('/', optionalAuth, async (req: AuthRequest, res: Response) => {
+router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const parsed = CreateBatchSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -30,6 +30,8 @@ router.post('/', optionalAuth, async (req: AuthRequest, res: Response) => {
 
     const { taskIds, mode } = parsed.data;
     const userId = req.userId || null;
+    
+    console.log(`[Batches] Create batch requested (userId: ${userId})`);
 
     let accessToken: string | null = null;
     if (userId) {
@@ -50,6 +52,7 @@ router.post('/', optionalAuth, async (req: AuthRequest, res: Response) => {
 
     startBatch(batch.id);
 
+    console.log(`[Batches] Create batch allowed (userId: ${userId}, batchId: ${batch.id})`);
     res.status(201).json({
       id: batch.id,
       status: batch.status,
@@ -68,7 +71,7 @@ router.post('/', optionalAuth, async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.get('/', async (_req: AuthRequest, res: Response) => {
+router.get('/', requireAuth, async (_req: AuthRequest, res: Response) => {
   try {
     const batches = getActiveBatches();
     res.json(
@@ -86,7 +89,7 @@ router.get('/', async (_req: AuthRequest, res: Response) => {
   }
 });
 
-router.get('/:id', async (req: AuthRequest, res: Response) => {
+router.get('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
     const batch = getBatch(id);
@@ -139,10 +142,12 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post('/:id/cancel', async (req: AuthRequest, res: Response) => {
+router.post('/:id/cancel', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
+    console.log(`[Batches] Cancel batch requested (userId: ${req.userId}, batchId: ${id})`);
     cancelBatch(id);
+    console.log(`[Batches] Cancel batch allowed (userId: ${req.userId}, batchId: ${id})`);
     res.json({ success: true });
   } catch (error) {
     console.error('[Batches] Error cancelling batch:', error);
@@ -150,11 +155,13 @@ router.post('/:id/cancel', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post('/:id/tasks/:taskId/cancel', async (req: AuthRequest, res: Response) => {
+router.post('/:id/tasks/:taskId/cancel', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
     const taskId = req.params.taskId as string;
+    console.log(`[Batches] Cancel task requested (userId: ${req.userId}, batchId: ${id}, taskId: ${taskId})`);
     cancelTask(id, taskId);
+    console.log(`[Batches] Cancel task allowed (userId: ${req.userId}, batchId: ${id}, taskId: ${taskId})`);
     res.json({ success: true });
   } catch (error) {
     console.error('[Batches] Error cancelling task:', error);
@@ -162,15 +169,17 @@ router.post('/:id/tasks/:taskId/cancel', async (req: AuthRequest, res: Response)
   }
 });
 
-router.post('/:id/approve', async (req: AuthRequest, res: Response) => {
+router.post('/:id/approve', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
+    console.log(`[Batches] Approve task requested (userId: ${req.userId}, batchId: ${id})`);
     approveNextTask(id);
     const batch = getBatch(id);
     if (!batch) {
       res.status(404).json({ error: 'Batch not found' });
       return;
     }
+    console.log(`[Batches] Approve task allowed (userId: ${req.userId}, batchId: ${id})`);
     res.json({
       id: batch.id,
       status: batch.status,

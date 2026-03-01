@@ -1,0 +1,20 @@
+# F2. Code Quality Review (Refresh)
+
+## Build/Lint/Test Matrix (current workspace)
+
+| Scope | Check | Status | Command | Key output excerpt |
+|---|---|---|---|---|
+| `@openlinear/api` | Build | PASS | `pnpm --filter @openlinear/api build` | `✓ API built successfully` |
+| `@openlinear/api` | Typecheck | PASS | `pnpm --filter @openlinear/api typecheck` | `> tsc --noEmit` |
+| `@openlinear/api` | Test | PASS | `pnpm --filter @openlinear/api test` | `Test Files 15 passed (15)` and `Tests 154 passed (154)` |
+| Repo-level | Lint | PASS | `pnpm lint` | `@openlinear/desktop-ui:lint: > tsc --noEmit`, `@openlinear/landing:lint: > tsc --noEmit`, `Tasks: 2 successful, 2 total` |
+| Repo-level | Build | FAIL | `pnpm build` | `@openlinear/desktop:build: failed to bundle project 'failed to run linuxdeploy'`, `Failed: @openlinear/desktop#build` |
+| Repo-level | Typecheck | PASS | `pnpm typecheck` | `Tasks: 3 successful, 3 total` |
+| Repo-level | Test | PASS | `pnpm test` | `Tasks: 1 successful, 1 total` |
+
+## Lint regression check
+
+- Previous lint failure signature (`Invalid project directory provided, no such directory: .../lint`) is not present.
+- Lint command issue is resolved for web apps in current workspace: both web app lint scripts run `tsc --noEmit`, and `pnpm lint` exits successfully.
+
+Build/Lint/Test matrix + VERDICT: FAIL
