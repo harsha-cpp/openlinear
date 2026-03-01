@@ -93,15 +93,24 @@ step "Building API..."
 pnpm --filter @openlinear/api build
 ok "API built"
 
+step "Building FE (desktop-ui)..."
+pnpm --filter @openlinear/desktop-ui build
+ok "FE built"
+
 # ── Restart services ─────────────────────────────────────────────
-step "Restarting API service..."
+step "Restarting API and FE services..."
 
 if command -v pm2 &>/dev/null; then
     # PM2 process manager
+    pm2 delete openlinear-dashboard 2>/dev/null || true
+    pm2 delete dashboard 2>/dev/null || true
     pm2 delete openlinear-api 2>/dev/null || true
+    pm2 delete openlinear-fe 2>/dev/null || true
+    
     pm2 start apps/api/dist/index.js --name openlinear-api
+    pm2 start npm --name openlinear-fe -- run start --prefix apps/desktop-ui
     pm2 save
-    ok "API service restarted (pm2)"
+    ok "API and FE services restarted (pm2)"
 elif systemctl is-active --quiet openlinear-api 2>/dev/null; then
     # Systemd services
     sudo systemctl restart openlinear-api

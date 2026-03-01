@@ -93,6 +93,7 @@ jobs:
             set -e
             echo "== pm2 show =="
             pm2 show openlinear-api || true
+            pm2 show openlinear-fe || true
             echo "== port 3001 listener =="
             (command -v ss >/dev/null 2>&1 && ss -ltnp | grep ':3001' && exit 0) || true
             (command -v lsof >/dev/null 2>&1 && lsof -iTCP:3001 -sTCP:LISTEN -nP && exit 0) || true
@@ -109,3 +110,23 @@ jobs:
             echo "✗ Health check failed — returned $HTTP_STATUS"
             exit 1
           fi
+
+  publish-npm:
+    name: Publish NPM Package
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+      - run: pnpm install --frozen-lockfile
+      - name: Publish @openlinear/core (openlinear)
+        run: |
+          cd packages/openlinear
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
