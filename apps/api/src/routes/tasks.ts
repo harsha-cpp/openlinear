@@ -2,8 +2,8 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '@openlinear/db';
 import { z } from 'zod';
 import { broadcast } from '../sse';
-import { executeTask, cancelTask, isTaskRunning, getExecutionLogs } from '../services/execution';
-import { optionalAuth, AuthRequest } from '../middleware/auth';
+import { executeTask, cancelTask, isTaskRunning } from '../services/execution';
+import { optionalAuth, requireAuth, AuthRequest } from '../middleware/auth';
 import { getUserTeamIds } from '../services/team-scope';
 
 const PriorityEnum = z.enum(['low', 'medium', 'high']);
@@ -391,18 +391,20 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/:id/execute', optionalAuth, async (req: AuthRequest, res: Response) => {
+router.post('/:id/execute', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
-    console.log(`[Tasks] Execute requested for task ${id.slice(0, 8)} (userId: ${req.userId || 'anonymous'})`);
+    console.log(`[Tasks] Execute requested for task ${id.slice(0, 8)} (userId: ${req.userId})`);
+    
     const result = await executeTask({ taskId: id, userId: req.userId });
 
     if (!result.success) {
       console.log(`[Tasks] Execute failed: ${result.error}`);
-      res.status(400).json({ error: result.error });
+      res.status(400).json({ error: result.error, code: result.code });
       return;
     }
 
+    console.log(`[Tasks] Execute allowed for task ${id.slice(0, 8)} (userId: ${req.userId})`);
     res.json({ message: 'Task execution started' });
   } catch (error) {
     console.error('[Tasks] Error executing task:', error);
@@ -410,7 +412,7 @@ router.post('/:id/execute', optionalAuth, async (req: AuthRequest, res: Response
   }
 });
 
-router.post('/:id/refresh-pr', optionalAuth, async (req: AuthRequest, res: Response) => {
+router.post('/:id/refresh-pr', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
     const task = await prisma.task.findUnique({
@@ -496,7 +498,7 @@ router.post('/:id/refresh-pr', optionalAuth, async (req: AuthRequest, res: Respo
   }
 });
 
-router.get('/:id/running', async (req: Request, res: Response) => {
+router.get('/:id/running', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
     res.json({ running: isTaskRunning(id) });
@@ -505,31 +507,23 @@ router.get('/:id/running', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/:id/logs', async (req: Request, res: Response) => {
+router.get('/:id/logs', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const id = req.params.id as string;
-    let logs = getExecutionLogs(id);
-
-    if (logs.length === 0) {
-      const result = await prisma.$queryRaw<Array<{ executionLogs: unknown }>>`
-        SELECT "executionLogs" FROM tasks WHERE id = ${id}
-      `;
-      if (result.length > 0 && Array.isArray(result[0].executionLogs)) {
-        logs = result[0].executionLogs as unknown as typeof logs;
-      }
-    }
-
-    res.json({ logs });
+    // We no longer persist or expose historical raw execution logs for privacy/compliance.
+    // Return a controlled response indicating logs are unavailable.
+    res.status(403).json({ 
+      error: 'Execution logs are not available. Raw execution logs are no longer persisted or exposed for privacy and compliance reasons.' 
+    });
   } catch (error) {
     console.error('[Tasks] Error getting execution logs:', error);
     res.status(500).json({ error: 'Failed to get execution logs' });
   }
 });
 
-router.post('/:id/cancel', async (req: Request, res: Response) => {
+router.post('/:id/cancel', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
-    console.log(`[Tasks] Cancel requested for task ${id.slice(0, 8)}`);
+    console.log(`[Tasks] Cancel requested for task ${id.slice(0, 8)} (userId: ${req.userId})`);
 
     if (!isTaskRunning(id)) {
       console.log(`[Tasks] Task ${id.slice(0, 8)} is not running, cannot cancel`);
@@ -545,7 +539,7 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
       return;
     }
 
-    console.log(`[Tasks] Task ${id.slice(0, 8)} cancelled`);
+    console.log(`[Tasks] Cancel allowed for task ${id.slice(0, 8)} (userId: ${req.userId})`);
     res.json({ message: 'Task cancelled' });
   } catch (error) {
     console.error('[Tasks] Error cancelling task:', error);

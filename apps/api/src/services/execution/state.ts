@@ -4,7 +4,6 @@ import { prisma } from '@openlinear/db';
 import { broadcast } from '../../sse';
 
 import type { OpencodeClient } from '@opencode-ai/sdk';
-import { cleanupDeltaBuffer, flushDeltaBuffer } from '../delta-buffer';
 
 export interface Label {
   id: string;
@@ -151,22 +150,13 @@ export function estimateProgress(execution: ExecutionState): number {
 }
 
 export async function persistLogs(taskId: string): Promise<void> {
-  const execution = activeExecutions.get(taskId);
-  if (!execution || execution.logs.length === 0) return;
-  try {
-    await prisma.$executeRaw`
-      UPDATE tasks SET "executionLogs" = ${JSON.stringify(execution.logs)}::jsonb WHERE id = ${taskId}
-    `;
-  } catch (error) {
-    console.error(`[Execution] Failed to persist logs for task ${taskId.slice(0, 8)}:`, error);
-  }
+  // No-op: We no longer persist raw execution logs for privacy/compliance reasons.
+  return;
 }
 
 export async function cleanupExecution(taskId: string): Promise<void> {
   const execution = activeExecutions.get(taskId);
   if (execution) {
-    flushDeltaBuffer(taskId);
-    cleanupDeltaBuffer(taskId);
     clearTimeout(execution.timeoutId);
     sessionToTask.delete(execution.sessionId);
     activeExecutions.delete(taskId);

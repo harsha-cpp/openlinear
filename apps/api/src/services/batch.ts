@@ -1,14 +1,10 @@
-import crypto from 'crypto';
+import { randomUUID } from 'crypto';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { prisma } from '@openlinear/db';
 import { broadcast } from '../sse';
-import { getClientForUser, toContainerPath } from './opencode';
-import { ensureMainRepo, createWorktree, cleanupBatch, mergeBranch, createBatchBranch, pushBranch } from './worktree';
+import { ensureMainRepo, cleanupBatch, mergeBranch, createBatchBranch, pushBranch } from './worktree';
 import type { BatchState, BatchTask, BatchSettings, CreateBatchParams, BatchEventType } from '../types/batch';
-import type { OpencodeClient } from '@opencode-ai/sdk';
-import { getOrCreateBuffer, appendTextDelta, appendReasoningDelta, flushDeltaBuffer, cleanupDeltaBuffer, markThinking } from './delta-buffer';
-import { getGitIdentityEnv } from './git-identity';
 
 const execAsync = promisify(exec);
 
@@ -28,7 +24,7 @@ function broadcastBatchEvent(type: BatchEventType, batchId: string, data: Record
 }
 
 export async function createBatch(params: CreateBatchParams): Promise<BatchState> {
-  const batchId = crypto.randomUUID();
+  const batchId = randomUUID();
 
   const settings = await prisma.settings.findFirst({ where: { id: 'default' } }) as Record<string, unknown> | null;
   const batchSettings: BatchSettings = {
@@ -143,37 +139,7 @@ async function startTask(batch: BatchState, taskIndex: number): Promise<void> {
   task.status = 'running';
   task.startedAt = new Date();
 
-  if (!batch.userId) {
-    throw new Error('Cannot start task without an authenticated user (userId is required for container isolation)');
-  }
-
   try {
-    const project = await prisma.repository.findUnique({ where: { id: batch.projectId } });
-
-    const worktreePath = await createWorktree(
-      batch.projectId,
-      batch.id,
-      task.taskId,
-      project?.defaultBranch || 'main'
-    );
-    task.worktreePath = worktreePath;
-
-    const client = await getClientForUser(batch.userId, worktreePath);
-
-    const containerPath = toContainerPath(worktreePath);
-    const sessionResponse = await client.session.create({
-      body: { title: task.title },
-      query: { directory: containerPath },
-    });
-
-    const sessionId = sessionResponse.data?.id;
-    if (!sessionId) {
-      throw new Error('Failed to create OpenCode session');
-    }
-
-    task.sessionId = sessionId;
-    sessionToBatch.set(sessionId, { batchId: batch.id, taskId: task.taskId });
-
     broadcastBatchEvent('batch:task:started', batch.id, { taskId: task.taskId, title: task.title });
 
     await updateTaskInDb(task.taskId, 'in_progress', {
@@ -181,28 +147,7 @@ async function startTask(batch: BatchState, taskIndex: number): Promise<void> {
       executionProgress: 0,
     });
 
-    emitBatchLog(task.taskId, 'info', `Batch task started in ${batch.mode} mode`);
-
-    subscribeToTaskEvents(client, sessionId, batch.id, task.taskId);
-
-    const taskRecord = await prisma.task.findUnique({
-      where: { id: task.taskId },
-      select: { title: true, description: true },
-    });
-
-    let prompt = taskRecord?.title || task.title;
-    if (taskRecord?.description) {
-      prompt += `\n\n${taskRecord.description}`;
-    }
-
-    client.session.prompt({
-      path: { id: sessionId },
-      body: { parts: [{ type: 'text', text: prompt }] },
-    }).then(() => {
-      console.log(`[Batch] Prompt sent for task ${task.taskId.slice(0, 8)} in batch ${batch.id.slice(0, 8)}`);
-    }).catch((err: Error) => {
-      console.error(`[Batch] Failed to send prompt for task ${task.taskId.slice(0, 8)}:`, err.message);
-    });
+    emitBatchLog(task.taskId, 'info', `Batch task started in ${batch.mode} mode (waiting for local execution)`);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
     console.error(`[Batch] Failed to start task ${task.taskId.slice(0, 8)}:`, errorMsg);
@@ -230,120 +175,6 @@ function emitBatchLog(taskId: string, type: 'info' | 'agent' | 'tool' | 'error' 
   batchTaskLogs.get(taskId)!.push(entry);
 
   broadcast('execution:log', { taskId, entry });
-}
-
-function subscribeToTaskEvents(
-  client: OpencodeClient,
-  sessionId: string,
-  batchId: string,
-  taskId: string
-): void {
-  let promptSent = false;
-  getOrCreateBuffer(taskId, (msg) => emitBatchLog(taskId, 'agent', msg));
-
-  (async () => {
-    try {
-      const events = await client.event.subscribe();
-
-      for await (const event of events.stream) {
-        const type = event.type as string;
-        const props = (event.properties || {}) as Record<string, unknown>;
-
-        if (type === 'server.heartbeat') continue;
-
-        // Terminal events
-        if (type === 'session.completed' || type === 'session.idle') {
-          if (!promptSent) continue;
-          flushDeltaBuffer(taskId);
-          cleanupDeltaBuffer(taskId);
-          emitBatchLog(taskId, 'success', 'Agent completed work');
-          await handleTaskComplete(batchId, taskId, true);
-          break;
-        }
-
-        if (type === 'session.error') {
-          flushDeltaBuffer(taskId);
-          cleanupDeltaBuffer(taskId);
-          const errorMsg = String(props.error || 'Session error');
-          emitBatchLog(taskId, 'error', 'Execution failed', errorMsg);
-          await handleTaskComplete(batchId, taskId, false, errorMsg);
-          break;
-        }
-
-        // Status events
-        if (type === 'session.status') {
-          const status = props.status as { type?: string; message?: string } | undefined;
-          if (status?.type === 'busy') {
-            promptSent = true;
-            if (markThinking(taskId)) {
-              emitBatchLog(taskId, 'agent', 'Agent is thinking...');
-            }
-          } else if (status?.type === 'retry') {
-            emitBatchLog(taskId, 'info', `Retrying: ${status.message || 'unknown reason'}`);
-          }
-          continue;
-        }
-
-        // Message part updates — agent text, tool calls, reasoning
-        if (type === 'message.part.updated') {
-          const part = props.part as { type?: string; text?: string; tool?: string; state?: { status?: string; title?: string; output?: string } } | undefined;
-          const delta = props.delta as string | undefined;
-
-          if (part?.type === 'text' && delta) {
-            appendTextDelta(taskId, delta);
-          } else if (part?.type === 'tool') {
-            flushDeltaBuffer(taskId);
-            const toolName = part.tool || 'unknown tool';
-            const state = part.state;
-            if (state?.status === 'running') {
-              emitBatchLog(taskId, 'tool', `Running: ${state.title || toolName}`);
-            } else if (state?.status === 'completed') {
-              emitBatchLog(taskId, 'success', `Completed: ${toolName}`, state.output?.slice(0, 100));
-            } else if (state?.status === 'error') {
-              emitBatchLog(taskId, 'error', `Failed: ${toolName}`, state.output);
-            }
-          } else if (part?.type === 'reasoning') {
-            if (delta && delta.length > 0) {
-              appendReasoningDelta(taskId, delta);
-            }
-          }
-          continue;
-        }
-
-        // Tool execution events
-        if (type === 'tool.execute.before') {
-          flushDeltaBuffer(taskId);
-          const tool = props.tool as string | undefined;
-          if (tool) {
-            emitBatchLog(taskId, 'tool', `Starting: ${tool}`);
-          }
-          continue;
-        }
-
-        if (type === 'tool.execute.after') {
-          const tool = props.tool as string | undefined;
-          const output = props.output as string | undefined;
-          if (tool) {
-            emitBatchLog(taskId, 'success', `Finished: ${tool}`, output?.slice(0, 100));
-          }
-          continue;
-        }
-
-        // File edits
-        if (type === 'file.edited') {
-          const file = props.file as string | undefined;
-          if (file) {
-            emitBatchLog(taskId, 'success', `Edited file: ${file}`);
-          }
-          continue;
-        }
-      }
-    } catch (error) {
-      cleanupDeltaBuffer(taskId);
-      console.error(`[Batch] Event subscription error for task ${taskId.slice(0, 8)}:`, error);
-      await handleTaskComplete(batchId, taskId, false, 'Event subscription failed');
-    }
-  })();
 }
 
 async function updateTaskInDb(
@@ -375,7 +206,7 @@ async function updateTaskInDb(
   }
 }
 
-async function handleTaskComplete(
+export async function handleTaskComplete(
   batchId: string,
   taskId: string,
   success: boolean,
@@ -389,58 +220,22 @@ async function handleTaskComplete(
 
   const elapsedMs = task.startedAt ? Date.now() - task.startedAt.getTime() : 0;
 
-    if (success) {
-      // Commit changes from worktree
-      if (task.worktreePath) {
-        try {
-          const env = { ...process.env, ...getGitIdentityEnv() };
-          const { stdout: status } = await execAsync('git status --porcelain', { cwd: task.worktreePath });
-          if (status.trim()) {
-            await execAsync('git add -A', { cwd: task.worktreePath });
-            const commitMsg = `feat: ${task.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').slice(0, 50)}`;
-            await execAsync(`git commit -m "${commitMsg}"`, { cwd: task.worktreePath, env });
-            console.log(`[Batch] Committed changes for task ${task.taskId.slice(0, 8)}`);
-          } else {
-            console.log(`[Batch] No changes for task ${task.taskId.slice(0, 8)}`);
-          }
-        } catch (commitErr) {
-          console.error(`[Batch] Failed to commit for task ${task.taskId.slice(0, 8)}:`, commitErr);
-        }
-      }
-
+  if (success) {
     task.status = 'completed';
     broadcastBatchEvent('batch:task:completed', batchId, { taskId });
     emitBatchLog(taskId, 'success', 'Batch task completed');
-
-    await updateTaskInDb(taskId, 'done', {
-      executionElapsedMs: elapsedMs,
-      executionProgress: 100,
-      outcome: 'Completed via batch execution',
-    });
   } else {
     task.status = 'failed';
     task.error = error || 'Unknown error';
     broadcastBatchEvent('batch:task:failed', batchId, { taskId, error: task.error });
     emitBatchLog(taskId, 'error', `Batch task failed: ${task.error}`);
-
-    await updateTaskInDb(taskId, 'todo', {
-      executionElapsedMs: elapsedMs,
-      outcome: `Failed: ${task.error}`,
-    });
   }
 
   task.completedAt = new Date();
 
   const logs = batchTaskLogs.get(taskId) || [];
   if (logs.length > 0) {
-    try {
-      await prisma.task.update({
-        where: { id: taskId },
-        data: { executionLogs: JSON.parse(JSON.stringify(logs)) },
-      });
-    } catch (err) {
-      console.error(`[Batch] Failed to persist logs for task ${taskId.slice(0, 8)}:`, err);
-    }
+    // We no longer persist raw execution logs for privacy/compliance reasons.
     batchTaskLogs.delete(taskId);
   }
 
@@ -482,6 +277,16 @@ async function finalizeBatch(batchId: string): Promise<void> {
 
   const project = await prisma.repository.findUnique({ where: { id: batch.projectId } });
   const targetBranch = project?.defaultBranch || 'main';
+
+  if (project) {
+    try {
+      const mainRepoPath = batch.mainRepoPath;
+      console.log(`[Batch] Fetching latest from origin before merging batch ${batchId}`);
+      await execAsync(`git -C ${mainRepoPath} fetch origin`);
+    } catch (err) {
+      console.error(`[Batch] Failed to fetch origin before merging:`, err);
+    }
+  }
 
   await createBatchBranch(batch.projectId, batch.batchBranch, targetBranch);
 
@@ -606,18 +411,12 @@ export async function cancelBatch(batchId: string): Promise<void> {
   batch.status = 'cancelled';
 
   for (const task of batch.tasks) {
-    if (task.status === 'running' && task.sessionId && task.worktreePath && batch.userId) {
-      try {
-        const client = await getClientForUser(batch.userId, task.worktreePath);
-        await client.session.abort({ path: { id: task.sessionId } });
-      } catch (error) {
-        console.error(`[Batch] Failed to abort session for task ${task.taskId.slice(0, 8)}:`, error);
-      }
+    if (task.status === 'running' || task.status === 'queued') {
       task.status = 'cancelled';
       task.completedAt = new Date();
-      sessionToBatch.delete(task.sessionId);
-    } else if (task.status === 'queued') {
-      task.status = 'cancelled';
+      if (task.sessionId) {
+        sessionToBatch.delete(task.sessionId);
+      }
     }
   }
 
@@ -644,13 +443,7 @@ export async function cancelTask(batchId: string, taskId: string): Promise<void>
   task.status = 'cancelled';
   task.completedAt = new Date();
 
-  if (task.sessionId && task.worktreePath && batch.userId) {
-    try {
-      const client = await getClientForUser(batch.userId, task.worktreePath);
-      await client.session.abort({ path: { id: task.sessionId } });
-    } catch (error) {
-      console.error(`[Batch] Failed to abort session for task ${taskId.slice(0, 8)}:`, error);
-    }
+  if (task.sessionId) {
     sessionToBatch.delete(task.sessionId);
   }
 
