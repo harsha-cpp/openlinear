@@ -127,6 +127,6 @@ jobs:
       - name: Publish @openlinear/core (openlinear)
         run: |
           cd packages/openlinear
-          npm publish --access public --otp=0cae9c2c31965a0cfcba1753d368de9d684ee17fd0491f1edaa894d1eda0e14a
+          npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
