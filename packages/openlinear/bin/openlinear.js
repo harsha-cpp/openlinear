@@ -17,6 +17,7 @@ const child = spawn(appImagePath, process.argv.slice(2), {
   env: {
     ...process.env,
     APPIMAGE_EXTRACT_AND_RUN: '1',
+    GDK_BACKEND: process.env.GDK_BACKEND || 'x11',
     WEBKIT_DISABLE_COMPOSITING_MODE: '1',
     WEBKIT_DISABLE_DMABUF_RENDERER: '1',
   }
