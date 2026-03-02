@@ -13,7 +13,8 @@ if (!fs.existsSync(appImagePath)) {
 }
 
 const child = spawn(appImagePath, process.argv.slice(2), {
-  stdio: 'inherit'
+  stdio: 'inherit',
+  env: { ...process.env, APPIMAGE_EXTRACT_AND_RUN: '1' }
 });
 
 child.on('exit', (code) => {
