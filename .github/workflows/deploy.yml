@@ -126,8 +126,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Remove stale auth tokens
-        run: npm config delete //registry.npmjs.org/:_authToken 2>/dev/null || true
+      - name: Upgrade npm for OIDC Trusted Publishers support
+        run: npm install -g npm@latest
       - name: Publish @openlinear/core (openlinear)
         run: |
           cd packages/openlinear
