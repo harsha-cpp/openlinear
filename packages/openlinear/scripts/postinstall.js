@@ -3,8 +3,6 @@ const https = require('node:https');
 const os = require('node:os');
 const path = require('node:path');
 
-const packageJson = require('../package.json');
-
 const platform = process.platform;
 const arch = process.arch;
 
@@ -13,41 +11,53 @@ if (platform !== 'linux' || arch !== 'x64') {
   process.exit(0);
 }
 
-const baseUrl = process.env.OPENLINEAR_RELEASE_BASE_URL ||
-  `https://github.com/kaizen403/openlinear/releases/download/v${packageJson.version}`;
-const fileName = `openlinear-${packageJson.version}-x86_64.AppImage`;
-const downloadUrl = `${baseUrl}/${fileName}`;
-
 const installDir = path.join(os.homedir(), '.openlinear');
 const targetPath = path.join(installDir, 'openlinear.AppImage');
 
-function download(url, destination) {
+function httpsGet(url) {
   return new Promise((resolve, reject) => {
-    const request = https.get(url, (response) => {
-      if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+    https.get(url, { headers: { 'User-Agent': 'openlinear-installer' } }, (response) => {
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
         response.resume();
-        download(response.headers.location, destination).then(resolve).catch(reject);
+        httpsGet(response.headers.location).then(resolve).catch(reject);
         return;
       }
-
       if (response.statusCode !== 200) {
         response.resume();
-        reject(new Error(`Download failed with status ${response.statusCode}`));
+        reject(new Error(`HTTP ${response.statusCode} from ${url}`));
         return;
       }
+      resolve(response);
+    }).on('error', reject);
+  });
+}
 
-      const totalBytes = parseInt(response.headers['content-length'], 10);
+function httpsGetJson(url) {
+  return new Promise((resolve, reject) => {
+    httpsGet(url).then((response) => {
+      let data = '';
+      response.on('data', (chunk) => { data += chunk; });
+      response.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch (e) { reject(new Error(`Invalid JSON from ${url}`)); }
+      });
+    }).catch(reject);
+  });
+}
+
+function downloadFile(url, destination, expectedSize) {
+  return new Promise((resolve, reject) => {
+    httpsGet(url).then((response) => {
+      const totalBytes = parseInt(response.headers['content-length'], 10) || expectedSize;
       let downloadedBytes = 0;
       let lastPrintedPercentage = -1;
 
       console.log(`\x1b[36m==>\x1b[0m Downloading OpenLinear AppImage (~${(totalBytes / 1024 / 1024).toFixed(1)} MB)...`);
-      
-      // Simple progress tracking
+
       response.on('data', (chunk) => {
         downloadedBytes += chunk.length;
-        if (!isNaN(totalBytes)) {
+        if (!isNaN(totalBytes) && totalBytes > 0) {
           const percentage = Math.floor((downloadedBytes / totalBytes) * 100);
-          // Only print every 10% to avoid spamming the console
           if (percentage % 10 === 0 && percentage !== lastPrintedPercentage) {
             process.stdout.write(`\r\x1b[36m==>\x1b[0m Progress: ${percentage}%`);
             lastPrintedPercentage = percentage;
@@ -59,27 +69,48 @@ function download(url, destination) {
       response.pipe(fileStream);
       fileStream.on('finish', () => {
         process.stdout.write(`\r\x1b[36m==>\x1b[0m Progress: 100%\n`);
-        fileStream.close(resolve);
+        fileStream.close(() => {
+          const stat = fs.statSync(destination);
+          if (expectedSize && stat.size !== expectedSize) {
+            fs.unlinkSync(destination);
+            reject(new Error(`Download incomplete: got ${stat.size} bytes, expected ${expectedSize}`));
+            return;
+          }
+          resolve();
+        });
       });
       fileStream.on('error', (err) => {
         fileStream.close();
         reject(err);
       });
-    });
-
-    request.on('error', reject);
+    }).catch(reject);
   });
 }
 
 async function main() {
   try {
+    const releaseUrl = process.env.OPENLINEAR_RELEASE_API_URL ||
+      'https://api.github.com/repos/kaizen403/openlinear/releases/latest';
+
+    console.log('\x1b[36m==>\x1b[0m Fetching latest OpenLinear release...');
+    const release = await httpsGetJson(releaseUrl);
+
+    const appImageAsset = release.assets.find((a) => a.name.endsWith('-x86_64.AppImage'));
+    if (!appImageAsset) {
+      console.error('\x1b[31m✗\x1b[0m No AppImage found in latest release.');
+      process.exit(0);
+    }
+
+    console.log(`\x1b[36m==>\x1b[0m Found ${appImageAsset.name} (${release.tag_name})`);
+
     fs.mkdirSync(installDir, { recursive: true });
-    await download(downloadUrl, targetPath);
+    await downloadFile(appImageAsset.browser_download_url, targetPath, appImageAsset.size);
     fs.chmodSync(targetPath, 0o755);
-    console.log(`\n\x1b[32m✓\x1b[0m OpenLinear AppImage successfully installed to ${targetPath}`);
+
+    console.log(`\x1b[32m✓\x1b[0m OpenLinear ${release.tag_name} installed to ${targetPath}`);
     console.log(`\x1b[32m✓\x1b[0m You can now run \x1b[1mopenlinear\x1b[0m in your terminal.`);
   } catch (error) {
-    console.error(`\n\x1b[31m✗\x1b[0m Failed to download OpenLinear AppImage: ${error.message}`);
+    console.error(`\n\x1b[31m✗\x1b[0m Failed to install OpenLinear: ${error.message}`);
   }
 }
 

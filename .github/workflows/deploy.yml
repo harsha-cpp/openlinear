@@ -31,6 +31,8 @@ jobs:
       DATABASE_URL: postgresql://openlinear:openlinear@localhost:5432/openlinear_test
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - uses: pnpm/action-setup@v4
 
@@ -55,12 +57,6 @@ jobs:
 
       - name: Test
         run: pnpm --filter @openlinear/api test
-
-      - name: Privacy Contract Gate
-        run: pnpm --filter @openlinear/api test -- src/__tests__/privacy-contract.test.ts
-
-      - name: Collaboration Compatibility Gate
-        run: pnpm --filter @openlinear/api test -- src/__tests__/projects.test.ts src/__tests__/teams.test.ts
 
   deploy:
     name: Deploy
@@ -102,18 +98,21 @@ jobs:
 
       - name: Verify deployment
         run: |
-          sleep 30
-          HTTP_STATUS=$(curl -s -o /dev/null -w '%{http_code}' https://rixie.in/health)
-          if [ "$HTTP_STATUS" = "200" ]; then
-            echo "✓ Deployment verified — health check returned $HTTP_STATUS"
-          else
-            echo "✗ Health check failed — returned $HTTP_STATUS"
-            exit 1
-          fi
+          for i in 1 2 3 4 5 6; do
+            HTTP_STATUS=$(curl -s -o /dev/null -w '%{http_code}' https://rixie.in/health)
+            if [ "$HTTP_STATUS" = "200" ]; then
+              echo "✓ Deployment verified — health check returned $HTTP_STATUS"
+              exit 0
+            fi
+            echo "Attempt $i: got $HTTP_STATUS, retrying in 5s..."
+            sleep 5
+          done
+          echo "✗ Health check failed after 6 attempts"
+          exit 1
 
   publish-npm:
     name: Publish NPM Package
-    needs: deploy
+    needs: checks
     runs-on: ubuntu-latest
     permissions:
       id-token: write
