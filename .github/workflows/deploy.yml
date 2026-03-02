@@ -115,7 +115,6 @@ jobs:
     name: Publish NPM Package
     needs: deploy
     runs-on: ubuntu-latest
-    environment: production
     permissions:
       id-token: write
       contents: read
@@ -126,8 +125,9 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          registry-url: 'https://registry.npmjs.org'
       - run: pnpm install --frozen-lockfile
+      - name: Remove stale auth tokens
+        run: npm config delete //registry.npmjs.org/:_authToken 2>/dev/null || true
       - name: Publish @openlinear/core (openlinear)
         run: |
           cd packages/openlinear
