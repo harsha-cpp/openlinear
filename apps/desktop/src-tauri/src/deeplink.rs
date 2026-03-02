@@ -9,7 +9,7 @@ use tauri::Emitter;
 use tauri_plugin_deep_link::DeepLinkExt;
 use url::Url;
 
-const API_BASE_URL: &str = "http://localhost:3001";
+const API_BASE_URL: &str = "https://rixie.in";
 
 /// Payload emitted to frontend after OAuth callback processing
 #[derive(Clone, Serialize)]

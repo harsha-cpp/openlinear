@@ -1,4 +1,4 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://rixie.in';
 
 function getClientHeader(): HeadersInit {
   const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;

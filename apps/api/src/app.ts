@@ -19,8 +19,20 @@ import { clients, SSEClient } from './sse';
 export function createApp(): Application {
   const app: Application = express();
 
+  const allowedOrigins = [
+    process.env.CORS_ORIGIN || 'http://localhost:3000',
+    'http://tauri.localhost',
+    'https://tauri.localhost',
+  ];
+
   app.use(cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: ${origin} not allowed`));
+      }
+    },
     credentials: true,
   }));
   app.use(express.json());
