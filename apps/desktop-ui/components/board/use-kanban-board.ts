@@ -7,7 +7,6 @@ import { Project } from "@/lib/api"
 import type { Repository } from "@/lib/api"
 import { Task, ExecutionProgress, ExecutionLogEntry } from "@/types/task"
 import { API_URL, getAuthHeader } from "@/lib/api/client"
-import { getSetupStatus, hasConfiguredProviders } from "@/lib/api/opencode"
 import { metadataQueue, TaskSyncState } from "@/lib/api/metadata-queue"
 
 export const COLUMNS = [
@@ -76,35 +75,30 @@ export interface UseKanbanBoardReturn {
   toggleColumnSelection: (columnId: string) => void
   toggleColumnSelectAll: (status: Task['status']) => void
   clearSelection: () => void
-  fetchTasks: (options?: {
-    showLoading?: boolean
-    allowRetry?: boolean
-    clearError?: boolean
-    resetRetry?: boolean
-    silent?: boolean
-  }) => Promise<void>
-  showProviderSetup: boolean
-  setShowProviderSetup: (show: boolean) => void
-  handleProviderSetupComplete: () => void
-}
-
-export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoardProps): UseKanbanBoardReturn {
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [syncStates, setSyncStates] = useState<Record<string, TaskSyncState>>({})
-  const [executionProgress, setExecutionProgress] = useState<Record<string, ExecutionProgress>>({})
-  const [isTaskFormOpen, setIsTaskFormOpen] = useState(false)
-  const [defaultStatus, setDefaultStatus] = useState<Task['status']>('todo')
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
-  const [taskLogs, setTaskLogs] = useState<Record<string, ExecutionLogEntry[]>>({})
-  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
-  const [selectingColumns, setSelectingColumns] = useState<Set<string>>(new Set())
-  const [activeBatch, setActiveBatch] = useState<ActiveBatch | null>(null)
-  const [completedBatch, setCompletedBatch] = useState<{ taskIds: string[]; prUrl: string | null; mode: string } | null>(null)
-  const [showProviderSetup, setShowProviderSetup] = useState(false)
-  const [pendingExecuteTaskId, setPendingExecuteTaskId] = useState<string | null>(null)
-  const { isAuthenticated, activeRepository, refreshActiveRepository } = useAuth()
+    fetchTasks: (options?: {
+      showLoading?: boolean
+      allowRetry?: boolean
+      clearError?: boolean
+      resetRetry?: boolean
+      silent?: boolean
+    }) => Promise<void>
+  }
+  
+  export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoardProps): UseKanbanBoardReturn {
+    const [tasks, setTasks] = useState<Task[]>([])
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+    const [syncStates, setSyncStates] = useState<Record<string, TaskSyncState>>({})
+    const [executionProgress, setExecutionProgress] = useState<Record<string, ExecutionProgress>>({})
+    const [isTaskFormOpen, setIsTaskFormOpen] = useState(false)
+    const [defaultStatus, setDefaultStatus] = useState<Task['status']>('todo')
+    const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+    const [taskLogs, setTaskLogs] = useState<Record<string, ExecutionLogEntry[]>>({})
+    const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
+    const [selectingColumns, setSelectingColumns] = useState<Set<string>>(new Set())
+    const [activeBatch, setActiveBatch] = useState<ActiveBatch | null>(null)
+    const [completedBatch, setCompletedBatch] = useState<{ taskIds: string[]; prUrl: string | null; mode: string } | null>(null)
+    const { isAuthenticated, activeRepository, refreshActiveRepository } = useAuth()
 
   const batchTaskIds = activeBatch?.tasks.map(t => t.taskId) ?? []
   const completedBatchTaskIds = completedBatch?.taskIds ?? []
@@ -114,7 +108,7 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
       const next = new Set(prev)
       tasks
         .filter(task => task.status === status)
-        .forEach(task => next.delete(task.id))
+        .forEach(task => { next.delete(task.id) })
       return next
     })
   }, [tasks])
@@ -153,7 +147,7 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
     setSelectedTaskIds(prev => {
       const next = new Set(prev)
       if (allSelected) {
-        columnTaskIds.forEach(id => next.delete(id))
+        columnTaskIds.forEach(id => { next.delete(id) })
       } else {
         columnTaskIds.forEach(id => {
           if (!batchTaskIds.includes(id)) {
@@ -407,7 +401,7 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
         }
         break
 
-      case 'execution:progress':
+      case 'execution:progress': {
         const progressData = data as unknown as ExecutionProgress
         if (progressData.taskId) {
           setExecutionProgress((prev) => ({
@@ -416,8 +410,9 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
           }))
         }
         break
+      }
 
-      case 'execution:log':
+      case 'execution:log': {
         const logData = data as unknown as { taskId: string; entry: ExecutionLogEntry }
         if (logData.taskId && logData.entry) {
           setTaskLogs((prev) => ({
@@ -426,6 +421,7 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
           }))
         }
         break
+      }
 
       case 'connected':
         console.log("[SSE] Connected with clientId:", data.clientId)
@@ -665,16 +661,6 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
     }
 
     try {
-      const status = await getSetupStatus();
-      if (!status.ready && !hasConfiguredProviders()) {
-        setPendingExecuteTaskId(taskId);
-        setShowProviderSetup(true);
-        return;
-      }
-    } catch {
-    }
-
-    try {
       const token = localStorage.getItem('token')
       const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
       const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/execute`, {
@@ -689,25 +675,6 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
       console.error("Error executing task:", err)
     }
   }
-
-  const handleProviderSetupComplete = useCallback(async () => {
-    setShowProviderSetup(false);
-    if (pendingExecuteTaskId) {
-      const taskId = pendingExecuteTaskId;
-      setPendingExecuteTaskId(null);
-      // Retry execution
-      try {
-        const token = localStorage.getItem('token');
-        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-        await fetch(`${API_BASE_URL}/api/tasks/${taskId}/execute`, {
-          method: "POST",
-          headers,
-        });
-      } catch (err) {
-        console.error("Error executing task:", err);
-      }
-    }
-  }, [pendingExecuteTaskId]);
 
   const handleCancel = async (taskId: string) => {
     try {
@@ -827,8 +794,5 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
     toggleColumnSelectAll,
     clearSelection,
     fetchTasks,
-    showProviderSetup,
-    setShowProviderSetup,
-    handleProviderSetupComplete,
   }
 }

@@ -18,7 +18,8 @@ export async function fetchCurrentUser(): Promise<User | null> {
 }
 
 export function getLoginUrl(): string {
-  return `${API_URL}/api/auth/github`;
+  const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+  return `${API_URL}/api/auth/github${isDesktop ? '?source=desktop' : ''}`;
 }
 
 export async function getGitHubConnectUrl(): Promise<string> {

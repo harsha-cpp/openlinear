@@ -48,6 +48,30 @@ pub fn setup_deep_link_handler(app: &tauri::App) {
 
 /// Parse the OAuth callback URL and exchange the code for a token
 async fn process_oauth_callback(url_str: &str) -> AuthCallbackResult {
+    if let Ok(url) = Url::parse(url_str) {
+        if let Some((_, token)) = url.query_pairs().find(|(key, _)| key == "token") {
+            return AuthCallbackResult {
+                success: true,
+                token: Some(token.to_string()),
+                error: None,
+            };
+        }
+
+        if let Some((_, value)) = url.query_pairs().find(|(key, _)| key == "error") {
+            let error_desc = url
+                .query_pairs()
+                .find(|(k, _)| k == "error_description")
+                .map(|(_, v)| v.to_string())
+                .unwrap_or_else(|| value.to_string());
+
+            return AuthCallbackResult {
+                success: false,
+                token: None,
+                error: Some(error_desc),
+            };
+        }
+    }
+
     // Parse the deep link URL to extract the code parameter
     let code = match extract_code_from_url(url_str) {
         Ok(code) => code,
@@ -192,5 +216,23 @@ mod tests {
         let result = extract_token_from_redirect(location);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("auth_failed"));
+    }
+
+    #[tokio::test]
+    async fn test_process_oauth_callback_with_token_in_deeplink() {
+        let url = "openlinear://callback?token=jwt.token.here";
+        let result = process_oauth_callback(url).await;
+        assert!(result.success);
+        assert_eq!(result.token.as_deref(), Some("jwt.token.here"));
+        assert!(result.error.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_process_oauth_callback_with_error_in_deeplink() {
+        let url = "openlinear://callback?error=access_denied";
+        let result = process_oauth_callback(url).await;
+        assert!(!result.success);
+        assert!(result.token.is_none());
+        assert_eq!(result.error.as_deref(), Some("access_denied"));
     }
 }

@@ -6,10 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button"
 import { Loader2, Check, AlertCircle, Brain, RefreshCw, Settings } from "lucide-react"
 import {
-  ensureContainer,
   getSetupStatus,
   getConfiguredProviderIds,
-  getModelConfig,
   ProviderInfo,
   SetupStatus,
 } from "@/lib/api/opencode"
@@ -26,11 +24,9 @@ const POLL_INTERVAL_MS = 2000
 export function ProviderSetupDialog({ open, onOpenChange, onSetupComplete }: ProviderSetupDialogProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [containerStarting, setContainerStarting] = useState(true)
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
-  const [currentModelName, setCurrentModelName] = useState<string | null>(null)
   const pollRef = useRef(false)
 
   const applyProviderData = useCallback((status: SetupStatus) => {
@@ -88,25 +84,13 @@ export function ProviderSetupDialog({ open, onOpenChange, onSetupComplete }: Pro
     }
 
     setLoading(true)
-    setContainerStarting(true)
     setLoadError(null)
     setSelectedProvider(null)
 
-    ensureContainer()
-      .then(() => {
-        setContainerStarting(false)
-        getModelConfig()
-          .then((cfg) => {
-            if (cfg.model) setCurrentModelName(cfg.model)
-          })
-          .catch(() => {})
-        return loadWithPolling()
-      })
-      .catch((err) => {
-        setLoadError(err instanceof Error ? err.message : "Failed to start AI environment")
-        setContainerStarting(false)
-        setLoading(false)
-      })
+    loadWithPolling().catch((err: unknown) => {
+      setLoadError(err instanceof Error ? err.message : "Failed to load providers")
+      setLoading(false)
+    })
 
     return () => {
       pollRef.current = false
@@ -114,20 +98,13 @@ export function ProviderSetupDialog({ open, onOpenChange, onSetupComplete }: Pro
   }, [open, loadWithPolling])
 
   const handleRetry = () => {
-    setContainerStarting(true)
     setLoadError(null)
     setLoading(true)
 
-    ensureContainer()
-      .then(() => {
-        setContainerStarting(false)
-        return loadWithPolling()
-      })
-      .catch((err) => {
-        setLoadError(err instanceof Error ? err.message : "Failed to start AI environment")
-        setContainerStarting(false)
-        setLoading(false)
-      })
+    loadWithPolling().catch((err: unknown) => {
+      setLoadError(err instanceof Error ? err.message : "Failed to load providers")
+      setLoading(false)
+    })
   }
 
   const handleUse = () => {
@@ -164,15 +141,15 @@ export function ProviderSetupDialog({ open, onOpenChange, onSetupComplete }: Pro
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto py-2 min-h-0">
-          {containerStarting || loading ? (
+          {loading ? (
             <div className="flex flex-col items-center justify-center py-12 gap-4">
               <Loader2 className="w-8 h-8 animate-spin text-linear-accent" />
               <div className="text-center">
                 <p className="text-linear-text font-medium">
-                  {containerStarting ? "Setting up your AI environment..." : "Loading providers..."}
+                  Loading providers...
                 </p>
                 <p className="text-sm text-linear-text-tertiary mt-1">
-                  {containerStarting ? "This may take a moment" : "Detecting available providers"}
+                  Detecting available providers
                 </p>
               </div>
             </div>
@@ -196,6 +173,7 @@ export function ProviderSetupDialog({ open, onOpenChange, onSetupComplete }: Pro
           ) : (
             <div className="space-y-1">
               <button
+                type="button"
                 onClick={handleGoToSettings}
                 className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-linear-text-secondary hover:text-linear-text bg-linear-bg border border-dashed border-linear-border hover:border-linear-text-tertiary transition-colors"
               >
@@ -204,16 +182,12 @@ export function ProviderSetupDialog({ open, onOpenChange, onSetupComplete }: Pro
               </button>
 
               {configuredProviders.map((provider) => {
-                const modelForProvider = currentModelName?.startsWith(`${provider.id}/`)
-                  ? currentModelName.slice(provider.id.length + 1)
-                  : undefined
                 return (
                   <ProviderRow
                     key={provider.id}
                     provider={provider}
                     selected={selectedProvider === provider.id}
                     onSelect={() => setSelectedProvider(provider.id)}
-                    activeModel={modelForProvider}
                   />
                 )
               })}
@@ -258,13 +232,13 @@ interface ProviderRowProps {
   provider: ProviderInfo
   selected: boolean
   onSelect: () => void
-  activeModel?: string
 }
 
-function ProviderRow({ provider, selected, onSelect, activeModel }: ProviderRowProps) {
+function ProviderRow({ provider, selected, onSelect }: ProviderRowProps) {
   return (
-    <div
-      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors cursor-pointer ${
+    <button
+      type="button"
+      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors cursor-pointer text-left ${
         selected
           ? "bg-linear-bg border border-linear-accent ring-1 ring-linear-accent/30"
           : "bg-linear-bg border border-linear-border hover:border-linear-text-tertiary"
@@ -281,9 +255,6 @@ function ProviderRow({ provider, selected, onSelect, activeModel }: ProviderRowP
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-linear-text truncate">{provider.name}</p>
-        {activeModel && (
-          <p className="text-xs text-linear-text-tertiary truncate">Using: {activeModel}</p>
-        )}
       </div>
       {provider.authenticated ? (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-500/10 text-green-400 border border-green-500/20 flex-shrink-0">
@@ -295,6 +266,6 @@ function ProviderRow({ provider, selected, onSelect, activeModel }: ProviderRowP
           Not configured
         </span>
       )}
-    </div>
+    </button>
   )
 }

@@ -14,6 +14,9 @@ import {
 import { z } from 'zod';
 
 const router: Router = Router();
+const DESKTOP_CALLBACK_URL = 'openlinear://callback';
+const DESKTOP_STATE_PREFIX = 'desktop:';
+const DESKTOP_CONNECT_STATE_PREFIX = 'desktop_connect:';
 
 function getJwtSecret() {
   return process.env.JWT_SECRET || 'openlinear-dev-secret-change-in-production';
@@ -41,6 +44,15 @@ async function generateUniqueTeamKey(username: string): Promise<string> {
 
 function generateState(): string {
   return crypto.randomUUID();
+}
+
+function getDesktopCallbackUrl(params: Record<string, string>): string {
+  const searchParams = new URLSearchParams(params);
+  return `${DESKTOP_CALLBACK_URL}?${searchParams.toString()}`;
+}
+
+function isDesktopOAuthRequest(req: Request): boolean {
+  return req.query.source === 'desktop' || req.headers['x-openlinear-client'] === 'desktop';
 }
 
 // --- Email/Password Auth ---
@@ -153,8 +165,10 @@ router.post('/login', async (req: Request, res: Response) => {
 
 // --- GitHub OAuth ---
 
-router.get('/github', (_req: Request, res: Response) => {
-  const state = generateState();
+router.get('/github', (req: Request, res: Response) => {
+  const state = isDesktopOAuthRequest(req)
+    ? `${DESKTOP_STATE_PREFIX}${generateState()}`
+    : generateState();
   const authUrl = getAuthorizationUrl(state);
   res.redirect(authUrl);
 });
@@ -169,7 +183,9 @@ router.get('/github/connect', async (req: Request, res: Response) => {
 
   try {
     const decoded = jwt.verify(authHeader.substring(7), getJwtSecret()) as { userId: string };
-    const state = `connect:${decoded.userId}`;
+    const state = req.headers['x-openlinear-client'] === 'desktop'
+      ? `${DESKTOP_CONNECT_STATE_PREFIX}${decoded.userId}`
+      : `connect:${decoded.userId}`;
     const authUrl = getAuthorizationUrl(state);
     res.json({ url: authUrl });
   } catch {
@@ -179,20 +195,31 @@ router.get('/github/connect', async (req: Request, res: Response) => {
 
 router.get('/github/callback', async (req: Request, res: Response) => {
   const { code, error, error_description, state } = req.query;
+  const stateStr = typeof state === 'string' ? state : '';
+  const isDesktop = stateStr.startsWith(DESKTOP_STATE_PREFIX);
+  const isDesktopConnect = stateStr.startsWith(DESKTOP_CONNECT_STATE_PREFIX);
 
   if (error) {
     console.error('[Auth] GitHub OAuth error:', error, error_description);
-    res.redirect(`${getFrontendUrl()}?error=${encodeURIComponent(String(error_description || error))}`);
+    const errorMessage = String(error_description || error);
+    if (isDesktop || isDesktopConnect) {
+      res.redirect(getDesktopCallbackUrl({ error: errorMessage }));
+      return;
+    }
+    res.redirect(`${getFrontendUrl()}?error=${encodeURIComponent(errorMessage)}`);
     return;
   }
 
   if (!code || typeof code !== 'string') {
+    if (isDesktop || isDesktopConnect) {
+      res.redirect(getDesktopCallbackUrl({ error: 'missing_code' }));
+      return;
+    }
     res.redirect(`${getFrontendUrl()}?error=missing_code`);
     return;
   }
 
-  const stateStr = typeof state === 'string' ? state : '';
-  const isConnect = stateStr.startsWith('connect:');
+  const isConnect = isDesktopConnect || stateStr.startsWith('connect:');
 
   try {
     const accessToken = await exchangeCodeForToken(code);
@@ -200,7 +227,9 @@ router.get('/github/callback', async (req: Request, res: Response) => {
 
     if (isConnect) {
       // Connect flow — link GitHub to existing user
-      const userId = stateStr.replace('connect:', '');
+      const userId = isDesktopConnect
+        ? stateStr.replace(DESKTOP_CONNECT_STATE_PREFIX, '')
+        : stateStr.replace('connect:', '');
       await connectGitHubToUser(userId, githubUser);
       const user = await getUserById(userId);
 
@@ -210,6 +239,10 @@ router.get('/github/callback', async (req: Request, res: Response) => {
         { expiresIn: '7d' }
       );
 
+      if (isDesktopConnect) {
+        res.redirect(getDesktopCallbackUrl({ token, connected: 'true' }));
+        return;
+      }
       res.redirect(`${getFrontendUrl()}?token=${token}&connected=true`);
     } else {
       // Normal login/signup flow
@@ -221,11 +254,19 @@ router.get('/github/callback', async (req: Request, res: Response) => {
         { expiresIn: '7d' }
       );
 
+      if (isDesktop) {
+        res.redirect(getDesktopCallbackUrl({ token }));
+        return;
+      }
       res.redirect(`${getFrontendUrl()}?token=${token}`);
     }
   } catch (err) {
     console.error('[Auth] OAuth callback error:', err);
     const errorMsg = err instanceof Error ? err.message : 'auth_failed';
+    if (isDesktop || isDesktopConnect) {
+      res.redirect(getDesktopCallbackUrl({ error: errorMsg }));
+      return;
+    }
     res.redirect(`${getFrontendUrl()}?error=${encodeURIComponent(errorMsg)}`);
   }
 });

@@ -17,10 +17,8 @@ registerShutdownHandlers();
 async function start() {
   try {
     await initOpenCode();
-    console.log('[API] Container-per-user mode ready');
   } catch (error) {
-    console.error('[API] Failed to initialize container manager:', error);
-    console.warn('[API] Continuing without containers - task execution will fail');
+    console.error('[API] Failed to initialize OpenCode:', error);
   }
 
   app.listen(PORT, () => {

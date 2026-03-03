@@ -1,19 +1,7 @@
-import { getFeatureFlags, isLocalExecutionEnabled } from '../../config/feature-flags';
-import { activeExecutions, ExecuteTaskParams } from './state';
+import { ExecuteTaskParams } from './state';
 
-export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promise<{ success: boolean; error?: string; code?: string }> {
-  const flags = getFeatureFlags();
-
-  if (userId && isLocalExecutionEnabled(userId, flags)) {
-    console.log(`[Execution] Task ${taskId.slice(0, 8)} should be executed locally (canary/local mode)`);
-    return { 
-      success: false, 
-      error: 'Local execution is enabled for this user. Please execute the task from the desktop app.',
-      code: 'LOCAL_EXECUTION_REQUIRED'
-    };
-  }
-
-  console.log(`[Execution] Server execution is disabled globally`);
+export async function executeTask({ taskId }: ExecuteTaskParams): Promise<{ success: boolean; error?: string; code?: string }> {
+  console.log(`[Execution] Server execution is disabled for task ${taskId.slice(0, 8)}`);
   return { 
     success: false, 
     error: 'Server execution is disabled. Please execute the task from the desktop app.',
