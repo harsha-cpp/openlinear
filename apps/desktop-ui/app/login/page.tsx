@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { loginUser, registerUser, getLoginUrl } from "@/lib/api"
 import { useAuth } from "@/hooks/use-auth"
+import { openExternal } from "@/lib/utils"
 
 type Tab = "email" | "github"
 
@@ -55,8 +56,12 @@ export default function LoginPage() {
     }
   }
 
-  const handleGitHubLogin = () => {
-    window.location.href = getLoginUrl()
+  const handleGitHubLogin = async () => {
+    try {
+      await openExternal(getLoginUrl())
+    } catch {
+      setError("Failed to open browser for GitHub login")
+    }
   }
 
   return (

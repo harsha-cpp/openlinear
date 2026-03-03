@@ -25,6 +25,7 @@ import {
   type GitHubRepo,
 } from "@/lib/api"
 import { useAuth } from "@/hooks/use-auth"
+import { openExternal } from "@/lib/utils"
 
 const SPRING = { type: "spring" as const, stiffness: 300, damping: 30 }
 
@@ -168,9 +169,10 @@ function GitHubRepoTab({
     setIsConnecting(true)
     try {
       const url = await getGitHubConnectUrl()
-      window.location.href = url
+      await openExternal(url)
     } catch {
       toast.error("Failed to start GitHub connection")
+    } finally {
       setIsConnecting(false)
     }
   }, [])

@@ -20,7 +20,7 @@ import {
   FolderOpen,
 } from "lucide-react"
 import { AppShell } from "@/components/layout/app-shell"
-import { cn } from "@/lib/utils"
+import { cn, openExternal } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -685,12 +685,15 @@ function ProjectsContent() {
                                 ) : githubError ? (
                                   <div className="text-sm text-linear-text-secondary py-4">
                                     Connect your GitHub account to browse repos.{" "}
-                                    <a
-                                      href={getLoginUrl()}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void openExternal(getLoginUrl())
+                                      }}
                                       className="text-linear-accent hover:underline"
                                     >
                                       Connect GitHub
-                                    </a>
+                                    </button>
                                   </div>
                                 ) : (
                                   <>
@@ -1247,12 +1250,15 @@ function ProjectsContent() {
                       ) : editGithubError ? (
                         <div className="text-sm text-linear-text-secondary py-4">
                           Connect your GitHub account to browse repos.{" "}
-                          <a
-                            href={getLoginUrl()}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void openExternal(getLoginUrl())
+                            }}
                             className="text-linear-accent hover:underline"
                           >
                             Connect GitHub
-                          </a>
+                          </button>
                         </div>
                       ) : (
                         <>

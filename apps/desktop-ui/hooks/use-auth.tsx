@@ -3,6 +3,12 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { User, Repository, fetchCurrentUser, getActiveRepository, logout as apiLogout } from '@/lib/api';
 
+interface AuthCallbackPayload {
+  success: boolean;
+  token?: string;
+  error?: string;
+}
+
 interface AuthContextType {
   user: User | null;
   activeRepository: Repository | null;
@@ -56,6 +62,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     Promise.all([refreshUser(), refreshActiveRepository()]).finally(() => {
       setIsLoading(false);
     });
+  }, [refreshUser, refreshActiveRepository]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    const subscribe = async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        unlisten = await listen<AuthCallbackPayload>('auth:callback', async (event) => {
+          const payload = event.payload;
+
+          if (payload.success && payload.token) {
+            localStorage.setItem('token', payload.token);
+            await Promise.all([refreshUser(), refreshActiveRepository()]);
+            return;
+          }
+
+          if (payload.error) {
+            console.error('Auth callback error:', payload.error);
+          }
+        });
+      } catch {}
+    };
+
+    void subscribe();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
   }, [refreshUser, refreshActiveRepository]);
 
   const logout = useCallback(() => {
