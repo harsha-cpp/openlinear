@@ -104,6 +104,12 @@ async function main() {
     console.log(`\x1b[36m==>\x1b[0m Found ${appImageAsset.name} (${release.tag_name})`);
 
     fs.mkdirSync(installDir, { recursive: true });
+
+    if (fs.existsSync(targetPath)) {
+      console.log('\x1b[36m==>\x1b[0m Removing old AppImage...');
+      fs.unlinkSync(targetPath);
+    }
+
     await downloadFile(appImageAsset.browser_download_url, targetPath, appImageAsset.size);
     fs.chmodSync(targetPath, 0o755);
 
