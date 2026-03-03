@@ -82,3 +82,30 @@ jobs:
         with:
           files: dist/release/*
 
+  publish-npm:
+    name: Publish NPM Package
+    needs: build-release
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Upgrade npm for OIDC Trusted Publishers support
+        run: npm install -g npm@latest
+      - name: Publish openlinear
+        run: |
+          cd packages/openlinear
+          LOCAL_VERSION=$(node -p "require('./package.json').version")
+          REMOTE_VERSION=$(npm view openlinear version 2>/dev/null || echo "0.0.0")
+          if [ "$LOCAL_VERSION" = "$REMOTE_VERSION" ]; then
+            echo "Version $LOCAL_VERSION already published, skipping"
+            exit 0
+          fi
+          npm publish --access public --provenance
