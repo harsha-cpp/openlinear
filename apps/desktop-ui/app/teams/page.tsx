@@ -527,7 +527,7 @@ export default function TeamsPage() {
                       {filteredTeams.map((team) => (
                         <tr
                           key={team.id}
-                          onClick={() => router.push(`/teams/${team.id}`)}
+                          onClick={() => router.push(`/teams/detail?id=${team.id}`)}
                           className="border-b border-linear-border/50 hover:bg-linear-bg-secondary/50 transition-colors cursor-pointer group"
                         >
                           <td className="py-3 px-6">
@@ -632,7 +632,7 @@ export default function TeamsPage() {
                   >
                     <button
                       type="button"
-                      onClick={() => router.push(`/teams/${team.id}`)}
+                      onClick={() => router.push(`/teams/detail?id=${team.id}`)}
                       className="w-full text-left"
                     >
                       <div className="flex items-start justify-between gap-3">

@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { useRouter, useParams } from "next/navigation"
+import { useState, useEffect, useCallback, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   ArrowLeft,
   Users,
@@ -63,10 +63,10 @@ interface Task {
   identifier: string | null
 }
 
-export default function TeamDetailPage() {
+function TeamDetailContent() {
   const router = useRouter()
-  const params = useParams()
-  const teamId = params.id as string
+  const searchParams = useSearchParams()
+  const teamId = searchParams.get("id") as string
 
   const [team, setTeam] = useState<Team | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -483,6 +483,7 @@ export default function TeamDetailPage() {
                             {member.role}
                           </Badge>
                           <button
+                            type="button"
                             onClick={() => handleRemoveMember(member.userId)}
                             className="p-1.5 rounded-md hover:bg-red-500/10 transition-colors"
                             title="Remove member"
@@ -617,6 +618,7 @@ export default function TeamDetailPage() {
                           </td>
                           <td className="py-3 px-4">
                             <button
+                              type="button"
                               onClick={() => handleDeleteProject(project.id, project.name)}
                               className="p-1.5 rounded-md hover:bg-red-500/10 transition-colors"
                               title="Delete project"
@@ -700,5 +702,19 @@ export default function TeamDetailPage() {
         </DialogContent>
       </Dialog>
     </AppShell>
+  )
+}
+
+export default function TeamDetailPage() {
+  return (
+    <Suspense fallback={
+      <AppShell>
+        <div className="flex-1 flex items-center justify-center bg-linear-bg">
+          <div className="text-linear-text-tertiary">Loading...</div>
+        </div>
+      </AppShell>
+    }>
+      <TeamDetailContent />
+    </Suspense>
   )
 }

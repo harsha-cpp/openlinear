@@ -48,7 +48,7 @@ function TeamSection({ team, pathname, searchParams, onDelete }: { team: Team; p
 
     const isIssuesActive = pathname === "/" && teamId === team.id
     const isProjectsActive = pathname === "/projects" && teamId === team.id
-    const isManageActive = pathname.startsWith(`/teams/${team.id}`)
+    const isManageActive = pathname === "/teams/detail" && searchParams.get("id") === team.id
 
     return (
         <div className="group/team">
@@ -85,7 +85,7 @@ function TeamSection({ team, pathname, searchParams, onDelete }: { team: Team; p
                     </PopoverTrigger>
                     <PopoverContent align="start" side="bottom" className="w-36 p-1 bg-linear-bg-secondary border-linear-border">
                         <Link
-                            href={`/teams/${team.id}`}
+                            href={`/teams/detail?id=${team.id}`}
                             onClick={() => setMenuOpen(false)}
                             className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-linear-text-secondary hover:text-linear-text hover:bg-linear-bg-tertiary transition-colors w-full"
                         >
@@ -121,7 +121,7 @@ function TeamSection({ team, pathname, searchParams, onDelete }: { team: Team; p
                         <span>Projects</span>
                     </Link>
                     <Link
-                        href={`/teams/${team.id}`}
+                        href={`/teams/detail?id=${team.id}`}
                         className={subNavItemClass(isManageActive)}
                     >
                         <Settings className="w-3.5 h-3.5 flex-shrink-0" />
@@ -188,7 +188,7 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
         try {
             await deleteTeam(teamId)
             loadTeams()
-            if (searchParams.get("teamId") === teamId || pathname.startsWith(`/teams/${teamId}`)) {
+            if (searchParams.get("teamId") === teamId || (pathname === "/teams/detail" && searchParams.get("id") === teamId)) {
                 router.push('/')
             }
         } catch (error) {

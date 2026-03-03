@@ -7,11 +7,9 @@ const nextConfig = {
   experimental: {
     cpus: process.env.CI ? 1 : undefined,
   },
-  turbopack: {},
-  webpack: (config) => {
-    // Increase chunk loading timeout for Tauri webview cold starts
-    config.output.chunkLoadTimeout = 120000
-    return config
+  output: 'export',
+  images: {
+    unoptimized: true,
   },
 }
 
