@@ -21,7 +21,7 @@ skip() { echo -e "${YELLOW}  ⊘${NC} $1"; }
 # Record start time for timing
 START_TIME=$(date +%s)
 
-TQ# ── Pull latest code ──────────────────────────────────────────────
+# ── Pull latest code ──────────────────────────────────────────────
 step "Pulling latest code..."
 # Discard build-generated file changes (e.g. next-env.d.ts) that block ff-only pull
 git reset --hard HEAD
