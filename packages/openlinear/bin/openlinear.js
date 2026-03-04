@@ -4,11 +4,22 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const appImagePath = path.join(os.homedir(), '.openlinear', 'openlinear.AppImage');
+const binaryPaths = [
+  path.join(os.homedir(), '.openlinear', 'openlinear'),
+  path.join(os.homedir(), '.openlinear', 'openlinear.AppImage'),
+];
 
-if (!fs.existsSync(appImagePath)) {
-  console.error('OpenLinear AppImage not found.');
-  console.error('Run: npm install -g @kaizen403/openlinear to download it.');
+const binaryPath = binaryPaths.find((p) => fs.existsSync(p));
+
+if (!binaryPath) {
+  console.error('OpenLinear desktop app not found.');
+  console.error('');
+  console.error('Please install it:');
+  console.error('  curl -fsSL https://rixie.in/api/install | bash');
+  console.error('');
+  console.error('Or build from source:');
+  console.error('  git clone https://github.com/kaizen403/openlinear.git');
+  console.error('  cd openlinear && pnpm install && pnpm --filter @openlinear/desktop build');
   process.exit(1);
 }
 
@@ -18,17 +29,14 @@ const isWayland =
 
 const env = {
   ...process.env,
-  APPIMAGE_EXTRACT_AND_RUN: '1',
   WEBKIT_DISABLE_DMABUF_RENDERER: '1',
 };
 
-// On Wayland: preload system libwayland-client to avoid EGL_BAD_PARAMETER crash
-// caused by the AppImage's bundled libwayland-client conflicting with system EGL
 if (isWayland && !process.env.LD_PRELOAD) {
   const waylandLibPaths = [
-    '/usr/lib/libwayland-client.so',                    // Arch, Fedora
-    '/usr/lib64/libwayland-client.so',                  // Fedora 64-bit
-    '/usr/lib/x86_64-linux-gnu/libwayland-client.so',   // Debian/Ubuntu
+    '/usr/lib/libwayland-client.so',
+    '/usr/lib64/libwayland-client.so',
+    '/usr/lib/x86_64-linux-gnu/libwayland-client.so',
   ];
   const found = waylandLibPaths.find((p) => fs.existsSync(p));
   if (found) {
@@ -41,7 +49,11 @@ if (isWayland && !process.env.LD_PRELOAD) {
   env.WEBKIT_DISABLE_COMPOSITING_MODE = '1';
 }
 
-const child = spawn(appImagePath, process.argv.slice(2), {
+if (binaryPath.endsWith('.AppImage')) {
+  env.APPIMAGE_EXTRACT_AND_RUN = '1';
+}
+
+const child = spawn(binaryPath, process.argv.slice(2), {
   stdio: 'inherit',
   env,
 });
