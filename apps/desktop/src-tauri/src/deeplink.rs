@@ -31,23 +31,45 @@ pub fn setup_deep_link_handler(app: &tauri::App) {
         println!("[DeepLink] Failed to register scheme handlers: {err}");
     }
 
+    let mut urls_found = false;
+
     match app.deep_link().get_current() {
         Ok(Some(urls)) => {
             for url in urls {
+                println!("[DeepLink] Found URL via get_current(): {}", url);
                 handle_deep_link_url(&handle, &url);
+                urls_found = true;
             }
         }
-        Ok(None) => {}
+        Ok(None) => {
+            println!("[DeepLink] get_current() returned None");
+        }
         Err(err) => {
             println!("[DeepLink] Failed to read initial deep link URL: {err}");
         }
     }
 
+    if !urls_found {
+        for arg in std::env::args().skip(1) {
+            println!("[DeepLink] Checking arg: {}", arg);
+            if let Ok(url) = Url::parse(&arg) {
+                if url.scheme() == "openlinear" {
+                    println!("[DeepLink] Found URL in command-line args: {}", url);
+                    handle_deep_link_url(&handle, &url);
+                    urls_found = true;
+                }
+            }
+        }
+    }
+
     app.deep_link().on_open_url(move |event| {
         for url in event.urls() {
+            println!("[DeepLink] Received URL via on_open_url: {}", url);
             handle_deep_link_url(&handle, &url);
         }
     });
+
+    println!("[DeepLink] Handler setup complete, URLs found: {}", urls_found);
 }
 
 fn handle_deep_link_url<R: tauri::Runtime>(handle: &tauri::AppHandle<R>, url: &Url) {
