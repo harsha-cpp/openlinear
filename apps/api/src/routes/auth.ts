@@ -166,9 +166,19 @@ router.post('/login', async (req: Request, res: Response) => {
 // --- GitHub OAuth ---
 
 router.get('/github', (req: Request, res: Response) => {
-  const state = isDesktopOAuthRequest(req)
+  const isDesktop = isDesktopOAuthRequest(req);
+  const state = isDesktop
     ? `${DESKTOP_STATE_PREFIX}${generateState()}`
     : generateState();
+  
+  // Debug logging
+  console.log('[Auth Debug] OAuth init:', {
+    isDesktop,
+    query: req.query,
+    headers: req.headers['x-openlinear-client'],
+    statePrefix: state.substring(0, 20)
+  });
+  
   const authUrl = getAuthorizationUrl(state);
   res.redirect(authUrl);
 });
@@ -198,6 +208,15 @@ router.get('/github/callback', async (req: Request, res: Response) => {
   const stateStr = typeof state === 'string' ? state : '';
   const isDesktop = stateStr.startsWith(DESKTOP_STATE_PREFIX);
   const isDesktopConnect = stateStr.startsWith(DESKTOP_CONNECT_STATE_PREFIX);
+  
+  // Debug logging
+  console.log('[Auth Debug] OAuth callback received:', {
+    state: stateStr,
+    isDesktop,
+    isDesktopConnect,
+    hasCode: !!code,
+    hasError: !!error
+  });
 
   if (error) {
     console.error('[Auth] GitHub OAuth error:', error, error_description);
