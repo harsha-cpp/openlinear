@@ -292,21 +292,13 @@ export default function PricingPage() {
             Need something <span className="font-editorial italic">custom</span>?
           </h3>
           <p className="text-muted-foreground/55 text-[0.9375rem] tracking-[-0.01em]">
-            Reach out at{" "}
-            <a
-              href="mailto:hello@openlinear.dev"
-              className="text-primary/80 hover:text-primary transition-colors duration-250"
-            >
-              hello@openlinear.dev
-            </a>{" "}
-            or{" "}
             <a
               href="/contact"
               className="text-primary/80 hover:text-primary transition-colors duration-250"
             >
-              contact us directly
-            </a>
-            .
+              Contact us directly
+            </a>{" "}
+            for custom enterprise pricing.
           </p>
         </div>
       </section>

@@ -70,6 +70,10 @@ export function createApp(): Application {
   app.use('/api/brainstorm', brainstormRouter);
   app.use('/api/transcribe', transcribeRouter);
 
+  app.get('/api/install', (_req: Request, res: Response) => {
+    res.redirect(302, 'https://raw.githubusercontent.com/kaizen403/openlinear/main/apps/landing/public/install.sh');
+  });
+
   app.get('/health', (_req: Request, res: Response) => {
     res.json({ 
       status: 'ok', 

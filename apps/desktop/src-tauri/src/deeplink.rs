@@ -26,24 +26,55 @@ pub struct AuthCallbackResult {
 pub fn setup_deep_link_handler(app: &tauri::App) {
     let handle = app.handle().clone();
 
-    app.deep_link().on_open_url(move |event| {
-        for url in event.urls() {
-            let url_str = url.as_str();
-            println!("[DeepLink] Received: {}", url_str);
+    #[cfg(any(target_os = "linux", windows))]
+    if let Err(err) = app.deep_link().register_all() {
+        println!("[DeepLink] Failed to register scheme handlers: {err}");
+    }
 
-            // Only handle callback URLs
-            if url_str.starts_with("openlinear://callback") {
-                let handle_clone = handle.clone();
-                let url_owned = url_str.to_string();
-
-                // Spawn async task to process the OAuth callback
-                tauri::async_runtime::spawn(async move {
-                    let result = process_oauth_callback(&url_owned).await;
-                    let _ = handle_clone.emit("auth:callback", result);
-                });
+    match app.deep_link().get_current() {
+        Ok(Some(urls)) => {
+            for url in urls {
+                handle_deep_link_url(&handle, &url);
             }
         }
+        Ok(None) => {}
+        Err(err) => {
+            println!("[DeepLink] Failed to read initial deep link URL: {err}");
+        }
+    }
+
+    app.deep_link().on_open_url(move |event| {
+        for url in event.urls() {
+            handle_deep_link_url(&handle, &url);
+        }
     });
+}
+
+fn handle_deep_link_url<R: tauri::Runtime>(handle: &tauri::AppHandle<R>, url: &Url) {
+    println!("[DeepLink] Received: {}", url);
+
+    if !is_oauth_callback_url(url) {
+        return;
+    }
+
+    let handle_clone = handle.clone();
+    let url_owned = url.to_string();
+
+    tauri::async_runtime::spawn(async move {
+        let result = process_oauth_callback(&url_owned).await;
+        let _ = handle_clone.emit("auth:callback", result);
+    });
+}
+
+fn is_oauth_callback_url(url: &Url) -> bool {
+    if url.scheme() != "openlinear" {
+        return false;
+    }
+
+    let host = url.host_str().unwrap_or_default();
+    let path = url.path().trim_matches('/');
+
+    host.eq_ignore_ascii_case("callback") || path.eq_ignore_ascii_case("callback")
 }
 
 /// Parse the OAuth callback URL and exchange the code for a token

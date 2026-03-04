@@ -52,12 +52,6 @@ export default function ContactPage() {
                 detail: "We respond within 24 hours",
               },
               {
-                icon: Mail,
-                title: "Email",
-                detail: "hello@openlinear.dev",
-                href: "mailto:hello@openlinear.dev",
-              },
-              {
                 icon: Github,
                 title: "GitHub",
                 detail: "kaizen403/openlinear",
@@ -226,15 +220,6 @@ export default function ContactPage() {
                   Direct <span className="font-editorial italic">channels</span>
                 </h3>
                 <div className="flex flex-col gap-3">
-                  <div>
-                    <p className="text-[0.75rem] text-muted-foreground/40 mb-1">Email</p>
-                    <a
-                      href="mailto:hello@openlinear.dev"
-                      className="text-primary/80 hover:text-primary text-[0.875rem] transition-colors duration-250"
-                    >
-                      hello@openlinear.dev
-                    </a>
-                  </div>
                   <div>
                     <p className="text-[0.75rem] text-muted-foreground/40 mb-1">GitHub</p>
                     <a

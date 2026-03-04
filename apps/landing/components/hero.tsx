@@ -1,6 +1,72 @@
 "use client"
 
-import { ArrowRight, CheckCircle2, ExternalLink, GitMerge, Image as ImageIcon, Loader2, MessageSquare, Sparkles, Zap } from "lucide-react"
+import { ArrowRight, CheckCircle2, Copy, ExternalLink, GitMerge, Image as ImageIcon, Loader2, MessageSquare, Sparkles, Zap } from "lucide-react"
+import { useState } from "react"
+
+function InstallTabs() {
+  const [activeTab, setActiveTab] = useState<"curl" | "npm">("curl")
+  const [copied, setCopied] = useState(false)
+
+  const commands = {
+    curl: "curl -fsSL https://rixie.in/api/install | bash",
+    npm: "npm install -g openlinear",
+  }
+
+  const copyToClipboard = async () => {
+    await navigator.clipboard.writeText(commands[activeTab])
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="w-full max-w-lg mx-auto mt-8">
+      <div className="rounded-xl bg-white/[0.03] border border-white/[0.08] overflow-hidden">
+        <div className="flex border-b border-white/[0.06]">
+          <button
+            type="button"
+            onClick={() => setActiveTab("curl")}
+            className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
+              activeTab === "curl"
+                ? "text-white bg-white/[0.06]"
+                : "text-white/50 hover:text-white/70 hover:bg-white/[0.03]"
+            }`}
+          >
+            curl
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("npm")}
+            className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
+              activeTab === "npm"
+                ? "text-white bg-white/[0.06]"
+                : "text-white/50 hover:text-white/70 hover:bg-white/[0.03]"
+            }`}
+          >
+            npm
+          </button>
+        </div>
+
+        <div className="p-4">
+          <div className="flex items-center justify-between gap-3 font-mono text-sm text-white/70 bg-black/30 rounded-lg px-4 py-3">
+            <code className="truncate">{commands[activeTab]}</code>
+            <button
+              type="button"
+              onClick={copyToClipboard}
+              className="shrink-0 p-1.5 rounded-md hover:bg-white/[0.1] transition-colors"
+              title="Copy to clipboard"
+            >
+              {copied ? (
+                <CheckCircle2 className="h-4 w-4 text-green-400" />
+              ) : (
+                <Copy className="h-4 w-4 text-white/50 hover:text-white/70" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export function Hero() {
   return (
@@ -63,6 +129,10 @@ export function Hero() {
             Talk to founder
             <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
           </a>
+        </div>
+
+        <div className="hero-reveal-5 w-full flex justify-center">
+          <InstallTabs />
         </div>
       </div>
 
@@ -151,7 +221,7 @@ export function Hero() {
                     <div className="h-3 w-3 rounded-full bg-green-400/80" />
                   </div>
                   <div className="h-4 w-[1px] bg-white/10 mx-2" />
-                  <span className="text-sm text-white/40 font-mono">openlinear.dev</span>
+                  <span className="text-sm text-white/40 font-mono">rixie.in</span>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06]">
