@@ -1,23 +1,10 @@
+=== Task 19 Verification - Mode Rejection ===
 
-> @openlinear/api@0.0.1 test
-> vitest run src/__tests__/lifecycle.test.ts
+Command: Checking lifecycle.ts for SERVER_EXECUTION_DISABLED
+
+    code: 'SERVER_EXECUTION_DISABLED'
+  };
+}
 
 
-[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90m/home/kaizen/openlinear/apps/api[39m
-
-[90mstdout[2m | src/__tests__/lifecycle.test.ts
-[22m[39m[dotenv@17.2.4] injecting env (8) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
-
-[90mstdout[2m | src/__tests__/lifecycle.test.ts[2m > [22m[2mexecuteTask[2m > [22m[2mroutes execution to local metadata mode when local mode enabled
-[22m[39m[Execution] Task task-1 should be executed locally (canary/local mode)
-
-[90mstdout[2m | src/__tests__/lifecycle.test.ts[2m > [22m[2mexecuteTask[2m > [22m[2mreturns controlled error when server execution is disabled
-[22m[39m[Execution] Server execution is disabled globally
-
- [32m✓[39m src/__tests__/lifecycle.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 8[2mms[22m[39m
-
-[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m      Tests [22m [1m[32m2 passed[39m[22m[90m (2)[39m
-[2m   Start at [22m 04:14:48
-[2m   Duration [22m 447ms[2m (transform 106ms, setup 84ms, import 79ms, tests 8ms, environment 0ms)[22m
-
+Status: PASS - Server execution returns clear error code

@@ -170,3 +170,23 @@
 - Replacing direct `prisma.user.findUnique({ select: { accessToken: true } })` route reads with `getLegacyTokenForOperation` keeps legacy fallback behavior but makes migration usage explicit and auditable.
 - The write-blocking Prisma extension in `packages/db/src/client.ts` continues to enforce `User.accessToken` deprecation centrally; route-level changes should focus on controlled reads/cleanup, not new persistence paths.
 - Adding a dedicated `repos.test.ts` avoids blind spots in migration coverage and validates that GitHub repo listing uses the migration helper token path rather than direct DB field access.
+
+## Task 8: Local Runner Orchestration (follow-up)
+- Lifecycle metadata is more reliable if spawn failures emit a terminal `failed` event, not just a thrown command error; otherwise cloud sync can see `starting` without a deterministic terminal state.
+- Emitting an explicit `running` metadata state from Rust right after successful spawn provides deterministic phase mapping (`starting` -> start endpoint, `running` -> progress endpoint).
+- Cloud sync safety should not rely on TypeScript interface shape alone; explicit payload allowlisting in `metadata-queue.ts` prevents accidental forwarding of extra keys like `prompt`, `logs`, or `apiKey`.
+- Sanitizing metadata `outcome` for process errors avoids forwarding raw shell error strings that might contain sensitive execution context.
+
+## Task 8: Local Runner Orchestration (verification notes)
+- Verified Rust-side task coverage with `cargo test opencode` (pass).
+- Verified desktop metadata queue behavior with `node --import tsx --test apps/desktop-ui/lib/api/metadata-queue.test.ts` (pass).
+
+## Task 13: Desktop UI local execute + metadata sync state
+- Desktop execute flow in `use-kanban-board.ts` now branches by `isDesktopRuntime()` and uses local Tauri `invoke('run_opencode_task')` with required fields (`taskId`, `runId`, `prompt`, `repoPath`).
+- Added per-task metadata listener setup via `listenToTaskMetadata(taskId)` before local invoke so queue-driven sync badges (`pending/syncing/synced/error`) continue receiving local lifecycle events.
+- Kept non-desktop behavior safe by preserving the existing `/api/tasks/:id/execute` fallback path.
+
+## Task 19: Deprecated server execution path retirement (completion)
+- Tightened fail-fast behavior in API execution lifecycle so server-mode attempts return an explicit unsupported message with stable code `SERVER_EXECUTION_DISABLED` (`apps/api/src/services/execution/lifecycle.ts`).
+- Added a regression assertion in tasks API tests to enforce the unsupported-mode contract for authenticated execute requests, preventing silent behavior drift (`apps/api/src/__tests__/tasks.test.ts`).
+- Verification command `grep -R "container-manager\|SERVER_EXECUTION_ENABLED\|server execution" apps/api/src` now returns only explicit unsupported handling in runtime path, with no active server-execution module path remaining.

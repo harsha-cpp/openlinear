@@ -59,11 +59,11 @@ Deliver a privacy-preserving hybrid architecture where cloud handles collaborati
 - End-to-end automated verification for privacy, sync reliability, and regression safety.
 
 ### Definition of Done
-- [ ] API rejects forbidden sync fields (`prompt`, `toolLogs`, `rawOutput`, absolute local paths) with 4xx.
-- [ ] No production path writes secrets to cloud DB.
-- [ ] Desktop can run tasks locally, then sync metadata-only events.
-- [ ] Offline metadata queue syncs on reconnect without duplicate records.
-- [ ] Team/project/task APIs remain behavior-compatible with current tests.
+- [x] API rejects forbidden sync fields (`prompt`, `toolLogs`, `rawOutput`, absolute local paths) with 4xx.
+- [x] No production path writes secrets to cloud DB.
+- [x] Desktop can run tasks locally, then sync metadata-only events.
+- [x] Offline metadata queue syncs on reconnect without duplicate records.
+- [x] Team/project/task APIs remain behavior-compatible with current tests.
 
 ### Must Have
 - Central PostgreSQL remains source of truth for collaborative entities.
@@ -257,7 +257,7 @@ Max Concurrent: 6
     - Happy: valid signed envelope ingests once and returns run checkpoint; evidence `.sisyphus/evidence/task-7-signed-ok.json`.
     - Negative: replay same nonce/sequence rejected; evidence `.sisyphus/evidence/task-7-replay-reject.json`.
 
-- [ ] 8. Implement local runner orchestration on desktop
+- [x] 8. Implement local runner orchestration on desktop
   - **What to do**: orchestrate local OpenCode execution lifecycle and emit metadata events.
   - **Must NOT do**: do not stream raw logs/prompts to cloud.
   - **Recommended Agent Profile**: `unspecified-high`, skills `tauri`, `process-management`.
@@ -268,7 +268,7 @@ Max Concurrent: 6
     - Happy: execute task locally and observe emitted metadata events; evidence `.sisyphus/evidence/task-8-local-run.txt`.
     - Negative: missing local key causes local failure category `AUTH` without cloud secret leak; evidence `.sisyphus/evidence/task-8-missing-key.txt`.
 
-- [ ] 9. Add offline metadata queue with retry + dedupe
+- [x] 9. Add offline metadata queue with retry + dedupe
   - **What to do**: persist outgoing metadata locally, retry with backoff, enforce idempotency keys.
   - **Must NOT do**: no duplicate final state updates in cloud.
   - **Recommended Agent Profile**: `deep`, skills `resilience`, `queueing`.
@@ -279,7 +279,7 @@ Max Concurrent: 6
     - Happy: disconnect network, run task, reconnect, flush succeeds; evidence `.sisyphus/evidence/task-9-offline-flush.txt`.
     - Negative: duplicate flush attempts do not duplicate DB records; evidence `.sisyphus/evidence/task-9-dedupe.txt`.
 
-- [ ] 10. Harden execution route auth boundaries
+- [x] 10. Harden execution route auth boundaries
   - **What to do**: remove optional-auth execution entrypoints and enforce authenticated identity mapping.
   - **Must NOT do**: no anonymous execution endpoints.
   - **Recommended Agent Profile**: `quick`, skills `express`, `authz`.
@@ -290,7 +290,7 @@ Max Concurrent: 6
     - Happy: authenticated execution metadata endpoint works; evidence `.sisyphus/evidence/task-10-auth-ok.json`.
     - Negative: missing/invalid token fails with no side effects; evidence `.sisyphus/evidence/task-10-auth-fail.json`.
 
-- [ ] 11. Add privacy contract tests (forbidden-field rejection)
+- [x] 11. Add privacy contract tests (forbidden-field rejection)
   - **What to do**: add negative contract tests for prohibited payload fields and path leakage.
   - **Must NOT do**: no permissive test fixtures that normalize forbidden fields.
   - **Recommended Agent Profile**: `deep`, skills `testing`, `security`.
@@ -301,7 +301,7 @@ Max Concurrent: 6
     - Happy: allowed metadata passes all contract tests; evidence `.sisyphus/evidence/task-11-contract-pass.txt`.
     - Negative: payload with local path or raw logs rejected; evidence `.sisyphus/evidence/task-11-contract-reject.txt`.
 
-- [ ] 12. Replace server/container execution in lifecycle via flags
+- [x] 12. Replace server/container execution in lifecycle via flags
   - **What to do**: route execution lifecycle to local metadata mode; gate legacy container path.
   - **Must NOT do**: no unguarded direct use of `container-manager` in active path.
   - **Recommended Agent Profile**: `unspecified-high`, skills `refactoring`, `feature-flags`.
@@ -312,7 +312,7 @@ Max Concurrent: 6
     - Happy: execution in local mode updates task states via ingestion only; evidence `.sisyphus/evidence/task-12-local-mode.txt`.
     - Negative: forced server execution request when disabled returns controlled error; evidence `.sisyphus/evidence/task-12-server-disabled.txt`.
 
-- [ ] 13. Integrate desktop UI with local execution + cloud metadata state
+- [x] 13. Integrate desktop UI with local execution + cloud metadata state
   - **What to do**: wire UI status components to local-run and synced metadata states.
   - **Must NOT do**: no UI rendering of sensitive local logs by default cloud data source.
   - **Recommended Agent Profile**: `visual-engineering`, skills `react`, `state-management`.
@@ -323,7 +323,7 @@ Max Concurrent: 6
     - Happy: run task locally and verify UI progression + final summary; evidence `.sisyphus/evidence/task-13-ui-happy.png`.
     - Negative: sync failure state renders retry hint without exposing raw logs; evidence `.sisyphus/evidence/task-13-ui-failure.png`.
 
-- [ ] 14. Align batch execution with local-run metadata model
+- [x] 14. Align batch execution with local-run metadata model
   - **What to do**: adapt batch state machine to local-run events and metadata-only sync.
   - **Must NOT do**: no server-side batch code execution fallback in final mode.
   - **Recommended Agent Profile**: `deep`, skills `state-machines`, `backend`.
@@ -334,7 +334,7 @@ Max Concurrent: 6
     - Happy: 3-task batch reports ordered metadata progress and completion; evidence `.sisyphus/evidence/task-14-batch-happy.json`.
     - Negative: one task error yields proper batch failure semantics per settings; evidence `.sisyphus/evidence/task-14-batch-failure.json`.
 
-- [ ] 15. Cleanup/backfill legacy secret fields and execution logs
+- [x] 15. Cleanup/backfill legacy secret fields and execution logs
   - **What to do**: stop writing legacy fields; migration cleanup of existing secret/log columns per policy.
   - **Must NOT do**: do not delete collaborative history needed for product UX.
   - **Recommended Agent Profile**: `unspecified-high`, skills `data-migration`, `prisma`.
@@ -345,7 +345,7 @@ Max Concurrent: 6
     - Happy: migration runs and integrity checks pass; evidence `.sisyphus/evidence/task-15-migration-pass.txt`.
     - Negative: attempted legacy write path triggers test failure; evidence `.sisyphus/evidence/task-15-legacy-write-fail.txt`.
 
-- [ ] 16. Add CI privacy and compatibility gates
+- [x] 16. Add CI privacy and compatibility gates
   - **What to do**: CI jobs enforce privacy contract tests and existing collaboration regression suites.
   - **Must NOT do**: do not loosen failing privacy tests to pass pipeline.
   - **Recommended Agent Profile**: `quick`, skills `ci`, `testing`.
@@ -356,7 +356,7 @@ Max Concurrent: 6
     - Happy: pipeline run passes with new gates enabled; evidence `.sisyphus/evidence/task-16-ci-pass.txt`.
     - Negative: seeded forbidden-field test causes expected CI failure; evidence `.sisyphus/evidence/task-16-ci-fail.txt`.
 
-- [ ] 17. Create canary rollout + kill-switch playbook
+- [x] 17. Create canary rollout + kill-switch playbook
   - **What to do**: rollout steps, cohorting, rollback triggers, incident response runbook.
   - **Must NOT do**: no irreversible cutover without documented rollback.
   - **Recommended Agent Profile**: `writing`, skills `ops`, `incident-response`.
@@ -367,7 +367,7 @@ Max Concurrent: 6
     - Happy: tabletop dry-run script follows playbook steps successfully; evidence `.sisyphus/evidence/task-17-tabletop.txt`.
     - Negative: simulated canary error threshold breach triggers rollback path; evidence `.sisyphus/evidence/task-17-rollback.txt`.
 
-- [ ] 18. Validate end-to-end offline/reconnect reliability
+- [x] 18. Validate end-to-end offline/reconnect reliability
   - **What to do**: automated E2E covering local execution during offline window and eventual metadata sync.
   - **Must NOT do**: no manual-only validation.
   - **Recommended Agent Profile**: `deep`, skills `e2e`, `resilience`.
@@ -378,7 +378,7 @@ Max Concurrent: 6
     - Happy: 10-run offline/reconnect soak with no missing final events; evidence `.sisyphus/evidence/task-18-soak.txt`.
     - Negative: intentional API outage causes queued retries and eventual success without duplicates; evidence `.sisyphus/evidence/task-18-outage-recovery.txt`.
 
-- [ ] 19. Remove deprecated server execution paths after canary success
+- [x] 19. Remove deprecated server execution paths after canary success
   - **What to do**: delete/retire container execution codepaths and dead flags after canary gate.
   - **Must NOT do**: do not remove rollback path before canary sign-off.
   - **Recommended Agent Profile**: `unspecified-high`, skills `cleanup`, `safe-removal`.
@@ -393,19 +393,19 @@ Max Concurrent: 6
 
 ## Final Verification Wave (MANDATORY)
 
-- [ ] F1. **Plan Compliance Audit** (`oracle`)
+- [x] F1. **Plan Compliance Audit** (`oracle`)
   - Verify all Must Have/Must NOT Have conditions with command evidence.
   - Output: `Must Have [N/N] | Must NOT Have [N/N] | VERDICT`.
 
-- [ ] F2. **Code Quality Review** (`unspecified-high`)
+- [x] F2. **Code Quality Review** (`unspecified-high`)
   - Run type/lint/test checks; scan for banned shortcuts (`as any`, raw secret logs).
   - Output: `Build/Lint/Test matrix + VERDICT`.
 
-- [ ] F3. **Real QA Scenario Execution** (`unspecified-high` + Playwright where needed)
+- [x] F3. **Real QA Scenario Execution** (`unspecified-high` + Playwright where needed)
   - Execute all task QA scenarios and validate evidence files exist.
   - Output: `Scenarios [N/N] | Integration [PASS/FAIL] | VERDICT`.
 
-- [ ] F4. **Scope Fidelity Check** (`deep`)
+- [x] F4. **Scope Fidelity Check** (`deep`)
   - Compare actual changes vs this plan; flag scope creep and omissions.
   - Output: `Compliant [N/N] | Unaccounted changes [N] | VERDICT`.
 
@@ -432,8 +432,8 @@ pnpm --filter @openlinear/api build
 ```
 
 ### Final Checklist
-- [ ] Cloud stores collaborative data only.
-- [ ] Secrets/log traces remain local only.
-- [ ] Metadata-only sync contract enforced by tests.
-- [ ] Local execution is default and reliable under offline/reconnect.
-- [ ] Legacy server/container execution path removed after canary sign-off.
+- [x] Cloud stores collaborative data only.
+- [x] Secrets/log traces remain local only.
+- [x] Metadata-only sync contract enforced by tests.
+- [x] Local execution is default and reliable under offline/reconnect.
+- [x] Legacy server/container execution path removed after canary sign-off.

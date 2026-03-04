@@ -6,8 +6,8 @@ import { useAuth } from "@/hooks/use-auth"
 import { Project } from "@/lib/api"
 import type { Repository } from "@/lib/api"
 import { Task, ExecutionProgress, ExecutionLogEntry } from "@/types/task"
-import { API_URL, getAuthHeader } from "@/lib/api/client"
-import { metadataQueue, TaskSyncState } from "@/lib/api/metadata-queue"
+import { API_URL, getAuthHeader, isDesktopRuntime } from "@/lib/api/client"
+import { metadataQueue, TaskSyncState, listenToTaskMetadata } from "@/lib/api/metadata-queue"
 
 export const COLUMNS = [
   { id: 'todo', title: 'All Issues', status: 'todo' as const },
@@ -96,9 +96,10 @@ export interface UseKanbanBoardReturn {
     const [taskLogs, setTaskLogs] = useState<Record<string, ExecutionLogEntry[]>>({})
     const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
     const [selectingColumns, setSelectingColumns] = useState<Set<string>>(new Set())
-    const [activeBatch, setActiveBatch] = useState<ActiveBatch | null>(null)
-    const [completedBatch, setCompletedBatch] = useState<{ taskIds: string[]; prUrl: string | null; mode: string } | null>(null)
-    const { isAuthenticated, activeRepository, refreshActiveRepository } = useAuth()
+  const [activeBatch, setActiveBatch] = useState<ActiveBatch | null>(null)
+  const [completedBatch, setCompletedBatch] = useState<{ taskIds: string[]; prUrl: string | null; mode: string } | null>(null)
+  const { isAuthenticated, activeRepository, refreshActiveRepository } = useAuth()
+  const metadataUnsubscribersRef = useRef<Map<string, () => void>>(new Map())
 
   const batchTaskIds = activeBatch?.tasks.map(t => t.taskId) ?? []
   const completedBatchTaskIds = completedBatch?.taskIds ?? []
@@ -167,6 +168,15 @@ export interface UseKanbanBoardReturn {
   useEffect(() => {
     const unsubscribe = metadataQueue.subscribe(setSyncStates)
     return unsubscribe
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      metadataUnsubscribersRef.current.forEach((unsubscribe) => {
+        unsubscribe()
+      })
+      metadataUnsubscribersRef.current.clear()
+    }
   }, [])
 
   useEffect(() => {
@@ -242,7 +252,10 @@ export interface UseKanbanBoardReturn {
   }, [isAuthenticated, refreshActiveRepository])
 
   const selectedProject = projects.find(p => p.id === projectId)
-  const canExecute = !!(selectedProject?.repositoryId || selectedProject?.localPath || activeRepository)
+  const desktopRuntime = isDesktopRuntime()
+  const canExecute = desktopRuntime
+    ? !!selectedProject?.localPath
+    : !!(selectedProject?.repositoryId || selectedProject?.localPath || activeRepository)
 
   const handleAddTask = (status: Task['status']) => {
     setDefaultStatus(status)
@@ -661,6 +674,42 @@ export interface UseKanbanBoardReturn {
     }
 
     try {
+      if (desktopRuntime) {
+        const localPath = selectedProject?.localPath
+        if (!localPath) {
+          throw new Error('Local project path is required for desktop execution')
+        }
+
+        const task = tasks.find((item) => item.id === taskId)
+        if (!task) {
+          throw new Error('Task not found')
+        }
+
+        const prompt = [task.title, task.description].filter(Boolean).join('\n\n').trim()
+        if (!prompt) {
+          throw new Error('Task prompt is empty')
+        }
+
+        if (!metadataUnsubscribersRef.current.has(taskId)) {
+          const unsubscribe = await listenToTaskMetadata(taskId)
+          metadataUnsubscribersRef.current.set(taskId, unsubscribe)
+        }
+
+        const runId = typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${taskId}-${Date.now()}`
+
+        const { invoke } = await import('@tauri-apps/api/core')
+        await invoke('run_opencode_task', {
+          taskId,
+          runId,
+          prompt,
+          repoPath: localPath,
+        })
+
+        return
+      }
+
       const token = localStorage.getItem('token')
       const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
       const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/execute`, {

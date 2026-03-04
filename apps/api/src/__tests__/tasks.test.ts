@@ -291,7 +291,7 @@ describe('Tasks API', () => {
       expect(res.body.error).toBe('Unauthorized');
     });
 
-    it('allows authenticated execute request', async () => {
+    it('fails fast for authenticated execute request with unsupported execution mode', async () => {
       const task = await prisma.task.create({
         data: { title: 'Auth Test Task', priority: 'medium' },
       });
@@ -300,7 +300,9 @@ describe('Tasks API', () => {
         .post(`/api/tasks/${task.id}/execute`)
         .set('Authorization', `Bearer ${authToken}`);
       
-      expect(res.status).not.toBe(401);
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('SERVER_EXECUTION_DISABLED');
+      expect(res.body.error).toContain('no longer supported');
     });
   });
 });

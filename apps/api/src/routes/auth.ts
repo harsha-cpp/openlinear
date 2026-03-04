@@ -15,6 +15,7 @@ import { z } from 'zod';
 
 const router: Router = Router();
 const DESKTOP_CALLBACK_URL = 'openlinear://callback';
+const WEB_CALLBACK_BRIDGE_URL = process.env.WEB_CALLBACK_BRIDGE_URL || 'http://localhost:3000/auth/callback';
 const DESKTOP_STATE_PREFIX = 'desktop:';
 const DESKTOP_CONNECT_STATE_PREFIX = 'desktop_connect:';
 
@@ -51,8 +52,25 @@ function getDesktopCallbackUrl(params: Record<string, string>): string {
   return `${DESKTOP_CALLBACK_URL}?${searchParams.toString()}`;
 }
 
+function getWebCallbackBridgeUrl(params: Record<string, string>): string {
+  const searchParams = new URLSearchParams(params);
+  return `${WEB_CALLBACK_BRIDGE_URL}?${searchParams.toString()}`;
+}
+
 function isDesktopOAuthRequest(req: Request): boolean {
-  return req.query.source === 'desktop' || req.headers['x-openlinear-client'] === 'desktop';
+  // Check query param (for initial auth URL)
+  if (req.query.source === 'desktop') return true;
+  // Check header (for API requests)
+  if (req.headers['x-openlinear-client'] === 'desktop') return true;
+  // Check state param (for OAuth callback - GitHub preserves state)
+  const state = req.query.state;
+  if (typeof state === 'string' && (
+    state.startsWith(DESKTOP_STATE_PREFIX) ||
+    state.startsWith(DESKTOP_CONNECT_STATE_PREFIX)
+  )) {
+    return true;
+  }
+  return false;
 }
 
 // --- Email/Password Auth ---
@@ -176,7 +194,8 @@ router.get('/github', (req: Request, res: Response) => {
     isDesktop,
     query: req.query,
     headers: req.headers['x-openlinear-client'],
-    statePrefix: state.substring(0, 20)
+    statePrefix: state.substring(0, 20),
+    userAgent: req.headers['user-agent']?.slice(0, 50)
   });
   
   const authUrl = getAuthorizationUrl(state);

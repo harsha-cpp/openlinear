@@ -117,6 +117,8 @@ pub async fn run_opencode_task(
     prompt: String,
     repo_path: String,
 ) -> Result<(), String> {
+    const METADATA_VERSION: &str = "1.0";
+
     {
         let guard = OPENCODE_PROCESS.lock().map_err(|e| e.to_string())?;
         if guard.is_some() {
@@ -133,7 +135,7 @@ pub async fn run_opencode_task(
         let _ = app.emit(
             &format!("opencode:metadata:{}", task_id),
             ExecutionMetadataSync {
-                version: Some("1.0".to_string()),
+                version: Some(METADATA_VERSION.to_string()),
                 task_id: task_id.clone(),
                 run_id: run_id.clone(),
                 status: "failed".to_string(),
@@ -145,16 +147,16 @@ pub async fn run_opencode_task(
         return Err("Missing required API keys".to_string());
     }
 
-        let _ = app.emit(
-            &format!("opencode:metadata:{}", task_id),
-            ExecutionMetadataSync {
-                version: Some("1.0".to_string()),
-                task_id: task_id.clone(),
-                run_id: run_id.clone(),
-                status: "starting".to_string(),
-                ..Default::default()
-            },
-        );
+    let _ = app.emit(
+        &format!("opencode:metadata:{}", task_id),
+        ExecutionMetadataSync {
+            version: Some(METADATA_VERSION.to_string()),
+            task_id: task_id.clone(),
+            run_id: run_id.clone(),
+            status: "starting".to_string(),
+            ..Default::default()
+        },
+    );
 
     let mut command = app
         .shell()
@@ -174,14 +176,40 @@ pub async fn run_opencode_task(
         command = command.env("CUSTOM_API_KEY", key);
     }
 
-    let (mut rx, child) = command
-        .spawn()
-        .map_err(|e| format!("Failed to spawn OpenCode: {}", e))?;
+    let (mut rx, child) = match command.spawn() {
+        Ok(result) => result,
+        Err(e) => {
+            let _ = app.emit(
+                &format!("opencode:metadata:{}", task_id),
+                ExecutionMetadataSync {
+                    version: Some(METADATA_VERSION.to_string()),
+                    task_id: task_id.clone(),
+                    run_id: run_id.clone(),
+                    status: "failed".to_string(),
+                    error_category: Some("UNKNOWN".to_string()),
+                    outcome: Some("Failed to start OpenCode task".to_string()),
+                    ..Default::default()
+                },
+            );
+            return Err(format!("Failed to spawn OpenCode: {}", e));
+        }
+    };
 
     {
         let mut guard = OPENCODE_PROCESS.lock().map_err(|e| e.to_string())?;
         *guard = Some(child);
     }
+
+    let _ = app.emit(
+        &format!("opencode:metadata:{}", task_id),
+        ExecutionMetadataSync {
+            version: Some(METADATA_VERSION.to_string()),
+            task_id: task_id.clone(),
+            run_id: run_id.clone(),
+            status: "running".to_string(),
+            ..Default::default()
+        },
+    );
 
     let app_handle = app.clone();
     let task_id_clone = task_id.clone();
@@ -223,17 +251,17 @@ pub async fn run_opencode_task(
                         None
                     };
 
-                        let _ = app_handle.emit(
-                            &format!("opencode:metadata:{}", task_id_clone),
-                            ExecutionMetadataSync {
-                                version: Some("1.0".to_string()),
-                                task_id: task_id_clone.clone(),
-                                run_id: run_id_clone.clone(),
-                                status,
-                                error_category,
-                                ..Default::default()
-                            },
-                        );
+                    let _ = app_handle.emit(
+                        &format!("opencode:metadata:{}", task_id_clone),
+                        ExecutionMetadataSync {
+                            version: Some(METADATA_VERSION.to_string()),
+                            task_id: task_id_clone.clone(),
+                            run_id: run_id_clone.clone(),
+                            status,
+                            error_category,
+                            ..Default::default()
+                        },
+                    );
 
                     let _ = app_handle.emit(
                         &format!("opencode:exit:{}", task_id_clone),
@@ -251,12 +279,12 @@ pub async fn run_opencode_task(
                     let _ = app_handle.emit(
                         &format!("opencode:metadata:{}", task_id_clone),
                         ExecutionMetadataSync {
-                            version: Some("1.0".to_string()),
+                            version: Some(METADATA_VERSION.to_string()),
                             task_id: task_id_clone.clone(),
                             run_id: run_id_clone.clone(),
                             status: "failed".to_string(),
                             error_category: Some("UNKNOWN".to_string()),
-                            outcome: Some(format!("Error: {}", err)),
+                            outcome: Some("OpenCode process error".to_string()),
                             ..Default::default()
                         },
                     );
@@ -371,5 +399,42 @@ mod tests {
         assert!(json.contains("\"status\":\"failed\""));
         assert!(json.contains("\"errorCategory\":\"AUTH\""));
         assert!(json.contains("\"outcome\":\"Missing required API keys\""));
+    }
+
+    #[test]
+    fn test_execution_metadata_sync_running_status() {
+        let metadata = ExecutionMetadataSync {
+            version: Some("1.0".to_string()),
+            task_id: "task_123".to_string(),
+            run_id: "run_456".to_string(),
+            status: "running".to_string(),
+            ..Default::default()
+        };
+
+        let json = serde_json::to_string(&metadata).expect("Should serialize");
+        assert!(json.contains("\"status\":\"running\""));
+        assert!(json.contains("\"taskId\":\"task_123\""));
+        assert!(json.contains("\"runId\":\"run_456\""));
+    }
+
+    #[test]
+    fn test_execution_metadata_sync_forbidden_fields_absent() {
+        let metadata = ExecutionMetadataSync {
+            version: Some("1.0".to_string()),
+            task_id: "task_123".to_string(),
+            run_id: "run_456".to_string(),
+            status: "failed".to_string(),
+            error_category: Some("AUTH".to_string()),
+            outcome: Some("Missing required API keys".to_string()),
+            ..Default::default()
+        };
+
+        let json = serde_json::to_value(&metadata).expect("Should serialize to value");
+        let object = json.as_object().expect("Should be JSON object");
+
+        assert!(!object.contains_key("prompt"));
+        assert!(!object.contains_key("logs"));
+        assert!(!object.contains_key("toolLogs"));
+        assert!(!object.contains_key("accessToken"));
     }
 }

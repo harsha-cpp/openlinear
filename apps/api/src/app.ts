@@ -24,17 +24,34 @@ export function createApp(): Application {
     'http://tauri.localhost',
     'https://tauri.localhost',
     'tauri://localhost',
+    'http://localhost:3001', // API itself for OAuth redirects
+    'https://rixie.in',
+    'https://dashboard.rixie.in',
   ];
 
   app.use(cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Allow requests with no origin (mobile apps, curl, etc)
+      if (!origin) {
         callback(null, true);
-      } else {
-        callback(new Error(`CORS: ${origin} not allowed`));
+        return;
       }
+      // Check allowed origins
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      // Allow any localhost origin for development
+      if (origin.match(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) {
+        callback(null, true);
+        return;
+      }
+      console.warn(`[CORS] Blocked request from origin: ${origin}`);
+      callback(new Error(`CORS: ${origin} not allowed`));
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-openlinear-client'],
   }));
   app.use(express.json());
   app.use(cookieParser());

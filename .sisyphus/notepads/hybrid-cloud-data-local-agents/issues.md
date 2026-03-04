@@ -92,3 +92,14 @@
 ## Task 5: DB migration away from server secret writes (follow-up)
 - The required verification command referenced `repos.test.ts`, but that file did not exist in the API test suite; created it to keep the command deterministic and to validate migration helper routing.
 - Targeted test runs emit an existing Postgres SSL-mode warning from dependencies (`pg-connection-string` alias notice). It is non-blocking for this task and does not affect migration behavior.
+
+## Task 8: Local Runner Orchestration (follow-up)
+- Rust `lsp_diagnostics` could not run in this environment because `rust-analyzer` is unavailable in the installed toolchain. Mitigation: used `cargo test opencode` as verification for compile/test correctness of modified Rust code.
+- Added runtime payload sanitation logs in queue tests (`Dropping invalid metadata payload without required identifiers`); these are expected test-time warnings and confirm invalid events are rejected before sync.
+
+## Task 8: Local Runner Orchestration (verification notes)
+- Rust `lsp_diagnostics` remained unavailable in this environment because `rust-analyzer` is missing.
+- `pnpm --filter @openlinear/desktop-ui lint` failed due to an existing `.next/dev/types/validator.ts` missing module issue.
+
+## Task 13: Desktop UI local execute + metadata sync state
+- `pnpm --filter @openlinear/desktop-ui lint` currently fails from generated Next dev types (`.next/dev/types/validator.ts` importing missing `app/teams/[id]/page.js`), which appears unrelated to the Task 13 hook changes.

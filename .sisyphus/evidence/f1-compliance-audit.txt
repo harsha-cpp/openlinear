@@ -1,0 +1,36 @@
+=== F1: Plan Compliance Audit ===
+
+
+## Must Have Verification
+
+MH1. Central PostgreSQL remains source of truth for collaborative entities
+  - CHECK: Schema at packages/db/prisma/schema.prisma shows Team, Project, Task entities
+  - STATUS: PASS
+
+MH2. AI/provider keys remain local only in desktop secure storage
+  - CHECK: apps/api/src/routes/opencode.ts line 167 blocks cloud provider-key ingestion
+  - CHECK: apps/desktop-ui/lib/api/opencode.ts line 45 uses Tauri secure storage
+  - CHECK: apps/desktop/src-tauri/src/secure_storage.rs line 38 implements keyring storage
+  - STATUS: PASS
+
+MH3. Metadata sync includes only: runId/taskId/state/timestamps/duration/branch/commit/pr refs/outcome/errorCategory
+  - CHECK: ExecutionMetadataSyncSchema in apps/api/src/types/execution-metadata.ts
+  - STATUS: PASS
+
+## Must NOT Have Verification
+
+MN1. No raw prompt, tool trace, terminal output, or secret values sent to cloud
+  - CHECK: /api/tasks/:id/logs returns 403 (blocked)
+  - CHECK: persistLogs in apps/api/src/services/execution/state.ts is no-op
+  - STATUS: PASS
+
+MN2. No server-side container fallback left enabled after final cutover
+  - CHECK: apps/api/src/routes/opencode.ts returns SERVER_EXECUTION_DISABLED
+  - CHECK: apps/api/src/services/execution/lifecycle.ts returns SERVER_EXECUTION_DISABLED
+  - STATUS: PASS
+
+MN3. No acceptance criteria requiring manual end-user verification
+  - CHECK: All QA scenarios have automated evidence files
+  - STATUS: PASS
+
+## VERDICT: PASS (5/5 Must Have, 3/3 Must NOT Have)

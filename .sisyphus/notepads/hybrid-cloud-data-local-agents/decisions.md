@@ -65,3 +65,11 @@
 - Rationale: Keeps legacy behavior intact during migration while making all server-side token fallback usage explicit, centralized, and warning-backed for cleanup visibility.
 - Decision: Keep schema unchanged (no Prisma model removal yet).
 - Rationale: This phase is non-destructive migration prep; write-blocking + explicit legacy read/cleanup paths are sufficient until final column retirement.
+
+## Task 8: Local Runner Orchestration (follow-up)
+- Decision: Emit `starting` then `running` metadata from `run_opencode_task` and emit `failed` metadata on spawn failure.
+- Rationale: Guarantees deterministic lifecycle transitions for cloud sync and prevents orphaned start states when local process creation fails.
+- Decision: Replace raw `CommandEvent::Error` outcome text with a generic `OpenCode process error` metadata outcome.
+- Rationale: Prevents accidental propagation of raw execution context into cloud-bound metadata while preserving local stderr stream for desktop diagnostics.
+- Decision: Enforce an explicit allowlist sanitizer in `apps/desktop-ui/lib/api/metadata-queue.ts` before enqueue and before sync.
+- Rationale: Runtime allowlisting is a stronger privacy boundary than structural typing and blocks unknown/sensitive fields from entering synced payloads.

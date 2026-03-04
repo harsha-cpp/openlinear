@@ -1,5 +1,10 @@
-import { API_URL, getAuthHeader } from './client';
+import { API_URL, getAuthHeader, isDesktopRuntime } from './client';
 import type { User } from './types';
+
+// Helper to get client header for desktop detection
+function getClientHeader(): Record<string, string> {
+  return isDesktopRuntime() ? { 'x-openlinear-client': 'desktop' } : {};
+}
 
 export async function fetchCurrentUser(): Promise<User | null> {
   const token = localStorage.getItem('token');
@@ -18,8 +23,7 @@ export async function fetchCurrentUser(): Promise<User | null> {
 }
 
 export function getLoginUrl(): string {
-  const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-  return `${API_URL}/api/auth/github${isDesktop ? '?source=desktop' : ''}`;
+  return `${API_URL}/api/auth/github${isDesktopRuntime() ? '?source=desktop' : ''}`;
 }
 
 export async function getGitHubConnectUrl(): Promise<string> {
@@ -38,27 +42,67 @@ export function logout(): void {
 }
 
 export async function loginUser(username: string, password: string): Promise<{ token: string; user: { id: string; username: string } }> {
-  const res = await fetch(`${API_URL}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
-  });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Login failed' }));
-    throw new Error(error.error || 'Login failed');
+  try {
+    const res = await fetch(`${API_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        ...getClientHeader(),
+      },
+      body: JSON.stringify({ username, password }),
+    });
+    
+    if (!res.ok) {
+      let errorMessage = 'Login failed';
+      try {
+        const errorData = await res.json();
+        errorMessage = errorData.error || errorData.message || `Login failed (${res.status})`;
+      } catch {
+        errorMessage = `Login failed (${res.status}): ${res.statusText}`;
+      }
+      throw new Error(errorMessage);
+    }
+    return res.json();
+  } catch (err) {
+    if (err instanceof Error) {
+      if (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('Failed to fetch')) {
+        throw new Error('Cannot connect to server. Please check your internet connection and try again.');
+      }
+      throw err;
+    }
+    throw new Error('Login failed. Please try again.');
   }
-  return res.json();
 }
 
 export async function registerUser(username: string, password: string, email?: string): Promise<{ token: string; user: { id: string; username: string } }> {
-  const res = await fetch(`${API_URL}/api/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password, email }),
-  });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Registration failed' }));
-    throw new Error(error.error || 'Registration failed');
+  try {
+    const res = await fetch(`${API_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        ...getClientHeader(),
+      },
+      body: JSON.stringify({ username, password, email }),
+    });
+    
+    if (!res.ok) {
+      let errorMessage = 'Registration failed';
+      try {
+        const errorData = await res.json();
+        errorMessage = errorData.error || errorData.message || `Registration failed (${res.status})`;
+      } catch {
+        errorMessage = `Registration failed (${res.status}): ${res.statusText}`;
+      }
+      throw new Error(errorMessage);
+    }
+    return res.json();
+  } catch (err) {
+    if (err instanceof Error) {
+      if (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('Failed to fetch')) {
+        throw new Error('Cannot connect to server. Please check your internet connection and try again.');
+      }
+      throw err;
+    }
+    throw new Error('Registration failed. Please try again.');
   }
-  return res.json();
 }

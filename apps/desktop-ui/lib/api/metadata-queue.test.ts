@@ -96,6 +96,88 @@ test('dedupe', async (t) => {
   assert.strictEqual(queue.getQueue()[0].payload.status, 'starting');
 });
 
+test('starting metadata uses start endpoint and running status mapping', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+
+  let receivedUrl = '';
+  let receivedMethod = '';
+  let receivedBody: Record<string, unknown> = {};
+
+  global.fetch = async (_url, options: any) => {
+    receivedUrl = String(_url);
+    receivedMethod = String(options?.method || '');
+    receivedBody = JSON.parse(String(options?.body || '{}')) as Record<string, unknown>;
+    return { ok: true, status: 200, text: async () => '' } as any;
+  };
+
+  const queue = new MetadataQueue();
+  queue.clearQueue();
+
+  queue.enqueue({
+    taskId: 'task-start',
+    runId: 'run-start',
+    status: 'starting',
+  });
+
+  t.mock.timers.tick(100);
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.ok(receivedUrl.endsWith('/api/execution/metadata/start'));
+  assert.strictEqual(receivedMethod, 'POST');
+  assert.strictEqual(receivedBody.taskId, 'task-start');
+  assert.strictEqual(receivedBody.runId, 'run-start');
+  assert.strictEqual(receivedBody.status, 'running');
+});
+
+test('sync payload strips forbidden fields', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+
+  let receivedBody: Record<string, unknown> = {};
+
+  global.fetch = async (_url, options: any) => {
+    receivedBody = JSON.parse(String(options?.body || '{}')) as Record<string, unknown>;
+    return { ok: true, status: 200, text: async () => '' } as any;
+  };
+
+  const queue = new MetadataQueue();
+  queue.clearQueue();
+
+  queue.enqueue({
+    taskId: 'task-privacy',
+    runId: 'run-privacy',
+    status: 'running',
+    outcome: 'ok',
+    prompt: 'do not sync',
+    logs: 'do not sync',
+    apiKey: 'do not sync',
+  } as ExecutionMetadataSync);
+
+  t.mock.timers.tick(100);
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.strictEqual(receivedBody.taskId, 'task-privacy');
+  assert.strictEqual(receivedBody.runId, 'run-privacy');
+  assert.strictEqual(receivedBody.status, 'running');
+  assert.strictEqual(receivedBody.outcome, 'ok');
+  assert.ok(!('prompt' in receivedBody));
+  assert.ok(!('logs' in receivedBody));
+  assert.ok(!('apiKey' in receivedBody));
+});
+
+test('invalid metadata without task/run identifiers is dropped', async () => {
+  global.fetch = async () => {
+    return { ok: true, status: 200, text: async () => '' } as any;
+  };
+
+  const queue = new MetadataQueue();
+  queue.clearQueue();
+
+  queue.enqueue({ taskId: '', runId: 'run-1', status: 'running' } as ExecutionMetadataSync);
+  queue.enqueue({ taskId: 'task-1', runId: '', status: 'running' } as ExecutionMetadataSync);
+
+  assert.strictEqual(queue.getQueue().length, 0);
+});
+
 test('soak: repeated offline/reconnect cycles', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   
@@ -103,7 +185,7 @@ test('soak: repeated offline/reconnect cycles', async (t) => {
   let isOnline = false;
   const receivedPayloads: any[] = [];
   
-  global.fetch = async (url, options: any) => {
+  global.fetch = async (_url, options: any) => {
     fetchCalls++;
     if (!isOnline) {
       throw new Error('Network error');
@@ -165,7 +247,7 @@ test('outage: API outage causes retries then eventual success without duplicates
   const targetFailures = 3;
   const receivedPayloads: any[] = [];
   
-  global.fetch = async (url, options: any) => {
+  global.fetch = async (_url, options: any) => {
     fetchCalls++;
     if (consecutiveFailures < targetFailures) {
       consecutiveFailures++;

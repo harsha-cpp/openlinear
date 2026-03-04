@@ -97,7 +97,9 @@ export class MetadataQueue {
   }
 
   private notifyListeners() {
-    this.listeners.forEach(listener => listener(this.taskStates));
+    this.listeners.forEach((listener) => {
+      listener(this.taskStates);
+    });
   }
 
   private updateTaskStates(errorTaskId?: string, errorMessage?: string) {
@@ -126,20 +128,59 @@ export class MetadataQueue {
     this.notifyListeners();
   }
 
+  private sanitizePayload(payload: ExecutionMetadataSync): ExecutionMetadataSync | null {
+    if (
+      !payload ||
+      typeof payload.taskId !== 'string' ||
+      payload.taskId.trim().length === 0 ||
+      typeof payload.runId !== 'string' ||
+      payload.runId.trim().length === 0 ||
+      typeof payload.status !== 'string' ||
+      payload.status.trim().length === 0
+    ) {
+      return null;
+    }
+
+    const sanitized: ExecutionMetadataSync = {
+      taskId: payload.taskId,
+      runId: payload.runId,
+      status: payload.status,
+    };
+
+    if (typeof payload.version === 'string' && payload.version.length > 0) sanitized.version = payload.version;
+    if (typeof payload.startedAt === 'string' && payload.startedAt.length > 0) sanitized.startedAt = payload.startedAt;
+    if (typeof payload.completedAt === 'string' && payload.completedAt.length > 0) sanitized.completedAt = payload.completedAt;
+    if (typeof payload.durationMs === 'number' && Number.isFinite(payload.durationMs) && payload.durationMs >= 0) sanitized.durationMs = payload.durationMs;
+    if (typeof payload.branch === 'string' && payload.branch.length > 0) sanitized.branch = payload.branch;
+    if (typeof payload.commitSha === 'string' && payload.commitSha.length > 0) sanitized.commitSha = payload.commitSha;
+    if (typeof payload.prUrl === 'string' && payload.prUrl.length > 0) sanitized.prUrl = payload.prUrl;
+    if (typeof payload.prNumber === 'number' && Number.isInteger(payload.prNumber) && payload.prNumber > 0) sanitized.prNumber = payload.prNumber;
+    if (typeof payload.outcome === 'string' && payload.outcome.length > 0) sanitized.outcome = payload.outcome;
+    if (typeof payload.errorCategory === 'string' && payload.errorCategory.length > 0) sanitized.errorCategory = payload.errorCategory;
+
+    return sanitized;
+  }
+
   private generateDedupeKey(payload: ExecutionMetadataSync): string {
     // Dedupe based on taskId, runId, and status/phase
     return `${payload.taskId}:${payload.runId}:${payload.status}`;
   }
 
   public enqueue(payload: ExecutionMetadataSync) {
-    const dedupeKey = this.generateDedupeKey(payload);
+    const sanitizedPayload = this.sanitizePayload(payload);
+    if (!sanitizedPayload) {
+      console.warn('Dropping invalid metadata payload without required identifiers');
+      return;
+    }
+
+    const dedupeKey = this.generateDedupeKey(sanitizedPayload);
     
     // Check if we already have this exact event in the queue
     const existingIndex = this.queue.findIndex(e => this.generateDedupeKey(e.payload) === dedupeKey);
     
     if (existingIndex >= 0) {
       // Update existing event with latest payload (in case other fields changed)
-      this.queue[existingIndex].payload = payload;
+      this.queue[existingIndex].payload = sanitizedPayload;
       this.queue[existingIndex].timestamp = Date.now();
       this.queue[existingIndex].retryCount = 0;
     } else {
@@ -148,7 +189,7 @@ export class MetadataQueue {
         id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2),
         timestamp: Date.now(),
         retryCount: 0,
-        payload
+        payload: sanitizedPayload
       });
     }
     
@@ -215,12 +256,17 @@ export class MetadataQueue {
   private async syncEvent(payload: ExecutionMetadataSync): Promise<boolean> {
     try {
       let endpoint = '/api/execution/metadata/progress';
-      const serverPayload = { ...payload };
+      const serverPayload = this.sanitizePayload(payload);
+
+      if (!serverPayload) {
+        console.warn('Dropping invalid metadata payload during sync');
+        return true;
+      }
       
-      if (payload.status === 'starting') {
+      if (serverPayload.status === 'starting') {
         endpoint = '/api/execution/metadata/start';
         serverPayload.status = 'running';
-      } else if (['completed', 'failed', 'cancelled'].includes(payload.status)) {
+      } else if (['completed', 'failed', 'cancelled'].includes(serverPayload.status)) {
         endpoint = '/api/execution/metadata/finish';
       }
 
