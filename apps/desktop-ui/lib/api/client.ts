@@ -5,6 +5,26 @@ function getDefaultApiUrl(): string {
 
   const hostname = window.location.hostname;
   const isDesktop = '__TAURI_INTERNALS__' in window || hostname === 'tauri.localhost';
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  // Production desktop app should use hosted API
+  if (isDesktop && isProduction) {
+    return 'https://rixie.in';
+  }
+
+  // Development desktop app or local web
+  if (isDesktop || hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://localhost:3001';
+  }
+
+  return window.location.origin;
+}
+  if (typeof window === 'undefined') {
+    return 'http://localhost:3001';
+  }
+
+  const hostname = window.location.hostname;
+  const isDesktop = '__TAURI_INTERNALS__' in window || hostname === 'tauri.localhost';
 
   if (isDesktop || hostname === 'localhost' || hostname === '127.0.0.1') {
     return 'http://localhost:3001';
