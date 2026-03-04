@@ -57,7 +57,7 @@ pnpm install &> /dev/null
 echo "Building desktop app (this may take a few minutes)..."
 echo ""
 
-pnpm --filter @openlinear/desktop build &> /dev/null
+pnpm --filter @openlinear/desktop exec tauri build --bundles deb &> /dev/null
 
 mkdir -p "$INSTALL_DIR"
 
