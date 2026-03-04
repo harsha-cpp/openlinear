@@ -1,61 +1,43 @@
 #!/bin/bash
-# OpenLinear Installer Script
+# OpenLinear Desktop App Installer
 # Usage: curl -fsSL https://rixie.in/api/install | bash
 
 set -e
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-# Configuration
 REPO="kaizen403/openlinear"
 API_URL="https://api.github.com/repos/${REPO}/releases/latest"
-INSTALL_DIR="${HOME}/.local/bin"
-BIN_NAME="openlinear"
+INSTALL_DIR="${HOME}/.openlinear"
+BINARY_NAME="openlinear.AppImage"
 
-echo -e "${BLUE}OpenLinear Installer${NC}"
+echo "OpenLinear Installer"
 echo "===================="
 echo ""
 
-# Detect OS and architecture
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+OS=$(uname -s)
 ARCH=$(uname -m)
 
-case "$OS" in
-    linux)
-        case "$ARCH" in
-            x86_64) PLATFORM="linux-x64" ;;
-            aarch64|arm64) PLATFORM="linux-arm64" ;;
-            *) echo -e "${RED}Unsupported architecture: $ARCH${NC}"; exit 1 ;;
-        esac
-        ;;
-    darwin)
-        case "$ARCH" in
-            x86_64) PLATFORM="macos-x64" ;;
-            arm64) PLATFORM="macos-arm64" ;;
-            *) echo -e "${RED}Unsupported architecture: $ARCH${NC}"; exit 1 ;;
-        esac
-        ;;
-    *)
-        echo -e "${RED}Unsupported OS: $OS${NC}"
-        exit 1
-        ;;
-esac
-
-echo -e "Detected: ${YELLOW}$PLATFORM${NC}"
-echo ""
-
-# Check for required tools
-if ! command -v curl &> /dev/null && ! command -v wget &> /dev/null; then
-    echo -e "${RED}Error: curl or wget is required${NC}"
+if [ "$OS" != "Linux" ]; then
+    echo "Error: OpenLinear desktop app is currently only available for Linux"
+    echo "Your OS: $OS"
     exit 1
 fi
 
-# Get latest release
+case "$ARCH" in
+    x86_64) PLATFORM="amd64" ;;
+    aarch64|arm64) PLATFORM="arm64" ;;
+    *) echo "Error: Unsupported architecture: $ARCH"; exit 1 ;;
+esac
+
+echo "Detected: Linux $PLATFORM"
+echo ""
+
+if ! command -v curl &> /dev/null && ! command -v wget &> /dev/null; then
+    echo "Error: curl or wget is required"
+    exit 1
+fi
+
+echo "Fetching latest release..."
+
 if command -v curl &> /dev/null; then
     RELEASE_DATA=$(curl -s "$API_URL")
 else
@@ -63,107 +45,46 @@ else
 fi
 
 if [ -z "$RELEASE_DATA" ] || echo "$RELEASE_DATA" | grep -q "Not Found"; then
-    echo -e "${RED}Error: Failed to fetch release information${NC}"
+    echo "Error: Failed to fetch release information"
     exit 1
 fi
 
-# Parse version
 VERSION=$(echo "$RELEASE_DATA" | grep -o '"tag_name": "[^"]*"' | cut -d'"' -f4)
 if [ -z "$VERSION" ]; then
-    echo -e "${RED}Error: Failed to parse version${NC}"
+    echo "Error: Failed to parse version"
     exit 1
 fi
 
-echo -e "Latest version: ${GREEN}$VERSION${NC}"
+echo "Latest version: $VERSION"
 echo ""
 
-# Find asset URL
-ASSET_PATTERN="${PLATFORM}"
-ASSET_URL=$(echo "$RELEASE_DATA" | grep -o '"browser_download_url": "[^"]*' | grep "$ASSET_PATTERN" | head -1 | cut -d'"' -f4)
+ASSET_URL=$(echo "$RELEASE_DATA" | grep -o '"browser_download_url": "[^"]*\.AppImage"' | grep -i "linux.*${PLATFORM}\|${PLATFORM}.*linux\|appimage" | head -1 | cut -d'"' -f4)
 
 if [ -z "$ASSET_URL" ]; then
-    echo -e "${YELLOW}No prebuilt binary found for $PLATFORM${NC}"
-    echo "Falling back to npm installation..."
-    echo ""
-    
-    if ! command -v npm &> /dev/null; then
-        echo -e "${RED}Error: npm is not installed${NC}"
-        echo "Please install Node.js first: https://nodejs.org"
-        exit 1
-    fi
-    
-    echo -e "${BLUE}Installing via npm...${NC}"
-    npm install -g openlinear
-    
-    if command -v openlinear &> /dev/null; then
-        echo ""
-        echo -e "${GREEN}✓ OpenLinear installed successfully!${NC}"
-        echo ""
-        echo "Run 'openlinear --help' to get started"
-    else
-        echo -e "${RED}Error: Installation failed${NC}"
-        exit 1
-    fi
-    
-    exit 0
+    echo "Error: No AppImage found for Linux $PLATFORM"
+    exit 1
 fi
 
-echo -e "${BLUE}Downloading...${NC}"
-
-# Create temp directory
-TMP_DIR=$(mktemp -d)
-trap "rm -rf $TMP_DIR" EXIT
-
-# Download
-DOWNLOAD_FILE="$TMP_DIR/openlinear-${PLATFORM}.tar.gz"
-
-if command -v curl &> /dev/null; then
-    curl -fsSL "$ASSET_URL" -o "$DOWNLOAD_FILE" --progress-bar
-else
-    wget -q --show-progress "$ASSET_URL" -O "$DOWNLOAD_FILE"
-fi
-
+echo "Downloading OpenLinear..."
 echo ""
-echo -e "${BLUE}Extracting...${NC}"
 
-# Extract
-tar -xzf "$DOWNLOAD_FILE" -C "$TMP_DIR"
-
-# Install
 mkdir -p "$INSTALL_DIR"
 
-# Find the binary in extracted files
-if [ -f "$TMP_DIR/openlinear" ]; then
-    BINARY_PATH="$TMP_DIR/openlinear"
-elif [ -f "$TMP_DIR/openlinear-desktop" ]; then
-    BINARY_PATH="$TMP_DIR/openlinear-desktop"
+if command -v curl &> /dev/null; then
+    curl -fsSL "$ASSET_URL" -o "$INSTALL_DIR/$BINARY_NAME" --progress-bar
 else
-    BINARY_PATH=$(find "$TMP_DIR" -type f -executable | head -1)
+    wget -q --show-progress "$ASSET_URL" -O "$INSTALL_DIR/$BINARY_NAME"
 fi
 
-cp "$BINARY_PATH" "$INSTALL_DIR/$BIN_NAME"
-chmod +x "$INSTALL_DIR/$BIN_NAME"
-
-# Check if install dir is in PATH
-if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-    echo ""
-    echo -e "${YELLOW}Warning: $INSTALL_DIR is not in your PATH${NC}"
-    echo ""
-    echo "Add the following to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
-    echo ""
-    echo "    export PATH=\"\$PATH:$INSTALL_DIR\""
-    echo ""
-fi
+chmod +x "$INSTALL_DIR/$BINARY_NAME"
 
 echo ""
-echo -e "${GREEN}✓ OpenLinear $VERSION installed successfully!${NC}"
+echo "✓ OpenLinear $VERSION installed successfully!"
 echo ""
-echo "Location: $INSTALL_DIR/$BIN_NAME"
+echo "Location: $INSTALL_DIR/$BINARY_NAME"
 echo ""
-
-if command -v openlinear &> /dev/null; then
-    echo "Run 'openlinear --help' to get started"
-else
-    echo "Please restart your terminal or run:"
-    echo "    export PATH=\"\$PATH:$INSTALL_DIR\""
-fi
+echo "Run OpenLinear with:"
+echo "  $INSTALL_DIR/$BINARY_NAME"
+echo ""
+echo "Or install the npm wrapper for easier access:"
+echo "  npm install -g openlinear"
