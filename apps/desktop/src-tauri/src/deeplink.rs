@@ -72,6 +72,14 @@ pub fn setup_deep_link_handler(app: &tauri::App) {
     println!("[DeepLink] Handler setup complete, URLs found: {}", urls_found);
 }
 
+pub fn handle_deep_link_arg<R: tauri::Runtime>(handle: &tauri::AppHandle<R>, arg: &str) {
+    if let Ok(url) = Url::parse(arg) {
+        if url.scheme() == "openlinear" {
+            handle_deep_link_url(handle, &url);
+        }
+    }
+}
+
 fn handle_deep_link_url<R: tauri::Runtime>(handle: &tauri::AppHandle<R>, url: &Url) {
     println!("[DeepLink] Received: {}", url);
 
