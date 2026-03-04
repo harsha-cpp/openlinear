@@ -23,6 +23,7 @@ export function createApp(): Application {
     process.env.CORS_ORIGIN || 'http://localhost:3000',
     'http://tauri.localhost',
     'https://tauri.localhost',
+    'tauri://localhost',
   ];
 
   app.use(cors({
