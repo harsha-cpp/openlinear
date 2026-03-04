@@ -165,3 +165,8 @@
 ## F2 Evidence Refresh (2026-03-01, post lint-script fix)
 - `pnpm lint` now passes and both web apps run `tsc --noEmit`; the previous `Invalid project directory .../lint` failure no longer appears.
 - Current required matrix run shows API `build/typecheck/test` PASS, repo `typecheck/test` PASS, and repo `build` still FAIL at desktop bundling (`failed to run linuxdeploy`).
+
+## Task 5: DB migration away from server secret writes (follow-up)
+- Replacing direct `prisma.user.findUnique({ select: { accessToken: true } })` route reads with `getLegacyTokenForOperation` keeps legacy fallback behavior but makes migration usage explicit and auditable.
+- The write-blocking Prisma extension in `packages/db/src/client.ts` continues to enforce `User.accessToken` deprecation centrally; route-level changes should focus on controlled reads/cleanup, not new persistence paths.
+- Adding a dedicated `repos.test.ts` avoids blind spots in migration coverage and validates that GitHub repo listing uses the migration helper token path rather than direct DB field access.

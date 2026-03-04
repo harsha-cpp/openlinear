@@ -59,3 +59,9 @@
 - Decided to keep the `batch:*` SSE events intact to avoid breaking the frontend, but trigger them from the metadata sync endpoint instead of internal server-side events.
 - Decided to remove the server-side git commit logic from `handleTaskComplete` because the local execution model handles committing and pushing changes.
 - Decided to update `startTask` to just mark the task as running and wait for the local execution to pick it up, rather than spawning a server-side OpenCode session.
+
+## Task 5: DB migration away from server secret writes (follow-up)
+- Decision: Route-level fallback reads now go through `getLegacyTokenForOperation` (`batches.create`, `tasks.refresh-pr`, `repos.list-github`) instead of direct `User.accessToken` queries.
+- Rationale: Keeps legacy behavior intact during migration while making all server-side token fallback usage explicit, centralized, and warning-backed for cleanup visibility.
+- Decision: Keep schema unchanged (no Prisma model removal yet).
+- Rationale: This phase is non-destructive migration prep; write-blocking + explicit legacy read/cleanup paths are sufficient until final column retirement.

@@ -3,6 +3,7 @@ import { prisma } from '@openlinear/db';
 import { z } from 'zod';
 import { broadcast } from '../sse';
 import { executeTask, cancelTask, isTaskRunning } from '../services/execution';
+import { getLegacyTokenForOperation } from '../services/auth-migration';
 import { optionalAuth, requireAuth, AuthRequest } from '../middleware/auth';
 import { getUserTeamIds } from '../services/team-scope';
 
@@ -439,14 +440,9 @@ router.post('/:id/refresh-pr', requireAuth, async (req: AuthRequest, res: Respon
     const [, owner, repo, rawBranch] = match;
     const branch = decodeURIComponent(rawBranch);
 
-    let accessToken: string | null = null;
-    if (req.userId) {
-      const user = await prisma.user.findUnique({
-        where: { id: req.userId },
-        select: { accessToken: true },
-      });
-      accessToken = user?.accessToken ?? null;
-    }
+    const accessToken = req.userId
+      ? await getLegacyTokenForOperation(req.userId, 'tasks.refresh-pr')
+      : null;
 
     if (!accessToken) {
       res.status(400).json({ error: 'GitHub authentication required to refresh PR status' });

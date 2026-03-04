@@ -88,3 +88,7 @@
 ## F2 Evidence Refresh (2026-03-01, post lint-script fix)
 - Remaining blocker is repo build: `pnpm build` still fails at `@openlinear/desktop#build` with `failed to run linuxdeploy`.
 - Lint is no longer a blocker after script updates (`pnpm lint` returns `Tasks: 2 successful, 2 total`).
+
+## Task 5: DB migration away from server secret writes (follow-up)
+- The required verification command referenced `repos.test.ts`, but that file did not exist in the API test suite; created it to keep the command deterministic and to validate migration helper routing.
+- Targeted test runs emit an existing Postgres SSL-mode warning from dependencies (`pg-connection-string` alias notice). It is non-blocking for this task and does not affect migration behavior.

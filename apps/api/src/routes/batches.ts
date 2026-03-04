@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import { prisma } from '@openlinear/db';
 import { requireAuth, AuthRequest } from '../middleware/auth';
+import { getLegacyTokenForOperation } from '../services/auth-migration';
 import {
   createBatch,
   startBatch,
@@ -33,14 +33,9 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
     
     console.log(`[Batches] Create batch requested (userId: ${userId})`);
 
-    let accessToken: string | null = null;
-    if (userId) {
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { accessToken: true },
-      });
-      accessToken = user?.accessToken ?? null;
-    }
+    const accessToken = userId
+      ? await getLegacyTokenForOperation(userId, 'batches.create')
+      : null;
 
     const batch = await createBatch({
       taskIds,

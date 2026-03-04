@@ -3,6 +3,11 @@ import request from 'supertest';
 import { createApp } from '../app';
 import { prisma } from '@openlinear/db';
 import * as githubService from '../services/github';
+import {
+  clearLegacyToken,
+  getLegacyTokenForOperation,
+  hasLegacyStoredToken,
+} from '../services/auth-migration';
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -82,7 +87,33 @@ describe('Auth Migration', () => {
         },
       })
     ).rejects.toThrow('Writing accessToken to database is deprecated and blocked.');
-    
-    await new Promise(r => setTimeout(r, 500));
+  });
+
+  it('legacy read/cleanup helpers stay explicit and safe for migration rows', async () => {
+    const user = await prisma.user.create({
+      data: {
+        username: 'legacy_reader',
+      },
+    });
+
+    await prisma.$executeRaw`
+      UPDATE "users"
+      SET "accessToken" = ${'gho_legacy_token'}
+      WHERE "id" = ${user.id}
+    `;
+
+    expect(await hasLegacyStoredToken(user.id)).toBe(true);
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const token = await getLegacyTokenForOperation(user.id, 'auth-migration.test');
+    expect(token).toBe('gho_legacy_token');
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Storing accessToken in database is deprecated')
+    );
+
+    await clearLegacyToken(user.id);
+    expect(await hasLegacyStoredToken(user.id)).toBe(false);
+
+    warnSpy.mockRestore();
   });
 });

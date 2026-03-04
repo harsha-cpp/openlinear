@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '@openlinear/db';
 import { z } from 'zod';
 import { requireAuth, AuthRequest } from '../middleware/auth';
+import { getLegacyTokenForOperation } from '../services/auth-migration';
 import {
   getGitHubRepos,
   addRepository,
@@ -101,17 +102,14 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
 
 router.get('/github', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.userId! },
-      select: { accessToken: true },
-    });
+    const accessToken = await getLegacyTokenForOperation(req.userId!, 'repos.list-github');
 
-    if (!user?.accessToken) {
+    if (!accessToken) {
       res.status(403).json({ error: 'GitHub account not linked. Please sign in with GitHub first.' });
       return;
     }
 
-    const repos = await getGitHubRepos(user.accessToken);
+    const repos = await getGitHubRepos(accessToken);
     res.json(repos);
   } catch (err) {
     console.error('[Repos] Failed to fetch GitHub repos:', err);

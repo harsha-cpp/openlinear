@@ -224,7 +224,7 @@ Max Concurrent: 6
     - Happy: set/get/delete secret command succeeds; evidence `.sisyphus/evidence/task-4-secret-roundtrip.txt`.
     - Negative: tampered storage key lookup returns controlled error; evidence `.sisyphus/evidence/task-4-secret-error.txt`.
 
-- [ ] 5. Prepare DB migration away from server secret writes
+- [x] 5. Prepare DB migration away from server secret writes
   - **What to do**: deprecate `User.accessToken` write path; define migration/backfill policy for legacy rows.
   - **Must NOT do**: do not break collaborative entities (teams/projects/tasks).
   - **Recommended Agent Profile**: `unspecified-high`, skills `prisma`, `migrations`.

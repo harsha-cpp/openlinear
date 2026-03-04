@@ -18,6 +18,10 @@ const DEPRECATION_WARNING =
 'WARNING: Storing accessToken in database is deprecated. ' +
 'Read docs/security/trust-boundary.md for migration guide.';
 
+function maskUserId(userId: string): string {
+  return userId.length <= 8 ? userId : `${userId.slice(0, 8)}...`;
+}
+
 /**
  * Check if user has a legacy stored token
  * Used during migration to identify users who need to transition
@@ -51,4 +55,17 @@ export async function getLegacyToken(userId: string): Promise<string | null> {
     select: { accessToken: true },
   });
   return user?.accessToken ?? null;
+}
+
+export async function getLegacyTokenForOperation(
+  userId: string,
+  operation: string
+): Promise<string | null> {
+  const token = await getLegacyToken(userId);
+  if (token) {
+    console.warn(
+      `[Auth Migration] ${DEPRECATION_WARNING} operation=${operation} userId=${maskUserId(userId)}`
+    );
+  }
+  return token;
 }
