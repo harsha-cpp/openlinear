@@ -224,17 +224,20 @@ router.get('/github/connect', async (req: Request, res: Response) => {
 
 router.get('/github/callback', async (req: Request, res: Response) => {
   const { code, error, error_description, state } = req.query;
-  const stateStr = typeof state === 'string' ? state : '';
+  const stateStr = typeof state === 'string' ? decodeURIComponent(state) : '';
   const isDesktop = stateStr.startsWith(DESKTOP_STATE_PREFIX);
   const isDesktopConnect = stateStr.startsWith(DESKTOP_CONNECT_STATE_PREFIX);
   
   // Debug logging
   console.log('[Auth Debug] OAuth callback received:', {
     state: stateStr,
+    statePrefix: stateStr.substring(0, 20),
+    DESKTOP_STATE_PREFIX,
     isDesktop,
     isDesktopConnect,
     hasCode: !!code,
-    hasError: !!error
+    hasError: !!error,
+    fullUrl: req.originalUrl
   });
 
   if (error) {
