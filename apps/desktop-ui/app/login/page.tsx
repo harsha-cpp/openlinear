@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Github, Loader2, UserPlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -14,7 +14,7 @@ type Tab = "email" | "github"
 
 export default function LoginPage() {
   const router = useRouter()
-  const { refreshUser } = useAuth()
+  const { refreshUser, isAuthenticated, isLoading: authLoading } = useAuth()
   const [activeTab, setActiveTab] = useState<Tab>("email")
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
@@ -64,6 +64,12 @@ export default function LoginPage() {
     }
   }
 
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      router.replace("/")
+    }
+  }, [authLoading, isAuthenticated, router])
+
   return (
     <div className="min-h-screen bg-linear-bg flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -84,6 +90,7 @@ export default function LoginPage() {
           {/* Tab Buttons */}
           <div className="flex border-b border-linear-border">
             <button
+              type="button"
               onClick={() => setActiveTab("email")}
               className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
                 activeTab === "email"
@@ -94,6 +101,7 @@ export default function LoginPage() {
               Email / Password
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab("github")}
               className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
                 activeTab === "github"
