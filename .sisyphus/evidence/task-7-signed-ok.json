@@ -1,5 +1,0 @@
-{
-  "scenario": "valid signed envelope ingests once and returns run checkpoint",
-  "result": "pass",
-  "details": "POST /api/execution/metadata/start with valid signature -> 200 OK"
-}

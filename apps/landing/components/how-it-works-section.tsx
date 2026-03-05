@@ -26,25 +26,20 @@ export function HowItWorksSection() {
           <StepCard
             visual={
               <div className="w-[280px] h-[180px] rounded-[16px] bg-[#0A0D14] border border-[#1E2330] relative overflow-hidden flex flex-col items-center justify-center mb-8 mx-auto group z-10">
-                <div className="w-[86%] h-[84%] rounded-[12px] border border-white/[0.08] bg-gradient-to-b from-white/[0.02] to-transparent overflow-hidden shadow-[0_8px_28px_-14px_rgba(0,0,0,0.7)]">
-                  <div className="flex items-center justify-between px-3 py-2 border-b border-white/[0.06] bg-white/[0.02]">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Todo</span>
-                      <span className="h-4 min-w-4 px-1 rounded border border-white/[0.08] bg-white/[0.06] text-[10px] leading-4 text-zinc-400 text-center">1</span>
+                <div className="w-[86%] h-[84%] rounded-xl bg-white/[0.03] backdrop-blur-md border border-white/[0.08] shadow-[0_4px_24px_-8px_rgba(0,0,0,0.4),0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.05)] overflow-hidden">
+                  <div className="p-3 pb-0">
+                    <div className="flex items-start gap-2">
+                      <h4 className="text-sm font-light leading-tight line-clamp-2 flex-1 text-white/90">Add authentication flow</h4>
                     </div>
-                    <Plus className="w-3.5 h-3.5 text-zinc-500" />
                   </div>
-                  <div className="p-2.5">
-                    <div className="rounded-xl bg-white/[0.03] backdrop-blur-md border border-white/[0.08] shadow-[0_4px_24px_-8px_rgba(0,0,0,0.4)] p-2.5">
-                      <p className="text-[11px] font-light leading-tight text-white/85 mb-2">Add authentication flow</p>
-                      <div className="flex gap-1.5 mb-2">
-                        <span className="text-[10px] px-2 py-0.5 h-5 rounded-[4px] inline-flex items-center border border-white/10 bg-[#60a5fa]/20 text-[#60a5fa] font-medium">Feature</span>
-                        <span className="text-[10px] px-2 py-0.5 h-5 rounded-[4px] inline-flex items-center border border-white/10 bg-[#f97316]/20 text-[#f97316] font-medium">Backend</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] text-zinc-500">
-                        <span className="font-mono opacity-70">PROJ-42</span>
-                        <span>Today</span>
-                      </div>
+                  <div className="p-3 pt-2">
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      <span className="text-[11px] px-2 py-0.5 h-5 font-medium rounded-[4px] inline-flex items-center backdrop-blur-sm border border-white/10 bg-[#60a5fa]/20 text-[#60a5fa]">Feature</span>
+                      <span className="text-[11px] px-2 py-0.5 h-5 font-medium rounded-[4px] inline-flex items-center backdrop-blur-sm border border-white/10 bg-[#f97316]/20 text-[#f97316]">Backend</span>
+                    </div>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-[11px] text-[#6a6a6a] font-mono opacity-60">PROJ-42</span>
+                      <span className="text-[11px] text-[#6a6a6a]">Today</span>
                     </div>
                   </div>
                 </div>

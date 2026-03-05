@@ -1,145 +1,173 @@
-"use client"
+"use client";
 
-import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
-import { Column } from "./column"
-import { TaskCard } from "./task-card"
-import { BatchControls } from "./batch-controls"
-import { BatchProgress } from "./batch-progress"
-import { DashboardLoading } from "./dashboard-loading"
-import { TaskFormDialog } from "@/components/task-form"
-import { TaskDetailView } from "@/components/task-detail-view"
-import { Plus, Settings2, GitBranch, CircleDot, Layers, Play, Pencil } from "lucide-react"
-import { Task } from "@/types/task"
-import { Project, Repository } from "@/lib/api"
-import { useKanbanBoard, COLUMNS, KanbanBoardProps } from "./use-kanban-board"
-import { InProgressBatchGroup } from "./in-progress-batch-group"
-import { DoneColumnContent } from "./done-column-content"
-import { ModelSelector } from "./model-selector"
-import { useRouter } from "next/navigation"
+import { useEffect } from "react";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import { Column } from "./column";
+import { TaskCard } from "./task-card";
+import { BatchControls } from "./batch-controls";
+import { BatchProgress } from "./batch-progress";
+import { DashboardLoading } from "./dashboard-loading";
+import { TaskFormDialog } from "@/components/task-form";
+import { TaskDetailView } from "@/components/task-detail-view";
+import {
+  Plus,
+  Settings2,
+  GitBranch,
+  CircleDot,
+  Layers,
+  Play,
+  Pencil,
+} from "lucide-react";
+import { Task } from "@/types/task";
+import { Project, Repository } from "@/lib/api";
+import { useKanbanBoard, COLUMNS, KanbanBoardProps } from "./use-kanban-board";
+import { InProgressBatchGroup } from "./in-progress-batch-group";
+import { DoneColumnContent } from "./done-column-content";
+import { ModelSelector } from "./model-selector";
+import { useRouter } from "next/navigation";
 
-interface ProjectConfigPanelProps {
-  selectedProject: Project | undefined
-  activeRepository: Repository | null
-  tasks: Task[]
-  selectedTaskIds: Set<string>
-  activeBatch: { mode: string; status: string } | null
+export type { KanbanBoardProps };
+export { COLUMNS };
+
+export interface ProjectConfigPanelProps {
+  selectedProject: Project | undefined;
+  activeRepository: Repository | null;
+  tasks: Task[];
+  selectedTaskIds: Set<string>;
+  activeBatch: { mode: string; status: string } | null;
 }
 
-function ProjectConfigPanel({ selectedProject, activeRepository, tasks, selectedTaskIds, activeBatch }: ProjectConfigPanelProps) {
-  const router = useRouter()
-  const todoCount = tasks.filter(t => t.status === 'todo').length
-  const inProgressCount = tasks.filter(t => t.status === 'in_progress').length
-  const doneCount = tasks.filter(t => t.status === 'done').length
-  const cancelledCount = tasks.filter(t => t.status === 'cancelled').length
-  const totalIssues = todoCount + inProgressCount + doneCount + cancelledCount
+export function ProjectConfigPanel({
+  selectedProject,
+  activeRepository,
+  tasks,
+  selectedTaskIds,
+  activeBatch,
+}: ProjectConfigPanelProps) {
+  const router = useRouter();
+  const todoCount = tasks.filter((t) => t.status === "todo").length;
+  const inProgressCount = tasks.filter(
+    (t) => t.status === "in_progress",
+  ).length;
+  const doneCount = tasks.filter((t) => t.status === "done").length;
+  const cancelledCount = tasks.filter((t) => t.status === "cancelled").length;
+  const totalIssues = todoCount + inProgressCount + doneCount + cancelledCount;
 
   const sourceFromRepoUrl = (() => {
-    const repoUrl = selectedProject?.repoUrl
-    if (!repoUrl) return null
+    const repoUrl = selectedProject?.repoUrl;
+    if (!repoUrl) return null;
     return repoUrl
       .replace(/^https?:\/\/(www\.)?github\.com\//, "")
-      .replace(/\.git$/, "")
-  })()
+      .replace(/\.git$/, "");
+  })();
 
   const sourceValue =
     selectedProject?.repository?.fullName ||
     sourceFromRepoUrl ||
     selectedProject?.localPath ||
     activeRepository?.fullName ||
-    null
+    null;
 
-  const canEditSource = !!(selectedProject || activeRepository)
-  const baseBranch = selectedProject?.repository?.defaultBranch || activeRepository?.defaultBranch || null
+  const canEditSource = !!(selectedProject || activeRepository);
+  const baseBranch =
+    selectedProject?.repository?.defaultBranch ||
+    activeRepository?.defaultBranch ||
+    null;
 
   const items = [
     {
       icon: Settings2,
-      label: 'Source',
-      value: sourceValue || 'No source connected',
-      status: selectedProject ? 'active' : 'inactive',
+      label: "Source",
+      value: sourceValue || "No source connected",
+      status: selectedProject ? "active" : "inactive",
     },
     {
       icon: GitBranch,
-      label: 'Branch',
-      value: baseBranch || 'Not configured',
-      status: baseBranch ? 'active' : 'inactive',
+      label: "Branch",
+      value: baseBranch || "Not configured",
+      status: baseBranch ? "active" : "inactive",
     },
     {
       icon: CircleDot,
-      label: 'Scope',
+      label: "Scope",
       value: `${totalIssues} issues`,
-      status: 'neutral',
+      status: "neutral",
     },
     {
       icon: Play,
-      label: 'Workflow',
-      value: activeBatch ? `${activeBatch.mode} mode` : 'Idle',
-      status: activeBatch ? 'active' : 'neutral',
+      label: "Workflow",
+      value: activeBatch ? `${activeBatch.mode} mode` : "Idle",
+      status: activeBatch ? "active" : "neutral",
     },
     {
       icon: Layers,
-      label: 'Selection',
-      value: selectedTaskIds.size > 0 ? `${selectedTaskIds.size} selected` : 'None',
-      status: selectedTaskIds.size > 0 ? 'active' : 'neutral',
+      label: "Selection",
+      value:
+        selectedTaskIds.size > 0 ? `${selectedTaskIds.size} selected` : "None",
+      status: selectedTaskIds.size > 0 ? "active" : "neutral",
     },
-  ]
+  ];
 
   return (
-    <div className="w-full border-b border-linear-border bg-linear-bg flex-shrink-0">
-      <div className="px-0 py-1">
-        <div className="rounded-none border-y border-linear-border bg-linear-bg-secondary overflow-hidden">
-          <div className="flex items-stretch divide-x divide-linear-border overflow-x-auto snap-x snap-mandatory">
-            {items.map((item) => {
-              const Icon = item.icon
-              const tones: Record<string, { icon: string; value: string }> = {
-                active: { icon: 'text-linear-text-secondary', value: 'text-linear-text' },
-                neutral: { icon: 'text-linear-text-tertiary', value: 'text-linear-text' },
-                inactive: { icon: 'text-linear-text-tertiary', value: 'text-linear-text-tertiary' },
-              }
-              const tone = tones[item.status] || tones.neutral
+    <div className="flex items-stretch divide-x divide-linear-border overflow-x-auto">
+      {items.map((item) => {
+        const Icon = item.icon;
+        const tones: Record<string, { icon: string; value: string }> = {
+          active: {
+            icon: "text-linear-text-secondary",
+            value: "text-linear-text",
+          },
+          neutral: {
+            icon: "text-linear-text-tertiary",
+            value: "text-linear-text",
+          },
+          inactive: {
+            icon: "text-linear-text-tertiary",
+            value: "text-linear-text-tertiary",
+          },
+        };
+        const tone = tones[item.status] || tones.neutral;
 
-              return (
-                <div
-                  key={item.label}
-                  className="flex-1 min-w-[132px] sm:min-w-0 px-2 py-1 flex items-center gap-1.5 snap-start"
-                >
-                  <Icon className={`w-3 h-3 flex-shrink-0 ${tone.icon}`} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[9px] uppercase tracking-[0.14em] text-linear-text-tertiary leading-tight">
-                      {item.label}
-                    </div>
-                    <div className={`text-[12px] font-medium truncate leading-tight ${tone.value}`}>
-                      {item.value}
-                    </div>
-                  </div>
+        return (
+          <div key={item.label} className="flex items-center gap-1.5 px-3 py-1">
+            <Icon className={`w-3 h-3 flex-shrink-0 ${tone.icon}`} />
+            <div className="min-w-0">
+              <div className="text-[9px] uppercase tracking-[0.14em] text-linear-text-tertiary leading-tight whitespace-nowrap">
+                {item.label}
+              </div>
+              <div
+                className={`text-[11px] font-medium truncate leading-tight whitespace-nowrap ${tone.value}`}
+              >
+                {item.value}
+              </div>
+            </div>
 
-                  {item.label === 'Source' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (selectedProject) {
-                          router.push(`/projects?editProjectId=${selectedProject.id}`)
-                          return
-                        }
-                        router.push('/projects')
-                      }}
-                      disabled={!canEditSource}
-                      className="ml-auto p-1 rounded-md text-linear-text-tertiary hover:text-linear-text hover:bg-white/[0.04] transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                      aria-label="Edit source"
-                      title="Edit source"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-            <ModelSelector />
+            {item.label === "Source" && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedProject) {
+                    router.push(
+                      `/projects?editProjectId=${selectedProject.id}`,
+                    );
+                    return;
+                  }
+                  router.push("/projects");
+                }}
+                disabled={!canEditSource}
+                className="ml-1 p-1 rounded-md text-linear-text-tertiary hover:text-linear-text hover:bg-white/[0.04] transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                aria-label="Edit source"
+                title="Edit source"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+            )}
           </div>
-        </div>
-      </div>
+        );
+      })}
+      <ModelSelector />
     </div>
-  )
+  );
 }
 
 export function KanbanBoard(props: KanbanBoardProps) {
@@ -183,9 +211,24 @@ export function KanbanBoard(props: KanbanBoardProps) {
     toggleColumnSelectAll,
     clearSelection,
     fetchTasks,
-  } = useKanbanBoard(props)
+  } = useKanbanBoard(props);
 
-  const renderTask = (task: Task, index: number, isCompletedBatch?: boolean) => (
+  // Lift live config state up to the page header
+  useEffect(() => {
+    props.onConfigState?.({
+      tasks,
+      selectedTaskIds,
+      activeBatch,
+      selectedProject,
+      activeRepository,
+    });
+  }, [tasks, selectedTaskIds, activeBatch, selectedProject, activeRepository]);
+
+  const renderTask = (
+    task: Task,
+    index: number,
+    isCompletedBatch?: boolean,
+  ) => (
     <Draggable key={task.id} draggableId={task.id} index={index}>
       {(provided, snapshot) => (
         <div
@@ -196,9 +239,15 @@ export function KanbanBoard(props: KanbanBoardProps) {
         >
           <TaskCard
             task={task}
-            onMoveToInProgress={task.status === 'todo' ? handleMoveToInProgress : undefined}
-            onExecute={task.status === 'in_progress' && canExecute ? handleExecute : undefined}
-            onCancel={task.status === 'in_progress' ? handleCancel : undefined}
+            onMoveToInProgress={
+              task.status === "todo" ? handleMoveToInProgress : undefined
+            }
+            onExecute={
+              task.status === "in_progress" && canExecute
+                ? handleExecute
+                : undefined
+            }
+            onCancel={task.status === "in_progress" ? handleCancel : undefined}
             onDelete={handleDelete}
             onTaskClick={handleTaskClick}
             executionProgress={executionProgress[task.id]}
@@ -213,10 +262,10 @@ export function KanbanBoard(props: KanbanBoardProps) {
         </div>
       )}
     </Draggable>
-  )
+  );
 
   if (loading) {
-    return <DashboardLoading />
+    return <DashboardLoading />;
   }
 
   if (error) {
@@ -226,14 +275,16 @@ export function KanbanBoard(props: KanbanBoardProps) {
           <p className="text-red-400 mb-4">{error}</p>
           <button
             type="button"
-            onClick={() => { fetchTasks({ showLoading: true, clearError: true }) }}
+            onClick={() => {
+              fetchTasks({ showLoading: true, clearError: true });
+            }}
             className="px-4 py-2 bg-linear-accent text-white rounded-md hover:bg-linear-accent-hover transition-colors"
           >
             Retry
           </button>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -247,24 +298,23 @@ export function KanbanBoard(props: KanbanBoardProps) {
             tasks={activeBatch.tasks}
             prUrl={activeBatch.prUrl}
             onCancel={handleCancelBatch}
-            onDismiss={activeBatch.status === 'completed' ? () => setActiveBatch(null) : undefined}
+            onDismiss={
+              activeBatch.status === "completed"
+                ? () => setActiveBatch(null)
+                : undefined
+            }
             onViewActivity={handleTaskClick}
           />
         )}
-        <ProjectConfigPanel
-          selectedProject={selectedProject}
-          activeRepository={activeRepository}
-          tasks={tasks}
-          selectedTaskIds={selectedTaskIds}
-          activeBatch={activeBatch}
-        />
+
         <div className="flex md:grid md:grid-cols-2 lg:grid-cols-4 flex-1 min-h-0 overflow-x-auto snap-x snap-mandatory md:overflow-x-visible md:snap-none">
           {COLUMNS.map((column) => {
-            const columnTasks = getTasksByStatus(column.status)
+            const columnTasks = getTasksByStatus(column.status);
             const hasParallelGroup =
-              (column.status === 'in_progress' && batchTaskIds.length > 0) ||
-              (column.status === 'done' && completedBatchTaskIds.length > 0)
-            const selectionActive = !hasParallelGroup && selectingColumns.has(column.id)
+              (column.status === "in_progress" && batchTaskIds.length > 0) ||
+              (column.status === "done" && completedBatchTaskIds.length > 0);
+            const selectionActive =
+              !hasParallelGroup && selectingColumns.has(column.id);
             return (
               <Droppable key={column.id} droppableId={column.id}>
                 {(provided, snapshot) => (
@@ -274,8 +324,16 @@ export function KanbanBoard(props: KanbanBoardProps) {
                     taskCount={columnTasks.length}
                     onAddTask={() => handleAddTask(column.status)}
                     selectionActive={selectionActive}
-                    onToggleSelection={!hasParallelGroup ? () => toggleColumnSelection(column.id) : undefined}
-                    onSelectAll={selectionActive ? () => toggleColumnSelectAll(column.status) : undefined}
+                    onToggleSelection={
+                      !hasParallelGroup
+                        ? () => toggleColumnSelection(column.id)
+                        : undefined
+                    }
+                    onSelectAll={
+                      selectionActive
+                        ? () => toggleColumnSelectAll(column.status)
+                        : undefined
+                    }
                     innerRef={provided.innerRef}
                     droppableProps={provided.droppableProps}
                     isDraggingOver={snapshot.isDraggingOver}
@@ -291,56 +349,70 @@ export function KanbanBoard(props: KanbanBoardProps) {
                         </div>
                         <span className="text-sm">Add task</span>
                       </button>
-                    ) : (() => {
-                      if (column.status === 'in_progress' && batchTaskIds.length > 0) {
-                        const batch = columnTasks.filter(t => batchTaskIds.includes(t.id))
-                        const rest = columnTasks.filter(t => !batchTaskIds.includes(t.id))
-                        const batchGroupCount = batch.length > 0 && activeBatch ? 1 : 0
-                        return (
-                          <>
-                            {batch.length > 0 && activeBatch && (
-                              <InProgressBatchGroup
-                                batch={batch}
-                                activeBatch={activeBatch}
-                                canExecute={canExecute}
-                                executionProgress={executionProgress}
-                                syncStates={syncStates}
-                                selectedTaskIds={selectedTaskIds}
-                                onExecute={handleExecute}
-                                onCancel={handleCancel}
-                                onDelete={handleDelete}
-                                onTaskClick={handleTaskClick}
-                                onToggleSelect={toggleTaskSelect}
-                              />
-                            )}
-                            {rest.map((task, i) => renderTask(task, batchGroupCount + i))}
-                          </>
-                        )
-                      }
+                    ) : (
+                      (() => {
+                        if (
+                          column.status === "in_progress" &&
+                          batchTaskIds.length > 0
+                        ) {
+                          const batch = columnTasks.filter((t) =>
+                            batchTaskIds.includes(t.id),
+                          );
+                          const rest = columnTasks.filter(
+                            (t) => !batchTaskIds.includes(t.id),
+                          );
+                          const batchGroupCount =
+                            batch.length > 0 && activeBatch ? 1 : 0;
+                          return (
+                            <>
+                              {batch.length > 0 && activeBatch && (
+                                <InProgressBatchGroup
+                                  batch={batch}
+                                  activeBatch={activeBatch}
+                                  canExecute={canExecute}
+                                  executionProgress={executionProgress}
+                                  syncStates={syncStates}
+                                  selectedTaskIds={selectedTaskIds}
+                                  onExecute={handleExecute}
+                                  onCancel={handleCancel}
+                                  onDelete={handleDelete}
+                                  onTaskClick={handleTaskClick}
+                                  onToggleSelect={toggleTaskSelect}
+                                />
+                              )}
+                              {rest.map((task, i) =>
+                                renderTask(task, batchGroupCount + i),
+                              )}
+                            </>
+                          );
+                        }
 
-                      if (column.status === 'done') {
-                        return (
-                          <DoneColumnContent
-                            columnTasks={columnTasks}
-                            completedBatch={completedBatch}
-                            executionProgress={executionProgress}
-                            syncStates={syncStates}
-                            selectedTaskIds={selectedTaskIds}
-                            onDelete={handleDelete}
-                            onTaskClick={handleTaskClick}
-                            onToggleSelect={toggleTaskSelect}
-                            renderTask={renderTask}
-                          />
-                        )
-                      }
+                        if (column.status === "done") {
+                          return (
+                            <DoneColumnContent
+                              columnTasks={columnTasks}
+                              completedBatch={completedBatch}
+                              executionProgress={executionProgress}
+                              syncStates={syncStates}
+                              selectedTaskIds={selectedTaskIds}
+                              onDelete={handleDelete}
+                              onTaskClick={handleTaskClick}
+                              onToggleSelect={toggleTaskSelect}
+                              renderTask={renderTask}
+                            />
+                          );
+                        }
 
-                      return columnTasks.map((task, index) => renderTask(task, index))
-                    })()}
+                        return columnTasks.map((task, index) =>
+                          renderTask(task, index),
+                        );
+                      })()
+                    )}
                     {provided.placeholder}
                   </Column>
                 )}
               </Droppable>
-            )
+            );
           })}
         </div>
 
@@ -355,41 +427,54 @@ export function KanbanBoard(props: KanbanBoardProps) {
 
         <TaskDetailView
           task={selectedTask}
-          logs={selectedTaskId ? (taskLogs[selectedTaskId] || []) : []}
-          progress={selectedTaskId ? executionProgress[selectedTaskId] : undefined}
+          logs={selectedTaskId ? taskLogs[selectedTaskId] || [] : []}
+          progress={
+            selectedTaskId ? executionProgress[selectedTaskId] : undefined
+          }
           open={!!selectedTaskId}
           onClose={handleDrawerClose}
           onDelete={handleDelete}
           onCancel={handleCancel}
-          onExecute={selectedTaskId && batchTaskIds.includes(selectedTaskId) ? undefined : handleExecute}
+          onExecute={
+            selectedTaskId && batchTaskIds.includes(selectedTaskId)
+              ? undefined
+              : handleExecute
+          }
           onUpdate={handleUpdateTask}
-          isExecuting={selectedTask?.status === 'in_progress'}
+          isExecuting={selectedTask?.status === "in_progress"}
         />
 
         {(() => {
-          if (selectedTaskIds.size === 0) return null
+          if (selectedTaskIds.size === 0) return null;
           const selectedTodoIds = Array.from(selectedTaskIds).filter(
-            id => tasks.find(t => t.id === id)?.status === 'todo'
-          )
+            (id) => tasks.find((t) => t.id === id)?.status === "todo",
+          );
           const selectedInProgressIds = Array.from(selectedTaskIds).filter(
-            id => tasks.find(t => t.id === id)?.status === 'in_progress'
-          )
-          const hasTodo = selectedTodoIds.length > 0
-          const hasInProgress = selectedInProgressIds.length > 0
-          const mode = hasTodo && hasInProgress ? 'mixed' as const : hasTodo ? 'move' as const : hasInProgress ? 'execute' as const : 'view' as const
+            (id) => tasks.find((t) => t.id === id)?.status === "in_progress",
+          );
+          const hasTodo = selectedTodoIds.length > 0;
+          const hasInProgress = selectedInProgressIds.length > 0;
+          const mode =
+            hasTodo && hasInProgress
+              ? ("mixed" as const)
+              : hasTodo
+                ? ("move" as const)
+                : hasInProgress
+                  ? ("execute" as const)
+                  : ("view" as const);
           return (
             <BatchControls
               selectedCount={selectedTaskIds.size}
               mode={mode}
-              onExecuteParallel={() => handleBatchExecute('parallel')}
-              onExecuteQueue={() => handleBatchExecute('queue')}
+              onExecuteParallel={() => handleBatchExecute("parallel")}
+              onExecuteQueue={() => handleBatchExecute("queue")}
               onMoveToInProgress={handleBatchMoveToInProgress}
               onClearSelection={clearSelection}
               disabled={!canExecute}
             />
-          )
+          );
         })()}
       </div>
     </DragDropContext>
-  )
+  );
 }

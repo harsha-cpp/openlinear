@@ -1,71 +1,104 @@
-"use client"
+"use client";
 
-import { Suspense, useState, useCallback, useEffect } from "react"
-import { useSearchParams, useRouter } from "next/navigation"
-import { Search, FolderKanban, GitBranch, ArrowRight, ArrowLeftRight, Plus } from "lucide-react"
-import { KanbanBoard } from "@/components/board/kanban-board"
-import { TaskFormDialog } from "@/components/task-form"
+import { Suspense, useState, useCallback, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import {
+  Search,
+  FolderKanban,
+  GitBranch,
+  ArrowRight,
+  ArrowLeftRight,
+  Plus,
+} from "lucide-react";
+import {
+  KanbanBoard,
+  ProjectConfigPanel,
+} from "@/components/board/kanban-board";
+import { TaskFormDialog } from "@/components/task-form";
 
-import { AppShell } from "@/components/layout/app-shell"
-import { useAuth } from "@/hooks/use-auth"
-import { fetchProjects, fetchTeams, Project, Team } from "@/lib/api"
-import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard"
+import { AppShell } from "@/components/layout/app-shell";
+import { useAuth } from "@/hooks/use-auth";
+import { fetchProjects, fetchTeams, Project, Team } from "@/lib/api";
+import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 
 function HomeContent() {
-  const searchParams = useSearchParams()
-  const urlTeamId = searchParams.get("teamId")
-  const urlProjectId = searchParams.get("projectId")
+  const searchParams = useSearchParams();
+  const urlTeamId = searchParams.get("teamId");
+  const urlProjectId = searchParams.get("projectId");
 
-  const [isTaskFormOpen, setIsTaskFormOpen] = useState(false)
-  const [refreshKey, setRefreshKey] = useState(0)
-  const { isAuthenticated, isLoading, activeRepository } = useAuth()
-  const router = useRouter()
-  const [projects, setProjects] = useState<Project[]>([])
-  const [teams, setTeams] = useState<Team[]>([])
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false)
+  const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { isAuthenticated, isLoading, activeRepository } = useAuth();
+  const router = useRouter();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
+    null,
+  );
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+
+  // Live state pushed up from the KanbanBoard via onConfigState
+  const [boardTasks, setBoardTasks] = useState<import("@/types/task").Task[]>(
+    [],
+  );
+  const [boardSelectedIds, setBoardSelectedIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [boardActiveBatch, setBoardActiveBatch] = useState<
+    import("@/components/board/use-kanban-board").ActiveBatch | null
+  >(null);
+  const [boardProject, setBoardProject] = useState<
+    import("@/lib/api").Project | undefined
+  >(undefined);
+  const [boardRepo, setBoardRepo] = useState<
+    import("@/lib/api").Repository | null
+  >(null);
 
   useEffect(() => {
-    fetchProjects().then(setProjects).catch(() => setProjects([]))
-    fetchTeams().then(setTeams).catch(() => setTeams([]))
-  }, [])
+    fetchProjects()
+      .then(setProjects)
+      .catch(() => setProjects([]));
+    fetchTeams()
+      .then(setTeams)
+      .catch(() => setTeams([]));
+  }, []);
 
   useEffect(() => {
     if (urlProjectId) {
-      setSelectedProjectId(urlProjectId)
-      setSelectedTeamId(null)
+      setSelectedProjectId(urlProjectId);
+      setSelectedTeamId(null);
     } else if (urlTeamId) {
-      setSelectedTeamId(urlTeamId)
-      setSelectedProjectId(null)
+      setSelectedTeamId(urlTeamId);
+      setSelectedProjectId(null);
     } else {
-      setSelectedProjectId(null)
-      setSelectedTeamId(null)
+      setSelectedProjectId(null);
+      setSelectedTeamId(null);
     }
-  }, [urlProjectId, urlTeamId])
+  }, [urlProjectId, urlTeamId]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.push('/login')
+      router.push("/login");
     }
-  }, [isLoading, isAuthenticated, router])
+  }, [isLoading, isAuthenticated, router]);
 
   const handleTaskCreated = useCallback(() => {
-    setRefreshKey((prev) => prev + 1)
-  }, [])
+    setRefreshKey((prev) => prev + 1);
+  }, []);
 
   const rawHeaderLabel = selectedTeamId
-    ? teams.find(t => t.id === selectedTeamId)?.name || "Team Issues"
+    ? teams.find((t) => t.id === selectedTeamId)?.name || "Team Issues"
     : selectedProjectId
-      ? projects.find(p => p.id === selectedProjectId)?.name || "Project"
-        : activeRepository
-          ? activeRepository.name
-          : "Dashboard"
-  const headerLabel = rawHeaderLabel.replace(/openlinear/gi, "Dashboard")
+      ? projects.find((p) => p.id === selectedProjectId)?.name || "Project"
+      : activeRepository
+        ? activeRepository.name
+        : "Dashboard";
+  const headerLabel = rawHeaderLabel.replace(/openlinear/gi, "Dashboard");
 
   if (isLoading || !isAuthenticated) {
-    return null
+    return null;
   }
 
   if (!selectedProjectId && !urlProjectId && !urlTeamId) {
@@ -73,8 +106,16 @@ function HomeContent() {
     if (projects.length === 0) {
       return (
         <AppShell>
-          <header className="min-h-14 border-b border-linear-border flex items-center pl-[72px] pr-4 sm:pr-6 lg:px-6 py-2 sm:py-0 bg-linear-bg gap-2 sm:gap-4" data-tauri-drag-region>
-            <div className="flex items-center gap-4 min-w-0">
+          <header
+            className="min-h-14 border-b border-linear-border flex items-center pl-[72px] pr-4 sm:pr-6 lg:px-6 py-2 sm:py-0 bg-linear-bg gap-2 sm:gap-4"
+            data-tauri-drag-region
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <img
+                src="/logo.png"
+                alt="OpenLinear"
+                className="h-[15px] flex-shrink-0"
+              />
               <h1 className="text-lg font-semibold truncate">Dashboard</h1>
             </div>
             <div className="flex-1 h-full" data-tauri-drag-region />
@@ -83,25 +124,35 @@ function HomeContent() {
             <OnboardingWizard
               teams={teams}
               onComplete={({ projectId }) => {
-                fetchProjects().then((updated) => {
-                  setProjects(updated)
-                  setSelectedProjectId(projectId)
-                  router.replace(`/?projectId=${projectId}`)
-                }).catch(() => {
-                  router.replace(`/?projectId=${projectId}`)
-                })
+                fetchProjects()
+                  .then((updated) => {
+                    setProjects(updated);
+                    setSelectedProjectId(projectId);
+                    router.replace(`/?projectId=${projectId}`);
+                  })
+                  .catch(() => {
+                    router.replace(`/?projectId=${projectId}`);
+                  });
               }}
             />
           </div>
         </AppShell>
-      )
+      );
     }
 
     // Returning user with projects — show project selector
     return (
       <AppShell>
-          <header className="min-h-14 border-b border-linear-border flex items-center pl-[72px] pr-4 sm:pr-6 lg:px-6 py-2 sm:py-0 bg-linear-bg gap-2 sm:gap-4" data-tauri-drag-region>
-          <div className="flex items-center gap-4 min-w-0">
+        <header
+          className="min-h-14 border-b border-linear-border flex items-center pl-[72px] pr-4 sm:pr-6 lg:px-6 py-2 sm:py-0 bg-linear-bg gap-2 sm:gap-4"
+          data-tauri-drag-region
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <img
+              src="/logo.png"
+              alt="OpenLinear"
+              className="h-[15px] flex-shrink-0"
+            />
             <h1 className="text-lg font-semibold truncate">Dashboard</h1>
           </div>
           <div className="flex-1 h-full" data-tauri-drag-region />
@@ -110,8 +161,12 @@ function HomeContent() {
           <div className="w-full max-w-md">
             <div className="text-center mb-8">
               <FolderKanban className="w-10 h-10 text-linear-text-tertiary mx-auto mb-3" />
-              <h1 className="text-xl font-semibold text-linear-text mb-1">Select a project</h1>
-              <p className="text-sm text-linear-text-tertiary">Choose a project to view its board</p>
+              <h1 className="text-xl font-semibold text-linear-text mb-1">
+                Select a project
+              </h1>
+              <p className="text-sm text-linear-text-tertiary">
+                Choose a project to view its board
+              </p>
             </div>
 
             <div className="flex flex-col gap-2">
@@ -120,8 +175,8 @@ function HomeContent() {
                   type="button"
                   key={project.id}
                   onClick={() => {
-                    setSelectedProjectId(project.id)
-                    setSelectedTeamId(null)
+                    setSelectedProjectId(project.id);
+                    setSelectedTeamId(null);
                   }}
                   className="group flex items-center gap-3 w-full px-4 py-3 rounded-lg bg-linear-bg-secondary border border-linear-border hover:border-linear-border-hover hover:bg-linear-bg-tertiary transition-colors text-left"
                 >
@@ -137,7 +192,10 @@ function HomeContent() {
                       <div className="flex items-center gap-1 mt-0.5">
                         <GitBranch className="w-3 h-3 text-linear-text-tertiary flex-shrink-0" />
                         <span className="text-xs text-linear-text-tertiary truncate">
-                          {project.repoUrl.replace(/^https?:\/\/(www\.)?github\.com\//, "")}
+                          {project.repoUrl.replace(
+                            /^https?:\/\/(www\.)?github\.com\//,
+                            "",
+                          )}
                         </span>
                       </div>
                     ) : project.localPath ? (
@@ -151,7 +209,8 @@ function HomeContent() {
                   </div>
                   {project._count?.tasks !== undefined && (
                     <span className="text-xs text-linear-text-tertiary flex-shrink-0">
-                      {project._count.tasks} {project._count.tasks === 1 ? "issue" : "issues"}
+                      {project._count.tasks}{" "}
+                      {project._count.tasks === 1 ? "issue" : "issues"}
                     </span>
                   )}
                   <ArrowRight className="w-4 h-4 text-linear-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
@@ -161,76 +220,102 @@ function HomeContent() {
           </div>
         </div>
       </AppShell>
-    )
+    );
   }
-
 
   return (
     <AppShell>
-      <header className="min-h-14 border-b border-linear-border flex flex-wrap items-center pl-[72px] pr-3 sm:pr-6 lg:px-6 py-2 sm:py-0 bg-linear-bg gap-2 sm:gap-4" data-tauri-drag-region>
-        <div className="flex items-center gap-4 min-w-0">
-          <h1 className="text-lg font-semibold truncate">
-            {headerLabel}
-          </h1>
-        </div>
-        <div className="hidden sm:block flex-1 h-full" data-tauri-drag-region />
-        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 ml-auto">
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedProjectId(null)
-              setSelectedTeamId(null)
-              setIsMobileSearchOpen(false)
-              router.replace('/')
-            }}
-            className="flex items-center gap-1.5 h-8 px-2.5 text-xs rounded-md bg-linear-bg-tertiary border border-linear-border hover:border-linear-border-hover text-linear-text transition-colors"
-          >
-            <ArrowLeftRight className="w-3.5 h-3.5 text-linear-text-tertiary" />
-            <span className="hidden sm:inline">Switch project</span>
-          </button>
-
-          <div className="relative hidden sm:block">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-linear-text-tertiary" />
-            <input
-              type="text"
-              placeholder="Search issues..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full max-w-64 h-9 pl-10 pr-4 rounded-md bg-linear-bg-tertiary border border-linear-border text-sm placeholder:text-linear-text-tertiary focus:outline-none focus:border-linear-border-hover transition-colors"
+      {/* Top bar — two rows stacked, both full-width, no width eaten by config cells */}
+      <header
+        className="border-b border-linear-border flex-shrink-0 bg-linear-bg"
+        data-tauri-drag-region
+      >
+        {/* Row 1: title + actions */}
+        <div
+          className="min-h-14 flex flex-wrap items-center pl-[72px] pr-3 sm:pr-6 lg:px-6 py-2 sm:py-0 gap-2 sm:gap-4"
+          data-tauri-drag-region
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <img
+              src="/logo.png"
+              alt="OpenLinear"
+              className="h-[15px] flex-shrink-0"
             />
+            <h1 className="text-lg font-semibold truncate">{headerLabel}</h1>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsMobileSearchOpen((prev) => !prev)}
-            className="sm:hidden w-9 h-9 rounded-md flex items-center justify-center text-linear-text-tertiary hover:text-linear-text hover:bg-linear-bg-tertiary transition-colors"
-            aria-label="Toggle issue search"
-          >
-            <Search className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsTaskFormOpen(true)}
-            className="flex items-center h-9 px-3 sm:px-4 rounded-md bg-linear-bg-tertiary hover:bg-linear-bg-secondary border border-linear-border text-linear-text text-sm font-medium transition-colors"
-          >
-            <Plus className="w-4 h-4 mr-1.5" />
-            <span>Issue</span>
-          </button>
+          <div
+            className="hidden sm:block flex-1 h-full"
+            data-tauri-drag-region
+          />
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 ml-auto">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedProjectId(null);
+                setSelectedTeamId(null);
+                setIsMobileSearchOpen(false);
+                router.replace("/");
+              }}
+              className="flex items-center gap-1.5 h-8 px-2.5 text-xs rounded-md bg-linear-bg-tertiary border border-linear-border hover:border-linear-border-hover text-linear-text transition-colors"
+            >
+              <ArrowLeftRight className="w-3.5 h-3.5 text-linear-text-tertiary" />
+              <span className="hidden sm:inline">Switch project</span>
+            </button>
 
-        </div>
-        {isMobileSearchOpen && (
-          <div className="w-full sm:hidden mt-1">
-            <div className="relative">
+            <div className="relative hidden sm:block">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-linear-text-tertiary" />
               <input
                 type="text"
                 placeholder="Search issues..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-9 pl-10 pr-4 rounded-md bg-linear-bg-tertiary border border-linear-border text-sm placeholder:text-linear-text-tertiary focus:outline-none focus:border-linear-border-hover transition-colors"
+                className="w-full max-w-64 h-9 pl-10 pr-4 rounded-md bg-linear-bg-tertiary border border-linear-border text-sm placeholder:text-linear-text-tertiary focus:outline-none focus:border-linear-border-hover transition-colors"
               />
             </div>
+            <button
+              type="button"
+              onClick={() => setIsMobileSearchOpen((prev) => !prev)}
+              className="sm:hidden w-9 h-9 rounded-md flex items-center justify-center text-linear-text-tertiary hover:text-linear-text hover:bg-linear-bg-tertiary transition-colors"
+              aria-label="Toggle issue search"
+            >
+              <Search className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsTaskFormOpen(true)}
+              className="flex items-center h-9 px-3 sm:px-4 rounded-md bg-linear-bg-tertiary hover:bg-linear-bg-secondary border border-linear-border text-linear-text text-sm font-medium transition-colors"
+            >
+              <Plus className="w-4 h-4 mr-1.5" />
+              <span>Issue</span>
+            </button>
           </div>
-        )}
+
+          {isMobileSearchOpen && (
+            <div className="w-full sm:hidden mt-1">
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-linear-text-tertiary" />
+                <input
+                  type="text"
+                  placeholder="Search issues..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full h-9 pl-10 pr-4 rounded-md bg-linear-bg-tertiary border border-linear-border text-sm placeholder:text-linear-text-tertiary focus:outline-none focus:border-linear-border-hover transition-colors"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Row 2: project config strip — overlaid in the header, never clips the board */}
+        <div className="border-t border-linear-border bg-linear-bg-secondary pl-[72px] pr-3 sm:pr-6 lg:px-6">
+          <ProjectConfigPanel
+            selectedProject={boardProject}
+            activeRepository={boardRepo}
+            tasks={boardTasks}
+            selectedTaskIds={boardSelectedIds}
+            activeBatch={boardActiveBatch}
+          />
+        </div>
       </header>
 
       <KanbanBoard
@@ -238,6 +323,13 @@ function HomeContent() {
         projectId={selectedProjectId}
         teamId={selectedTeamId}
         projects={projects}
+        onConfigState={(state) => {
+          setBoardTasks(state.tasks);
+          setBoardSelectedIds(state.selectedTaskIds);
+          setBoardActiveBatch(state.activeBatch);
+          setBoardProject(state.selectedProject);
+          setBoardRepo(state.activeRepository);
+        }}
       />
       <TaskFormDialog
         open={isTaskFormOpen}
@@ -248,7 +340,7 @@ function HomeContent() {
         projects={projects}
       />
     </AppShell>
-  )
+  );
 }
 
 export default function HomePage() {
@@ -256,5 +348,5 @@ export default function HomePage() {
     <Suspense>
       <HomeContent />
     </Suspense>
-  )
+  );
 }

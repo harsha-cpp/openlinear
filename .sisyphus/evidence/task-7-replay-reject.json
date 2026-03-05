@@ -1,5 +1,0 @@
-{
-  "scenario": "replay same nonce/sequence rejected",
-  "result": "pass",
-  "details": "POST /api/execution/metadata/start with reused nonce -> 409 Replay detected"
-}

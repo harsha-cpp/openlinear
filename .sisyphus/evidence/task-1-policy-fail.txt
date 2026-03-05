@@ -1,9 +1,0 @@
-(node:2426416) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/kaizen/openlinear/scripts/check-trust-boundary.ts is not specified and it doesn't parse as CommonJS.
-Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
-To eliminate this warning, add "type": "module" to /home/kaizen/openlinear/package.json.
-(Use `node --trace-warnings ...` to show where the warning was created)
-❌ Trust Boundary Violation: Unclassified fields detected!
-The following fields are not classified in docs/security/trust-boundary.md:
-  - syntheticUnclassifiedField
-
-Please update the policy document to classify these fields.

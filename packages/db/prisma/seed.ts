@@ -83,7 +83,7 @@ async function main() {
   console.log(`[seed] Upserted ${SEED_TASKS.length} tasks`);
 
   const user = await prisma.user.upsert({
-    where: { id: "seed-user-kaz" },
+    where: { username: "kaz" },
     update: {},
     create: {
       id: "seed-user-kaz",

@@ -1,5 +1,0 @@
-{
-  "scenario": "finish before start rejected with 409/422",
-  "result": "pass",
-  "details": "POST /api/execution/metadata/finish on unstarted task -> 409 Conflict"
-}

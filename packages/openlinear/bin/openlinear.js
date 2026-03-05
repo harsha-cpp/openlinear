@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+```#!/usr/bin/env node
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -53,11 +53,15 @@ if (binaryPath.endsWith('.AppImage')) {
   env.APPIMAGE_EXTRACT_AND_RUN = '1';
 }
 
+// Launch detached from the terminal/session so the app survives Ctrl+C and shell exit.
 const child = spawn(binaryPath, process.argv.slice(2), {
-  stdio: 'inherit',
+  detached: true,
+  stdio: 'ignore',
   env,
 });
 
-child.on('exit', (code) => {
-  process.exit(code ?? 0);
-});
+// Allow parent CLI to exit immediately while child keeps running.
+child.unref();
+
+// Exit successfully once launch is handed off.
+process.exit(0);
