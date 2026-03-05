@@ -123,3 +123,77 @@ jobs:
           done
           echo "Health check failed after 6 attempts"
           exit 1
+
+  auto-tag:
+    name: Auto Tag & Release
+    needs: deploy
+    if: "github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Bump version and push tag
+        run: |
+          TAURI_VER=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          NPM_VER=$(node -p "require('./packages/openlinear/package.json').version")
+          
+          get_latest_version() {
+            local v1=$1
+            local v2=$2
+            if [ "$(printf '%s\n' "$v1" "$v2" | sort -V | tail -n1)" = "$v1" ]; then
+              echo "$v1"
+            else
+              echo "$v2"
+            fi
+          }
+          
+          HIGHEST=$(get_latest_version "$TAURI_VER" "$NPM_VER")
+          IFS='.' read -ra ADDR <<< "$HIGHEST"
+          MAJOR="${ADDR[0]}"
+          MINOR="${ADDR[1]}"
+          PATCH="${ADDR[2]}"
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+          
+          echo "Bumping from $HIGHEST to $NEW_VERSION"
+          
+          node -e "
+            const fs = require('fs');
+            const p = './packages/openlinear/package.json';
+            const data = JSON.parse(fs.readFileSync(p));
+            data.version = '$NEW_VERSION';
+            fs.writeFileSync(p, JSON.stringify(data, null, 2) + '\n');
+          "
+          
+          node -e "
+            const fs = require('fs');
+            const p = './apps/desktop/src-tauri/tauri.conf.json';
+            const data = JSON.parse(fs.readFileSync(p));
+            data.version = '$NEW_VERSION';
+            fs.writeFileSync(p, JSON.stringify(data, null, 2) + '\n');
+          "
+          
+          sed -i "s/^pkgver=.*/pkgver=$NEW_VERSION/" packaging/aur/openlinear-bin/PKGBUILD
+          sed -i "s/pkgver = .*/pkgver = $NEW_VERSION/" packaging/aur/openlinear-bin/.SRCINFO
+          sed -i "s/v$HIGHEST/v$NEW_VERSION/g" packaging/aur/openlinear-bin/.SRCINFO
+          sed -i "s/openlinear-$HIGHEST/openlinear-$NEW_VERSION/g" packaging/aur/openlinear-bin/.SRCINFO
+          
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          git add apps/desktop/src-tauri/tauri.conf.json packages/openlinear/package.json packaging/aur/openlinear-bin/PKGBUILD packaging/aur/openlinear-bin/.SRCINFO
+          git commit -m "chore(release): v$NEW_VERSION [skip ci]"
+          git tag "v$NEW_VERSION"
+          
+          git push origin main
+          git push origin "v$NEW_VERSION"
