@@ -6,6 +6,7 @@ import { User, Repository, fetchCurrentUser, getActiveRepository, logout as apiL
 interface AuthCallbackPayload {
   success: boolean;
   token?: string;
+  github_connect_token?: string;
   error?: string;
 }
 
@@ -47,9 +48,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
+    const githubConnectToken = params.get('github_connect_token');
     const error = params.get('error');
 
-    if (token) {
+    if (githubConnectToken) {
+      import('@/lib/api/auth').then(({ confirmGitHubConnect }) => {
+        confirmGitHubConnect(githubConnectToken)
+          .then((res) => {
+            localStorage.setItem('token', res.token);
+            window.history.replaceState({}, '', window.location.pathname);
+            Promise.all([refreshUser(), refreshActiveRepository()]);
+          })
+          .catch(err => console.error('GitHub connect error:', err));
+      });
+    } else if (token) {
       localStorage.setItem('token', token);
       window.history.replaceState({}, '', window.location.pathname);
     }
@@ -73,10 +85,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         unlisten = await listen<AuthCallbackPayload>('auth:callback', async (event) => {
           const payload = event.payload;
 
-          if (payload.success && payload.token) {
-            localStorage.setItem('token', payload.token);
-            await Promise.all([refreshUser(), refreshActiveRepository()]);
-            return;
+          if (payload.success) {
+            if (payload.github_connect_token) {
+              try {
+                const { confirmGitHubConnect } = await import('@/lib/api/auth');
+                const res = await confirmGitHubConnect(payload.github_connect_token);
+                localStorage.setItem('token', res.token);
+                await Promise.all([refreshUser(), refreshActiveRepository()]);
+              } catch (e) {
+                console.error('GitHub connect error via callback:', e);
+              }
+              return;
+            } else if (payload.token) {
+              localStorage.setItem('token', payload.token);
+              await Promise.all([refreshUser(), refreshActiveRepository()]);
+              return;
+            }
           }
 
           if (payload.error) {

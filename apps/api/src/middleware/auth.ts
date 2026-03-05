@@ -1,9 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-/** Lazy read to avoid ESM module-load-time race with dotenv */
 function getJwtSecret(): string {
-  return process.env.JWT_SECRET || 'openlinear-dev-secret-change-in-production';
+  const secret = process.env.JWT_SECRET;
+  if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET is not set in production');
+  }
+  return secret || 'openlinear-dev-secret-change-in-production';
 }
 
 export interface AuthRequest extends Request {
@@ -17,7 +20,7 @@ export function optionalAuth(req: AuthRequest, _res: Response, next: NextFunctio
   if (authHeader?.startsWith('Bearer ')) {
     try {
       const token = authHeader.substring(7);
-      const decoded = jwt.verify(token, getJwtSecret()) as { userId: string; username: string };
+      const decoded = jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'] }) as { userId: string; username: string };
       req.userId = decoded.userId;
       req.username = decoded.username;
     } catch {
@@ -37,7 +40,7 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
 
   try {
     const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, getJwtSecret()) as { userId: string; username: string };
+    const decoded = jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'] }) as { userId: string; username: string };
     req.userId = decoded.userId;
     req.username = decoded.username;
     next();

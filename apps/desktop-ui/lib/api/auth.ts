@@ -36,6 +36,28 @@ export async function getGitHubConnectUrl(): Promise<string> {
   return data.url;
 }
 
+export async function confirmGitHubConnect(githubConnectToken: string): Promise<{ token: string }> {
+  const res = await fetch(`${API_URL}/api/auth/github/connect/confirm`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+      ...getClientHeader(),
+    },
+    body: JSON.stringify({ github_connect_token: githubConnectToken }),
+  });
+
+  if (!res.ok) {
+    let errorMessage = 'Failed to confirm GitHub connection';
+    try {
+      const errorData = await res.json();
+      errorMessage = errorData.error || errorData.message || errorMessage;
+    } catch {}
+    throw new Error(errorMessage);
+  }
+  return res.json();
+}
+
 export function logout(): void {
   localStorage.removeItem('token');
   window.location.href = '/';

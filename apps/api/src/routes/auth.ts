@@ -10,6 +10,7 @@ import {
   createOrUpdateUser,
   connectGitHubToUser,
   getUserById,
+  GitHubUser,
 } from '../services/github';
 import { z } from 'zod';
 
@@ -20,7 +21,11 @@ const DESKTOP_STATE_PREFIX = 'desktop:';
 const DESKTOP_CONNECT_STATE_PREFIX = 'desktop_connect:';
 
 function getJwtSecret() {
-  return process.env.JWT_SECRET || 'openlinear-dev-secret-change-in-production';
+  const secret = process.env.JWT_SECRET;
+  if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET is not set in production');
+  }
+  return secret || 'openlinear-dev-secret-change-in-production';
 }
 
 function getFrontendUrl() {
@@ -52,17 +57,9 @@ function getDesktopCallbackUrl(params: Record<string, string>): string {
   return `${DESKTOP_CALLBACK_URL}?${searchParams.toString()}`;
 }
 
-function getWebCallbackBridgeUrl(params: Record<string, string>): string {
-  const searchParams = new URLSearchParams(params);
-  return `${WEB_CALLBACK_BRIDGE_URL}?${searchParams.toString()}`;
-}
-
 function isDesktopOAuthRequest(req: Request): boolean {
-  // Check query param (for initial auth URL)
   if (req.query.source === 'desktop') return true;
-  // Check header (for API requests)
   if (req.headers['x-openlinear-client'] === 'desktop') return true;
-  // Check state param (for OAuth callback - GitHub preserves state)
   const state = req.query.state;
   if (typeof state === 'string' && (
     state.startsWith(DESKTOP_STATE_PREFIX) ||
@@ -136,7 +133,7 @@ router.post('/register', async (req: Request, res: Response) => {
     const token = jwt.sign(
       { userId: user.id, username: user.username },
       getJwtSecret(),
-      { expiresIn: '7d' }
+      { expiresIn: '7d', algorithm: 'HS256' }
     );
 
     res.status(201).json({ token, user: { id: user.id, username: user.username, email: user.email } });
@@ -171,7 +168,7 @@ router.post('/login', async (req: Request, res: Response) => {
     const token = jwt.sign(
       { userId: user.id, username: user.username },
       getJwtSecret(),
-      { expiresIn: '7d' }
+      { expiresIn: '7d', algorithm: 'HS256' }
     );
 
     res.json({ token, user: { id: user.id, username: user.username, email: user.email, avatarUrl: user.avatarUrl } });
@@ -189,20 +186,10 @@ router.get('/github', (req: Request, res: Response) => {
     ? `${DESKTOP_STATE_PREFIX}${generateState()}`
     : generateState();
   
-  // Debug logging
-  console.log('[Auth Debug] OAuth init:', {
-    isDesktop,
-    query: req.query,
-    headers: req.headers['x-openlinear-client'],
-    statePrefix: state.substring(0, 20),
-    userAgent: req.headers['user-agent']?.slice(0, 50)
-  });
-  
   const authUrl = getAuthorizationUrl(state);
   res.redirect(authUrl);
 });
 
-// GitHub connect — links GitHub to an existing email/password user
 router.get('/github/connect', async (req: Request, res: Response) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -211,10 +198,11 @@ router.get('/github/connect', async (req: Request, res: Response) => {
   }
 
   try {
-    const decoded = jwt.verify(authHeader.substring(7), getJwtSecret()) as { userId: string };
-    const state = req.headers['x-openlinear-client'] === 'desktop'
-      ? `${DESKTOP_CONNECT_STATE_PREFIX}${decoded.userId}`
-      : `connect:${decoded.userId}`;
+    jwt.verify(authHeader.substring(7), getJwtSecret(), { algorithms: ['HS256'] });
+    const isDesktop = req.headers['x-openlinear-client'] === 'desktop';
+    const state = isDesktop
+      ? `${DESKTOP_CONNECT_STATE_PREFIX}${generateState()}`
+      : `connect:${generateState()}`;
     const authUrl = getAuthorizationUrl(state);
     res.json({ url: authUrl });
   } catch {
@@ -227,18 +215,6 @@ router.get('/github/callback', async (req: Request, res: Response) => {
   const stateStr = typeof state === 'string' ? decodeURIComponent(state) : '';
   const isDesktop = stateStr.startsWith(DESKTOP_STATE_PREFIX);
   const isDesktopConnect = stateStr.startsWith(DESKTOP_CONNECT_STATE_PREFIX);
-  
-  // Debug logging
-  console.log('[Auth Debug] OAuth callback received:', {
-    state: stateStr,
-    statePrefix: stateStr.substring(0, 20),
-    DESKTOP_STATE_PREFIX,
-    isDesktop,
-    isDesktopConnect,
-    hasCode: !!code,
-    hasError: !!error,
-    fullUrl: req.originalUrl
-  });
 
   if (error) {
     console.error('[Auth] GitHub OAuth error:', error, error_description);
@@ -267,32 +243,29 @@ router.get('/github/callback', async (req: Request, res: Response) => {
     const githubUser = await getGitHubUser(accessToken);
 
     if (isConnect) {
-      // Connect flow — link GitHub to existing user
-      const userId = isDesktopConnect
-        ? stateStr.replace(DESKTOP_CONNECT_STATE_PREFIX, '')
-        : stateStr.replace('connect:', '');
-      await connectGitHubToUser(userId, githubUser);
-      const user = await getUserById(userId);
-
-      const token = jwt.sign(
-        { userId: user!.id, username: user!.username },
+      const tempToken = jwt.sign(
+        { 
+          githubId: githubUser.id, 
+          githubLogin: githubUser.login, 
+          githubEmail: githubUser.email, 
+          githubAvatarUrl: githubUser.avatar_url 
+        },
         getJwtSecret(),
-        { expiresIn: '7d' }
+        { expiresIn: '15m', algorithm: 'HS256' }
       );
 
       if (isDesktopConnect) {
-        res.redirect(getDesktopCallbackUrl({ token, connected: 'true' }));
+        res.redirect(getDesktopCallbackUrl({ github_connect_token: tempToken }));
         return;
       }
-      res.redirect(`${getFrontendUrl()}?token=${token}&connected=true`);
+      res.redirect(`${getFrontendUrl()}?github_connect_token=${tempToken}`);
     } else {
-      // Normal login/signup flow
       const user = await createOrUpdateUser(githubUser);
 
       const token = jwt.sign(
         { userId: user.id, username: user.username },
         getJwtSecret(),
-        { expiresIn: '7d' }
+        { expiresIn: '7d', algorithm: 'HS256' }
       );
 
       if (isDesktop) {
@@ -312,6 +285,45 @@ router.get('/github/callback', async (req: Request, res: Response) => {
   }
 });
 
+router.post('/github/connect/confirm', async (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const { github_connect_token } = req.body;
+  if (!github_connect_token) {
+    res.status(400).json({ error: 'Missing github_connect_token' });
+    return;
+  }
+
+  try {
+    const decodedAuth = jwt.verify(authHeader.substring(7), getJwtSecret(), { algorithms: ['HS256'] }) as { userId: string };
+    const decodedGithub = jwt.verify(github_connect_token, getJwtSecret(), { algorithms: ['HS256'] }) as { githubId: number, githubLogin: string, githubEmail: string, githubAvatarUrl: string };
+
+    const githubUser: GitHubUser = {
+      id: decodedGithub.githubId,
+      login: decodedGithub.githubLogin,
+      email: decodedGithub.githubEmail,
+      avatar_url: decodedGithub.githubAvatarUrl,
+    };
+
+    await connectGitHubToUser(decodedAuth.userId, githubUser);
+    const user = await getUserById(decodedAuth.userId);
+
+    const token = jwt.sign(
+      { userId: user!.id, username: user!.username },
+      getJwtSecret(),
+      { expiresIn: '7d', algorithm: 'HS256' }
+    );
+
+    res.json({ success: true, token });
+  } catch (err) {
+    res.status(401).json({ error: 'Invalid or expired token' });
+  }
+});
+
 router.get('/me', async (req: Request, res: Response) => {
   const authHeader = req.headers.authorization;
 
@@ -323,7 +335,7 @@ router.get('/me', async (req: Request, res: Response) => {
   const token = authHeader.substring(7);
 
   try {
-    const decoded = jwt.verify(token, getJwtSecret()) as { userId: string };
+    const decoded = jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'] }) as { userId: string };
     const user = await getUserById(decoded.userId);
 
     if (!user) {
