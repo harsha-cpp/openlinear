@@ -1,15 +1,15 @@
 # CI/CD Pipeline
 
-Two GitHub Actions workflows handle all automation. One deploys the API + frontend to the production droplet. The other builds desktop releases and publishes to npm.
+Two GitHub Actions workflows handle all automation. One deploys the API + frontend to the production droplet and auto-tags releases. The other builds desktop releases and publishes to npm.
 
 ```
-main push ──→ deploy.yml ──→ checks (typecheck, build, test) ──→ SSH deploy ──→ health check
-tag push  ──→ release.yml ──→ build desktop (Tauri + Rust) ──→ GitHub Release ──→ npm publish
+main push ──→ deploy.yml ──→ checks ──→ SSH deploy ──→ health check ──→ auto-tag (v0.1.XX)
+tag push  ──→ release.yml ──→ build desktop (Tauri) ──→ GitHub Release ──→ npm publish
 ```
 
 ## Workflows
 
-### `deploy.yml` — Deploy to Production
+### `deploy.yml` — Deploy to Production + Auto Tag
 
 **Trigger:** Push to `main` (ignores docs, landing, desktop, packaging changes).
 
@@ -20,6 +20,7 @@ tag push  ──→ release.yml ──→ build desktop (Tauri + Rust) ──→
 | **checks** | Install deps, generate Prisma, push test schema, typecheck API + desktop-ui, build API, run API tests | 10 min |
 | **deploy** | SSH into droplet, run `scripts/deploy.sh` | 10 min |
 | **verify** | POST to `https://rixie.in/health`, retry 6 times | — |
+| **auto-tag** | After successful deploy, bump patch version across all files, commit, create + push git tag | — |
 
 Path filters skip the workflow entirely for changes that don't affect the deployed services:
 - `docs/**`, `*.md`, `LICENSE`
@@ -27,16 +28,20 @@ Path filters skip the workflow entirely for changes that don't affect the deploy
 - `apps/desktop/**`, `apps/intro-video/**`
 - `packaging/**`
 
+The auto-tag job bumps the version in `tauri.conf.json`, `package.json`, `PKGBUILD`, and `.SRCINFO`, commits with `[skip ci]`, and pushes a `v*` tag. This tag push triggers `release.yml`. Note: for the tag push to trigger `release.yml`, a `PAT_TOKEN` secret is needed (GitHub Actions won't trigger workflows from `GITHUB_TOKEN` pushes). Until then, tags can be pushed manually.
+
 ### `release.yml` — Desktop Release + npm Publish
 
-**Trigger:** Tag push matching `v*` (e.g. `v0.1.14`).
+**Trigger:** Tag push matching `v*` (e.g. `v0.1.23`).
 
 **Concurrency:** Per-tag group, does not cancel (releases must complete).
 
 | Job | What it does | Timeout |
 |-----|-------------|---------|
-| **build-release** | Build sidecar binary, build Tauri desktop (AppImage + deb), strip Wayland libs, create GitHub Release | 30 min |
-| **publish-npm** | Build + publish the `openlinear` npm package with provenance | 10 min |
+| **build-release** | Build Tauri desktop app (AppImage + deb), strip Wayland libs from AppImage, create GitHub Release | 30 min |
+| **publish-npm** | Build + publish the `openlinear` npm package to npmjs.org | 10 min |
+
+The desktop app connects to the remote API (`https://rixie.in`) in production — no sidecar binary is bundled.
 
 Caching:
 - **Rust build cache** — `~/.cargo` registry + `apps/desktop/src-tauri/target/`, keyed on `Cargo.lock` hash. Saves ~10 min on repeat builds.
@@ -59,31 +64,33 @@ On manual trigger (`workflow_dispatch`) or first deploy, everything rebuilds.
 
 ## Release Process
 
-To cut a release:
+Releases are automated via the auto-tag job in `deploy.yml`. Every successful deploy to production automatically:
+
+1. Bumps the patch version in all version files
+2. Commits with `[skip ci]` to prevent recursive triggers
+3. Creates and pushes a `v*` git tag
+4. The tag push triggers `release.yml` (builds desktop + publishes npm)
+
+To release manually (e.g. if auto-tag isn't wired up with PAT_TOKEN yet):
 
 ```bash
 # 1. Bump version in these files:
 #    - apps/desktop/src-tauri/tauri.conf.json  (version field)
 #    - packages/openlinear/package.json        (version field)
+#    - packaging/aur/openlinear-bin/PKGBUILD   (pkgver)
+#    - packaging/aur/openlinear-bin/.SRCINFO   (pkgver + source URLs)
 
 # 2. Commit and tag
-git add -A && git commit -m "release: vX.Y.Z"
+git add -A && git commit -m "chore(release): vX.Y.Z [skip ci]"
 git tag vX.Y.Z
 git push origin main --tags
 ```
 
-This triggers:
-- `deploy.yml` — deploys the API/frontend commit to production
-- `release.yml` — builds desktop binaries and creates a GitHub Release
-
-The npm publish step skips automatically if the version is already published.
-
 ## Artifacts
 
 Each GitHub Release contains:
-- `openlinear-{version}-x86_64.AppImage` — Linux portable binary
-- `openlinear-{version}-x86_64.deb` — Debian/Ubuntu package
-- `openlinear-api-{version}-x86_64` — Standalone API server binary
+- `openlinear-{version}-x86_64.AppImage` — Linux portable binary (~84 MB)
+- `openlinear-{version}-x86_64.deb` — Debian/Ubuntu package (~9 MB)
 
 ## Required GitHub Secrets
 
@@ -92,10 +99,12 @@ Each GitHub Release contains:
 | `DEPLOY_HOST` | Droplet IP address |
 | `DEPLOY_USER` | SSH username (root) |
 | `DEPLOY_SSH_KEY` | SSH private key for droplet access |
-
-npm publishing uses OIDC Trusted Publishers (no `NPM_TOKEN` needed).
+| `NPM_TOKEN` | npm access token for publishing the `openlinear` package |
+| `PAT_TOKEN` | (Optional) GitHub PAT for auto-tag to trigger release.yml. Without this, tags must be pushed manually. |
 
 ## Architecture Decisions
+
+**Why no sidecar in production builds?** The desktop app calls the remote API at `https://rixie.in` — the local sidecar binary is only for development. Removing it cut the AppImage size from ~108 MB to ~84 MB.
 
 **Why not deploy on `dev`?** Pushing to `dev` previously triggered production deploys. Removed to prevent accidental production deployments from development work.
 
@@ -122,8 +131,9 @@ npm publishing uses OIDC Trusted Publishers (no `NPM_TOKEN` needed).
 **Release build fails on Rust compilation:**
 - Usually a cache corruption issue. Delete the `rust-release-*` cache from the Actions → Caches page and re-run.
 
-**npm publish fails with 403:**
-- Check that OIDC Trusted Publishers is configured for the `openlinear` package on npmjs.com under Settings → Publishing access.
+**npm publish fails with ENEEDAUTH:**
+- Verify that the `NPM_TOKEN` secret is set in Settings → Secrets → Actions
+- Generate a new token at https://www.npmjs.com/ → Access Tokens → Automation
 
 **Two workflows running on same commit:**
 - Expected when you push a tag to `main`. `deploy.yml` deploys the API. `release.yml` builds the desktop. They don't conflict — different concurrency groups.
