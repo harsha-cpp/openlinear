@@ -2,9 +2,9 @@
 
 # OpenLinear
 
-**AI-powered project management that actually writes the code.**
+**A kanban board that executes your tasks.**
 
-Drag tasks on a kanban board. Click execute. Get a pull request.
+Describe what you want built. Click execute. Get a pull request.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
@@ -20,23 +20,20 @@ Drag tasks on a kanban board. Click execute. Get a pull request.
 
 ## What is OpenLinear?
 
-OpenLinear is a **desktop app** (built with Tauri) that combines a Linear-style kanban board with AI coding agents. You manage tasks visually, and when you're ready, the AI clones your repo, creates a branch, writes the code, and opens a pull request — all in one click.
+OpenLinear is a project management tool that turns your backlog into pull requests. You manage tasks on a Linear-style kanban board. When you're ready, an AI agent — running locally with your own credentials — clones your repo, creates a branch, writes the code, and opens a PR. No copy-pasting prompts, no context switching.
 
-Each user gets an **isolated Docker container** running their own AI agent with their own API keys. No credential sharing, no interference between users.
-
-**Architecture:** The dashboard is **desktop-only**. The web version only contains the marketing landing page.
+The dashboard is **desktop-only**. The web version only contains the marketing landing page.
 
 ## Features
 
 - **Kanban Board** — drag-and-drop task management with priorities, labels, and status tracking
 - **One-Click Execution** — select a task, hit execute, get a PR with real code changes
 - **Batch Execution** — run multiple tasks in parallel or queue mode, merged into a single PR
-- **Container Isolation** — every user gets a dedicated Docker container with isolated credentials
+- **Local Execution** — agent runs on your machine with your own API keys and credentials
 - **Real-Time Streaming** — watch the AI work live via SSE (tool calls, file edits, progress)
 - **GitHub Integration** — OAuth login, repo management, automatic PR creation
 - **Brainstorm Mode** — describe a goal in natural language, get actionable tasks generated
 - **Teams & Projects** — organize work with teams, projects, and scoped issue numbering
-- **Desktop App** — runs as a Tauri desktop app with native performance
 
 ## Agent Support
 
@@ -53,7 +50,7 @@ Each user gets an **isolated Docker container** running their own AI agent with 
 
 - Node.js 22+
 - pnpm 9+
-- Docker
+- Docker (for PostgreSQL only)
 - A GitHub OAuth app (for login and repo access)
 
 ### Setup
@@ -89,16 +86,14 @@ pnpm --filter @openlinear/desktop dev
 | `GITHUB_CLIENT_ID` | GitHub OAuth app client ID |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth app client secret |
 | `GITHUB_REDIRECT_URI` | OAuth callback URL |
-| `OPENCODE_IMAGE` | Docker image for worker containers (default: `opencode-worker:latest`) |
-| `REPOS_DIR` | Host path for cloned repos (default: `/tmp/openlinear-repos`) |
 | `API_PORT` | API server port (default: `3001`) |
 | `CORS_ORIGIN` | Allowed CORS origin (default: `http://localhost:3000`) |
 
 ## How It Works
 
 1. **You create tasks** on the kanban board with descriptions of what you want built
-2. **You click execute** — the API clones your repo, creates a branch, and spins up an AI agent
-3. **The agent writes code** in an isolated Docker container with its own git worktree
+2. **You click execute** — the desktop app picks it up, clones your repo, and creates a branch
+3. **The agent writes code** locally using your API keys, in its own git worktree
 4. **You watch it work** — real-time SSE streams every tool call, file edit, and decision
 5. **You get a PR** — changes are committed, pushed, and a pull request is created automatically
 
@@ -111,14 +106,14 @@ For batch execution, multiple tasks run in parallel (or queued), each in isolate
 ```
 openlinear/
   apps/
-    desktop-ui/     Next.js frontend (Tauri webview) - DESKTOP ONLY
-    desktop/        Tauri app shell
+    desktop-ui/     Next.js frontend (desktop webview)
+    desktop/        Desktop app shell
     landing/        Marketing landing page (Vercel)
-    api/            Express API sidecar
+    api/            Express API
   packages/
     db/             Prisma schema + client
-  docker/
-    opencode-worker/  Per-user container image
+    openlinear/     npm package (CLI launcher + library)
+    types/          Shared TypeScript types
   docs/
     features/       Feature documentation (18 guides)
     diagrams/       Architecture SVGs
@@ -132,7 +127,7 @@ openlinear/
 | AppImage | Linux | [GitHub Releases](https://github.com/kaizen403/openlinear/releases) |
 | .deb | Debian/Ubuntu | [GitHub Releases](https://github.com/kaizen403/openlinear/releases) |
 | AUR | Arch Linux | `yay -S openlinear-bin` |
-| npm installer | Any | `npm install -g @kaizen403/openlinear` |
+| npm installer | Any | `npm install -g openlinear` |
 
 Release builds are triggered automatically on tag push (`v*`).
 

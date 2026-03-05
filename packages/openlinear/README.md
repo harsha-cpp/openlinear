@@ -2,9 +2,9 @@
 
 # OpenLinear
 
-**AI-powered project management that actually writes the code.**
+**A kanban board that executes your tasks.**
 
-Drag tasks on a kanban board. Click execute. Get a pull request.
+Describe what you want built. Click execute. Get a pull request.
 
 [![npm version](https://img.shields.io/npm/v/openlinear.svg)](https://www.npmjs.com/package/openlinear)
 [![npm downloads](https://img.shields.io/npm/dm/openlinear.svg)](https://www.npmjs.com/package/openlinear)
@@ -20,9 +20,7 @@ Drag tasks on a kanban board. Click execute. Get a pull request.
 
 ## What is OpenLinear?
 
-OpenLinear is a **desktop app** (built with Tauri) that combines a Linear-style kanban board with AI coding agents. You manage tasks visually, and when you're ready, the AI clones your repo, creates a branch, writes the code, and opens a pull request — all in one click.
-
-Each user gets an **isolated Docker container** running their own AI agent with their own API keys. No credential sharing, no interference between users.
+OpenLinear is a project management tool that turns your backlog into pull requests. You manage tasks on a Linear-style kanban board. When you're ready, an AI agent — running locally with your own credentials — clones your repo, creates a branch, writes the code, and opens a PR. No copy-pasting prompts, no context switching.
 
 **This package** is the official launcher and utility library. It does two things:
 
@@ -349,8 +347,8 @@ Any payload passing through `sanitizePayload` or `safeValidateExecutionMetadataS
 ## How OpenLinear Works
 
 1. **You create tasks** on the kanban board with descriptions of what you want built.
-2. **You click execute** — the API clones your repo, creates a branch, and spins up a dedicated AI agent container.
-3. **The agent writes code** in an isolated Docker container with its own git worktree and credentials.
+2. **You click execute** — the desktop app picks it up, clones your repo, and creates a branch.
+3. **The agent writes code** locally using your API keys, in its own git worktree.
 4. **You watch it work** — real-time SSE streams every tool call, file edit, and decision live.
 5. **You get a PR** — changes are committed, pushed, and a pull request is opened automatically.
 
@@ -368,8 +366,8 @@ pnpm install
 # Build the npm package
 pnpm --filter openlinear build
 
-# Build the full desktop app
-docker compose up -d
+# Start the full stack
+docker compose up -d    # PostgreSQL only
 pnpm db:push
 pnpm --filter @openlinear/api dev
 pnpm --filter @openlinear/desktop dev
