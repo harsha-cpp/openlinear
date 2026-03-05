@@ -64,9 +64,6 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @openlinear/db db:generate
 
-      - name: Build sidecar
-        run: pnpm build:sidecar
-
       - name: Build desktop
         run: pnpm build:desktop
 
@@ -94,7 +91,6 @@ jobs:
           mkdir -p dist/release
           cp "$APPIMAGE" "dist/release/openlinear-${VERSION}-x86_64.AppImage"
           cp "$DEB" "dist/release/openlinear-${VERSION}-x86_64.deb"
-          cp apps/api/dist/api-linux-x64 "dist/release/openlinear-api-${VERSION}-x86_64"
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
