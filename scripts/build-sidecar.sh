@@ -18,12 +18,23 @@ echo "module.exports = { Client: class Client {} };" > stub-ssh2.cjs
 npx esbuild src/index.ts --bundle --platform=node --target=node18 --outfile=dist/bundle.cjs --format=cjs --alias:ssh2=./stub-ssh2.cjs --define:import.meta.dirname=__dirname
 
 echo "==> Copying Prisma engine and schema..."
-PRISMA_CLIENT="$ROOT_DIR/node_modules/.pnpm/@prisma+client@5.22.0_prisma@5.22.0/node_modules/.prisma/client"
-if [ -f "$PRISMA_CLIENT/libquery_engine-debian-openssl-1.1.x.so.node" ]; then
-  cp "$PRISMA_CLIENT/libquery_engine-debian-openssl-1.1.x.so.node" dist/
+# Dynamically find the .prisma/client directory regardless of version
+PRISMA_CLIENT=$(find "$ROOT_DIR/node_modules/.pnpm" -path "*/@prisma+client@*/node_modules/.prisma/client" -type d 2>/dev/null | head -n 1)
+if [ -z "$PRISMA_CLIENT" ]; then
+  # Fallback: check packages/db local node_modules
+  PRISMA_CLIENT="$ROOT_DIR/packages/db/node_modules/.prisma/client"
 fi
+echo "  Prisma client dir: $PRISMA_CLIENT"
+
+for ENGINE in "$PRISMA_CLIENT"/libquery_engine-*.so.node "$PRISMA_CLIENT"/libquery_engine-*.node; do
+  if [ -f "$ENGINE" ]; then
+    cp "$ENGINE" dist/
+    echo "  Copied $(basename "$ENGINE")"
+  fi
+done
 if [ -f "$PRISMA_CLIENT/schema.prisma" ]; then
   cp "$PRISMA_CLIENT/schema.prisma" dist/
+  echo "  Copied schema.prisma"
 fi
 
 echo "==> Building binaries with pkg..."

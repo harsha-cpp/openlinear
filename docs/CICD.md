@@ -1,110 +1,129 @@
-# CI/CD Deployment Setup
+# CI/CD Pipeline
 
-This document describes the automated deployment setup for OpenLinear.
-
-## Overview
-
-The CI/CD pipeline automatically deploys the application to the DigitalOcean droplet whenever changes are pushed to the `main` or `dev` branches.
-
-## Architecture
+Two GitHub Actions workflows handle all automation. One deploys the API + frontend to the production droplet. The other builds desktop releases and publishes to npm.
 
 ```
-GitHub Push → GitHub Actions Workflow → SSH to Droplet → Deploy Script
+main push ──→ deploy.yml ──→ checks (typecheck, build, test) ──→ SSH deploy ──→ health check
+tag push  ──→ release.yml ──→ build desktop (Tauri + Rust) ──→ GitHub Release ──→ npm publish
 ```
 
-## GitHub Secrets
+## Workflows
 
-The following secrets must be configured in the GitHub repository:
+### `deploy.yml` — Deploy to Production
 
-| Secret | Value | Description |
-|--------|-------|-------------|
-| `DEPLOY_HOST` | `206.189.139.212` | IP address of the DigitalOcean droplet |
-| `DEPLOY_USER` | `root` | SSH username for the droplet |
-| `DEPLOY_SSH_KEY` | Private key content | SSH private key for authentication |
+**Trigger:** Push to `main` (ignores docs, landing, desktop, packaging changes).
 
-### SSH Key Setup
+**Concurrency:** Cancels in-progress deploys when a new push arrives.
 
-The SSH key used for deployment is located at `~/.ssh/droplet_key` on the local machine and has been added to the droplet's `~/.ssh/authorized_keys`.
+| Job | What it does | Timeout |
+|-----|-------------|---------|
+| **checks** | Install deps, generate Prisma, push test schema, typecheck API + desktop-ui, build API, run API tests | 10 min |
+| **deploy** | SSH into droplet, run `scripts/deploy.sh` | 10 min |
+| **verify** | POST to `https://rixie.in/health`, retry 6 times | — |
 
-**Public key fingerprint:**
-```
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAzxe83rbgC3EG2VEIPvep7yc+9YdQcpw9+3UhLGcTxN opencode-agent
-```
+Path filters skip the workflow entirely for changes that don't affect the deployed services:
+- `docs/**`, `*.md`, `LICENSE`
+- `apps/landing/**` (deployed via Vercel separately)
+- `apps/desktop/**`, `apps/intro-video/**`
+- `packaging/**`
 
-## Workflow
+### `release.yml` — Desktop Release + npm Publish
 
-The deployment workflow (`.github/workflows/deploy.yml`) consists of three jobs:
+**Trigger:** Tag push matching `v*` (e.g. `v0.1.14`).
 
-### 1. Checks
-- Runs tests and type checking
-- Builds the API
-- Ensures code quality before deployment
+**Concurrency:** Per-tag group, does not cancel (releases must complete).
 
-### 2. Deploy
-- SSHs into the droplet
-- Runs the deploy script at `/opt/openlinear/scripts/deploy.sh`
-- Performs diagnostics after deployment
-- Verifies health endpoint
+| Job | What it does | Timeout |
+|-----|-------------|---------|
+| **build-release** | Build sidecar binary, build Tauri desktop (AppImage + deb), strip Wayland libs, create GitHub Release | 30 min |
+| **publish-npm** | Build + publish the `openlinear` npm package with provenance | 10 min |
 
-### 3. Publish NPM Package
-- Builds and publishes the `openlinear` npm package
-- Uses trusted publishing with provenance
+Caching:
+- **Rust build cache** — `~/.cargo` registry + `apps/desktop/src-tauri/target/`, keyed on `Cargo.lock` hash. Saves ~10 min on repeat builds.
+- **pnpm store** — via `actions/setup-node` `cache: pnpm`.
 
-## Deploy Script Optimizations
+## Deploy Script (`scripts/deploy.sh`)
 
-The deploy script (`scripts/deploy.sh`) includes several optimizations:
+Runs on the droplet via SSH. Implements incremental deploys:
 
-1. **Incremental builds**: Only rebuilds changed components (API, FE, DB)
-2. **PNPM cache**: Uses persistent store for faster installs
-3. **Zero-downtime reload**: Uses PM2 reload instead of restart
-4. **Removed Docker worker build**: Not needed in local-only mode
-5. **Timing**: Shows total deploy duration
+1. **Pull** — `git pull origin main --ff-only`
+2. **Diff detection** — compares `OLD_HEAD` vs `NEW_HEAD` to determine what changed:
+   - `apps/api/**` → rebuild API
+   - `apps/desktop-ui/**` or `packages/**` → rebuild frontend
+   - `packages/db/**` → regenerate Prisma + push schema
+3. **Install** — only runs `pnpm install` if `package.json` or `pnpm-lock.yaml` changed
+4. **Build** — only rebuilds changed components
+5. **Restart** — PM2 `reload` for zero-downtime restart (only for changed services)
 
-## Manual Deployment
+On manual trigger (`workflow_dispatch`) or first deploy, everything rebuilds.
 
-If needed, manual deployment can be done via SSH:
+## Release Process
+
+To cut a release:
 
 ```bash
-ssh -i ~/.ssh/droplet_key root@206.189.139.212
-cd /opt/openlinear
-./scripts/deploy.sh
+# 1. Bump version in these files:
+#    - apps/desktop/src-tauri/tauri.conf.json  (version field)
+#    - packages/openlinear/package.json        (version field)
+
+# 2. Commit and tag
+git add -A && git commit -m "release: vX.Y.Z"
+git tag vX.Y.Z
+git push origin main --tags
 ```
+
+This triggers:
+- `deploy.yml` — deploys the API/frontend commit to production
+- `release.yml` — builds desktop binaries and creates a GitHub Release
+
+The npm publish step skips automatically if the version is already published.
+
+## Artifacts
+
+Each GitHub Release contains:
+- `openlinear-{version}-x86_64.AppImage` — Linux portable binary
+- `openlinear-{version}-x86_64.deb` — Debian/Ubuntu package
+- `openlinear-api-{version}-x86_64` — Standalone API server binary
+
+## Required GitHub Secrets
+
+| Secret | Description |
+|--------|-------------|
+| `DEPLOY_HOST` | Droplet IP address |
+| `DEPLOY_USER` | SSH username (root) |
+| `DEPLOY_SSH_KEY` | SSH private key for droplet access |
+
+npm publishing uses OIDC Trusted Publishers (no `NPM_TOKEN` needed).
+
+## Architecture Decisions
+
+**Why not deploy on `dev`?** Pushing to `dev` previously triggered production deploys. Removed to prevent accidental production deployments from development work.
+
+**Why `cancel-in-progress: true` on deploy?** If you push 3 commits in quick succession, only the latest one deploys. The earlier in-flight deploys are cancelled since they'd be immediately superseded.
+
+**Why `cancel-in-progress: false` on release?** Releases must complete — cancelling a half-uploaded GitHub Release corrupts it.
+
+**Why path filters?** Changes to docs, the landing page (Vercel), or the desktop app (release-only) don't need a production deploy. Saves CI minutes.
+
+**Why Rust caching?** The Tauri/Rust compilation is the slowest step (~15 min cold, ~3 min cached). Caching `target/` and `~/.cargo` dramatically reduces release build times.
+
+**Why is npm publish only in release.yml?** It was previously duplicated in both workflows. The deploy workflow would attempt to publish on every main push (wasteful, even with the version guard skip). npm publishes belong exclusively with tagged releases.
 
 ## Troubleshooting
 
-### Deploy Job Fails
-1. Check GitHub secrets are correctly set
-2. Verify SSH key is in droplet's `authorized_keys`
-3. Check droplet is running: `curl https://rixie.in/health`
+**Deploy fails with SSH timeout:**
+- Verify secrets are set: Settings → Secrets → Actions
+- Test manually: `ssh -i ~/.ssh/droplet_key root@<DEPLOY_HOST>`
 
-### CORS Issues
-If desktop app can't connect to API, ensure `tauri://localhost` is in CORS allowed origins:
-```typescript
-// apps/api/src/app.ts
-const allowedOrigins = [
-  process.env.CORS_ORIGIN || 'http://localhost:3000',
-  'http://tauri.localhost',
-  'https://tauri.localhost',
-  'tauri://localhost',
-];
-```
+**Health check fails after deploy:**
+- SSH in and check PM2: `pm2 status && pm2 logs openlinear-api --lines 50`
+- Check port binding: `ss -ltnp | grep 3001`
 
-### OAuth Redirect Issues
-Ensure the API has the desktop OAuth logic:
-- Detects `?source=desktop` parameter
-- Uses `desktop:` state prefix
-- Redirects to `openlinear://callback` for desktop apps
+**Release build fails on Rust compilation:**
+- Usually a cache corruption issue. Delete the `rust-release-*` cache from the Actions → Caches page and re-run.
 
-## Verification
+**npm publish fails with 403:**
+- Check that OIDC Trusted Publishers is configured for the `openlinear` package on npmjs.com under Settings → Publishing access.
 
-After deployment, verify:
-- API health: `curl https://rixie.in/health`
-- GitHub Actions: Check workflow run status
-- PM2 status: `ssh root@206.189.139.212 "pm2 status"`
-
-## Recent Changes
-
-- Fixed CORS to allow `tauri://localhost` for desktop app
-- Optimized deploy script for faster deployments (~54s)
-- Fixed GitHub Actions secrets for automatic deployment
-- Added desktop OAuth flow with deep-link callback
+**Two workflows running on same commit:**
+- Expected when you push a tag to `main`. `deploy.yml` deploys the API. `release.yml` builds the desktop. They don't conflict — different concurrency groups.
