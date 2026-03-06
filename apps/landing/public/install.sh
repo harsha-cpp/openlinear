@@ -68,7 +68,14 @@ if [ ! -f "$BINARY_PATH" ]; then
     exit 1
 fi
 
-cp "$BINARY_PATH" "$INSTALL_DIR/openlinear"
+cp "$BINARY_PATH" "$INSTALL_DIR/openlinear.bin"
+chmod +x "$INSTALL_DIR/openlinear.bin"
+
+cat > "$INSTALL_DIR/openlinear" << 'WRAPPER'
+#!/usr/bin/env bash
+nohup "$HOME/.openlinear/openlinear.bin" "$@" > /dev/null 2>&1 &
+disown
+WRAPPER
 chmod +x "$INSTALL_DIR/openlinear"
 
 echo ""
