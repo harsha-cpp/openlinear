@@ -1,6 +1,6 @@
 pkgbase = openlinear-bin
 	pkgdesc = AI-powered project management that actually writes the code — desktop app
-	pkgver = 0.1.23
+	pkgver = 0.1.26
 	pkgrel = 1
 	url = https://github.com/kaizen403/openlinear
 	arch = x86_64
