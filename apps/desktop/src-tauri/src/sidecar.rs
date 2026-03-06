@@ -30,7 +30,7 @@ pub async fn start_api_server(app: tauri::AppHandle, database_url: String) -> Re
 
     let sidecar_command = app
         .shell()
-        .sidecar("openlinear-api")
+        .sidecar("openlinear-sidecar")
         .map_err(|e| format!("Failed to create sidecar command: {}", e))?
         .env("DATABASE_URL", database_url);
 

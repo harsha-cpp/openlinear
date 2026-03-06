@@ -23,7 +23,7 @@
     "active": true,
     "targets": ["dmg", "app", "appimage", "deb"],
     "icon": ["icons/icon.png"],
-    "externalBin": ["binaries/openlinear-api"],
+    "externalBin": ["binaries/openlinear-sidecar", "binaries/opencode"],
     "macOS": {
       "minimumSystemVersion": "10.15",
       "dmg": {
