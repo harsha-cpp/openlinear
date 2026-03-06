@@ -47,7 +47,7 @@ import {
 import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import { DatabaseSettings } from "@/components/desktop/database-settings"
-import { ensureContainer, getSetupStatus, setProviderApiKey, getProviderAuthMethods, oauthAuthorize, oauthCallback, addConfiguredProvider, getModels, getModelConfig, setModel, SetupStatus, ProviderAuthMethods, ProviderModels } from "@/lib/api/opencode"
+import { getSetupStatus, setProviderApiKey, getProviderAuthMethods, oauthAuthorize, oauthCallback, addConfiguredProvider, getModels, getModelConfig, setModel, SetupStatus, ProviderAuthMethods, ProviderModels } from "@/lib/api/opencode"
 import { getActiveRepository, setActiveRepositoryBaseBranch } from "@/lib/api"
 import { AppShell } from "@/components/layout/app-shell"
 import { API_URL } from "@/lib/api/client"
@@ -216,7 +216,6 @@ function SettingsContent() {
     setProvidersLoading(true)
     setProviderError(null)
     try {
-      await ensureContainer()
       const [status, authMethods, modelsData, modelConfig] = await Promise.all([
         getSetupStatus(),
         getProviderAuthMethods().catch(() => ({} as ProviderAuthMethods)),
@@ -245,7 +244,7 @@ function SettingsContent() {
       setProviderError(
         error instanceof Error
           ? error.message
-          : "Failed to connect to the AI container. Make sure Docker is running."
+          : "Failed to connect to the AI environment. Make sure OpenCode is running."
       )
     } finally {
       setProvidersLoading(false)
@@ -1629,7 +1628,7 @@ function SettingsContent() {
               <div className="flex flex-col items-center justify-center gap-3">
                 <Loader2 className="w-6 h-6 animate-spin text-linear-accent" />
                 <p className="text-sm text-linear-text-secondary">
-                  Starting AI container&hellip;
+                  Starting AI environment&hellip;
                 </p>
               </div>
             </CardContent>
@@ -1683,7 +1682,7 @@ function SettingsContent() {
                     No providers found
                   </p>
                   <p className="text-xs text-linear-text-tertiary">
-                    The AI container is running but no providers were detected.
+                    The AI environment is running but no providers were detected.
                   </p>
                 </div>
               </div>

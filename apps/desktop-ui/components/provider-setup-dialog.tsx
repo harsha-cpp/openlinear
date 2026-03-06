@@ -6,7 +6,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button"
 import { Loader2, Check, AlertCircle, Brain, RefreshCw, Settings } from "lucide-react"
 import {
-  ensureContainer,
   getSetupStatus,
   getConfiguredProviderIds,
   getModelConfig,
@@ -26,7 +25,6 @@ const POLL_INTERVAL_MS = 2000
 export function ProviderSetupDialog({ open, onOpenChange, onSetupComplete }: ProviderSetupDialogProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [containerStarting, setContainerStarting] = useState(true)
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
@@ -88,25 +86,16 @@ export function ProviderSetupDialog({ open, onOpenChange, onSetupComplete }: Pro
     }
 
     setLoading(true)
-    setContainerStarting(true)
     setLoadError(null)
     setSelectedProvider(null)
 
-    ensureContainer()
-      .then(() => {
-        setContainerStarting(false)
-        getModelConfig()
-          .then((cfg) => {
-            if (cfg.model) setCurrentModelName(cfg.model)
-          })
-          .catch(() => {})
-        return loadWithPolling()
+    getModelConfig()
+      .then((cfg) => {
+        if (cfg.model) setCurrentModelName(cfg.model)
       })
-      .catch((err) => {
-        setLoadError(err instanceof Error ? err.message : "Failed to start AI environment")
-        setContainerStarting(false)
-        setLoading(false)
-      })
+      .catch(() => {})
+
+    loadWithPolling()
 
     return () => {
       pollRef.current = false
@@ -114,20 +103,9 @@ export function ProviderSetupDialog({ open, onOpenChange, onSetupComplete }: Pro
   }, [open, loadWithPolling])
 
   const handleRetry = () => {
-    setContainerStarting(true)
     setLoadError(null)
     setLoading(true)
-
-    ensureContainer()
-      .then(() => {
-        setContainerStarting(false)
-        return loadWithPolling()
-      })
-      .catch((err) => {
-        setLoadError(err instanceof Error ? err.message : "Failed to start AI environment")
-        setContainerStarting(false)
-        setLoading(false)
-      })
+    loadWithPolling()
   }
 
   const handleUse = () => {
@@ -164,15 +142,15 @@ export function ProviderSetupDialog({ open, onOpenChange, onSetupComplete }: Pro
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto py-2 min-h-0">
-          {containerStarting || loading ? (
+          {loading ? (
             <div className="flex flex-col items-center justify-center py-12 gap-4">
               <Loader2 className="w-8 h-8 animate-spin text-linear-accent" />
               <div className="text-center">
                 <p className="text-linear-text font-medium">
-                  {containerStarting ? "Setting up your AI environment..." : "Loading providers..."}
+                  Loading providers...
                 </p>
                 <p className="text-sm text-linear-text-tertiary mt-1">
-                  {containerStarting ? "This may take a moment" : "Detecting available providers"}
+                  Detecting available providers
                 </p>
               </div>
             </div>
