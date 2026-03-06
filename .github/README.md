@@ -16,19 +16,19 @@ OpenLinear is an open-source desktop app that connects a Linear-style task board
 
 ### Why OpenLinear?
 
-Most AI coding tools are chat-first. OpenLinear is **task-first**. You plan your work on a kanban board, then let AI agents execute tasks in isolated environments — each user gets their own Docker container, their own credentials, their own branches.
+Most AI coding tools are chat-first. OpenLinear is **task-first**. You plan your work on a kanban board, then let AI agents execute tasks directly on your machine — each task gets its own git worktree, its own branch, and the agent runs as a bundled sidecar.
 
 ### Key Capabilities
 
 - **One-click task execution** — describe the task, click execute, receive a pull request
 - **Batch execution** — run multiple tasks in parallel or queue mode, merged into a single PR
-- **Per-user isolation** — every user gets a dedicated Docker container with sandboxed credentials
+- **Per-task isolation** — every task runs in its own git worktree with an independent branch
 - **Real-time visibility** — watch the AI agent's tool calls, file edits, and decisions as they happen
 - **GitHub-native** — OAuth login, automatic repo cloning, branch management, and PR creation
 
 ### Built With
 
-Next.js, Tauri, Express.js, PostgreSQL, Prisma, Docker, OpenCode SDK
+Next.js, Tauri, Express.js, PostgreSQL, Prisma, OpenCode SDK
 
 ### Get Started
 

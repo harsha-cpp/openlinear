@@ -10,7 +10,7 @@ permissions:
   packages: write
 
 jobs:
-  build-release:
+  build-linux:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -62,6 +62,66 @@ jobs:
           cp "$DEB" "dist/release/openlinear-${VERSION}-x86_64.deb"
           cp apps/api/dist/api-linux-x64 "dist/release/openlinear-api-${VERSION}-x86_64"
 
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifacts
+          path: dist/release/*
+
+  build-macos-arm:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Generate Prisma client
+        run: pnpm --filter @openlinear/db db:generate
+
+      - name: Build sidecar
+        run: pnpm build:sidecar
+
+      - name: Build desktop
+        run: pnpm build:desktop
+
+      - name: Prepare release artifacts
+        run: |
+          set -euo pipefail
+          VERSION=${GITHUB_REF_NAME#v}
+          DMG=$(ls apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg | head -n 1)
+          mkdir -p dist/release
+          cp "$DMG" "dist/release/openlinear-${VERSION}-aarch64.dmg"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm-artifacts
+          path: dist/release/*
+
+  create-release:
+    runs-on: ubuntu-22.04
+    needs: [build-linux, build-macos-arm]
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/release
+          merge-multiple: true
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -69,7 +129,7 @@ jobs:
 
   publish-cli:
     runs-on: ubuntu-22.04
-    needs: build-release
+    needs: create-release
     steps:
       - name: Checkout
         uses: actions/checkout@v4

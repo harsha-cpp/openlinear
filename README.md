@@ -23,14 +23,13 @@ Drag tasks on a kanban board. Click execute. Get a pull request.
 
 OpenLinear is a desktop app (and web app) that combines a Linear-style kanban board with AI coding agents. You manage tasks visually, and when you're ready, the AI clones your repo, creates a branch, writes the code, and opens a pull request — all in one click.
 
-Each user gets an **isolated Docker container** running their own AI agent with their own API keys. No credential sharing, no interference between users.
+The OpenCode AI agent runs directly on your machine as a bundled Tauri sidecar. No containers, no isolation overhead — just the agent working with your local copy of the code.
 
 ## Features
 
 - **Kanban Board** — drag-and-drop task management with priorities, labels, and status tracking
 - **One-Click Execution** — select a task, hit execute, get a PR with real code changes
 - **Batch Execution** — run multiple tasks in parallel or queue mode, merged into a single PR
-- **Container Isolation** — every user gets a dedicated Docker container with isolated credentials
 - **Real-Time Streaming** — watch the AI work live via SSE (tool calls, file edits, progress)
 - **GitHub Integration** — OAuth login, repo management, automatic PR creation
 - **Brainstorm Mode** — describe a goal in natural language, get actionable tasks generated
@@ -52,7 +51,6 @@ Each user gets an **isolated Docker container** running their own AI agent with 
 
 - Node.js 22+
 - pnpm 9+
-- Docker
 - A GitHub OAuth app (for login and repo access)
 
 ### Setup
@@ -88,7 +86,6 @@ pnpm --filter @openlinear/desktop dev
 | `GITHUB_CLIENT_ID` | GitHub OAuth app client ID |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth app client secret |
 | `GITHUB_REDIRECT_URI` | OAuth callback URL |
-| `OPENCODE_IMAGE` | Docker image for worker containers (default: `opencode-worker:latest`) |
 | `REPOS_DIR` | Host path for cloned repos (default: `/tmp/openlinear-repos`) |
 | `API_PORT` | API server port (default: `3001`) |
 | `CORS_ORIGIN` | Allowed CORS origin (default: `http://localhost:3000`) |
@@ -96,8 +93,8 @@ pnpm --filter @openlinear/desktop dev
 ## How It Works
 
 1. **You create tasks** on the kanban board with descriptions of what you want built
-2. **You click execute** — the API clones your repo, creates a branch, and spins up an AI agent
-3. **The agent writes code** in an isolated Docker container with its own git worktree
+2. **You click execute** — the API clones your repo and creates a branch
+3. **The agent writes code** with OpenCode running directly on your machine in its own worktree
 4. **You watch it work** — real-time SSE streams every tool call, file edit, and decision
 5. **You get a PR** — changes are committed, pushed, and a pull request is created automatically
 
@@ -114,8 +111,6 @@ openlinear/
     api/            Express API sidecar
   packages/
     db/             Prisma schema + client
-  docker/
-    opencode-worker/  Per-user container image
   docs/
     features/       Feature documentation (18 guides)
     diagrams/       Architecture SVGs
@@ -126,10 +121,13 @@ openlinear/
 
 | Format | Platform | Install |
 |--------|----------|---------|
+| .dmg | macOS (Apple Silicon) | [GitHub Releases](https://github.com/kaizen403/openlinear/releases) |
 | AppImage | Linux | [GitHub Releases](https://github.com/kaizen403/openlinear/releases) |
 | .deb | Debian/Ubuntu | [GitHub Releases](https://github.com/kaizen403/openlinear/releases) |
 | AUR | Arch Linux | `yay -S openlinear-bin` |
 | npm CLI | Any | `npm install @kaizen403/openlinear-cli` |
+
+> **macOS note**: The app is unsigned. On first launch, right-click the app and select "Open", or run `xattr -cr /Applications/OpenLinear.app` to bypass Gatekeeper.
 
 Release builds are triggered automatically on tag push (`v*`).
 
