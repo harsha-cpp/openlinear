@@ -126,3 +126,61 @@ jobs:
             exit 0
           fi
           npm publish --access public
+
+  publish-aur:
+    name: Publish AUR Package
+    needs: build-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update PKGBUILD and .SRCINFO
+        run: |
+          set -euo pipefail
+          VERSION=${GITHUB_REF_NAME#v}
+          cd packaging/aur/openlinear-bin
+
+          sed -i "s/^pkgver=.*/pkgver=${VERSION}/" PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+
+          cat > .SRCINFO << EOF
+          pkgbase = openlinear-bin
+          	pkgdesc = AI-powered project management that actually writes the code — desktop app
+          	pkgver = ${VERSION}
+          	pkgrel = 1
+          	url = https://github.com/kaizen403/openlinear
+          	arch = x86_64
+          	license = MIT
+          	depends = glibc
+          	depends = gtk3
+          	depends = webkit2gtk-4.1
+          	optdepends = libappindicator-gtk3: system tray support
+          	optdepends = xdg-utils: open links in browser
+          	provides = openlinear
+          	conflicts = openlinear
+          	source = openlinear-${VERSION}-x86_64.AppImage::https://github.com/kaizen403/openlinear/releases/download/v${VERSION}/openlinear-${VERSION}-x86_64.AppImage
+          	source = openlinear.desktop
+          	source = openlinear.png::https://raw.githubusercontent.com/kaizen403/openlinear/v${VERSION}/apps/desktop/src-tauri/icons/icon.png
+          	sha256sums = SKIP
+          	sha256sums = SKIP
+          	sha256sums = SKIP
+
+          pkgname = openlinear-bin
+          EOF
+
+          # Remove leading whitespace from heredoc
+          sed -i 's/^          //' .SRCINFO
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
+        with:
+          pkgname: openlinear-bin
+          pkgbuild: packaging/aur/openlinear-bin/PKGBUILD
+          assets: |
+            packaging/aur/openlinear-bin/.SRCINFO
+            packaging/aur/openlinear-bin/openlinear.desktop
+          commit_username: kaizen403
+          commit_email: kaizen403@proton.me
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ github.ref_name }}"
