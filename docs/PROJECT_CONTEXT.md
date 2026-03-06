@@ -21,7 +21,7 @@ So instead of only *tracking* "Fix the login button" or "Add API pagination," yo
 
 - **Familiar workflow:** You create issues/tasks, put them on a board (Todo → In Progress → Done / Cancelled), add labels and priorities — similar to Linear.
 - **Execution, not just planning:** When you hit "Execute," an AI agent (e.g. OpenCode) works on that task in a real repo: it edits code, runs commands, and can create a branch and open a PR.
-- **Desktop-first, local control:** The app runs on your machine. The API and execution run locally or against your own database. You connect your GitHub repo and sign in with GitHub or email/password; the agent works in clones/worktrees on your machine or in a Docker container.
+- **Desktop-first, local control:** The app runs on your machine. The API and execution run locally or against your own database. You connect your GitHub repo and sign in with GitHub or email/password; the agent (OpenCode) runs directly on your machine with its own worktree for each task.
 - **Real-time feedback:** The board and execution views update live (e.g. when a task starts, finishes, or fails) so you're not guessing what the agent is doing.
 
 ---
@@ -48,8 +48,8 @@ So instead of only *tracking* "Fix the login button" or "Add API pagination," yo
 | **Batch** | A group of tasks you run together — either in **parallel** (several at once, up to a limit) or **queue** (one after another). The system can merge their branches into one PR. |
 | **Project** | A connected GitHub repository with optional local path and repo URL. You sign in, pick or add a repo; that repo is the "project" whose issues/tasks you're managing and where the agent does the work. |
 | **Team** | A group of users sharing tasks, projects, and issue numbering. Teams have invite codes for easy onboarding. |
-| **OpenCode** | The main AI coding agent integrated today. Each user gets their own Docker container running OpenCode. Other agents (e.g. Claude Code, Codex) are planned. |
-| **Container** | A Docker container running an OpenCode worker. Each user gets a dedicated container for isolated task execution. |
+| **OpenCode** | The main AI coding agent integrated today. Runs directly on your machine as a Tauri sidecar. Other agents (e.g. Claude Code, Codex) are planned. |
+| **Container** | (Deprecated) Previously used for isolation; now OpenCode runs directly on the host. |
 | **Settings** | Where you configure things like: how many tasks can run at once (parallel limit), batch size, and behavior when tasks conflict or fail. |
 | **Outcome** | An AI-generated summary of what was done during task execution, displayed in the task detail view after completion. |
 
@@ -70,9 +70,9 @@ So instead of only *tracking* "Fix the login button" or "Add API pagination," yo
    - Leave them in **Todo**.
 
 3. **Execute (single task)**
-   - Click **Execute** on a task.
-   - It moves to **In Progress**; the agent works in a dedicated Docker container.
-   - You see status/progress and live execution logs; when done, the task moves to **Done** with a PR link and an AI-generated outcome summary.
+    - Click **Execute** on a task.
+    - It moves to **In Progress**; the agent works in an isolated worktree with its own branch.
+    - You see status/progress and live execution logs; when done, the task moves to **Done** with a PR link and an AI-generated outcome summary.
 
 4. **Execute (batch)**
    - Select several tasks (e.g. with checkboxes).
@@ -104,7 +104,7 @@ These reflect the product and plan decisions.
 - Team management with invite codes and join flow.
 - Project management with GitHub repo linking and local paths.
 - Desktop app (Mac, Linux) with local API/sidecar.
-- Container-per-user OpenCode execution via Docker.
+- OpenCode execution via worktrees on the host machine.
 - Configurable parallel limit and batch behavior.
 - AI-generated task outcome summaries.
 - CI/CD deployment pipeline via GitHub Actions.
@@ -138,7 +138,7 @@ These reflect the product and plan decisions.
   Team CRUD with auto-generated invite codes (nanoid). Users can join teams via invite code. Teams scope issue numbering, members, and projects.
 
 - **Container-per-user execution:**
-  Each user gets a dedicated Docker container running OpenCode. Containers are managed via Dockerode with automatic lifecycle management (create on demand, cleanup on delete). Provider authentication (API keys, OAuth) is configured per-user through the container.
+   Each user's execution runs in an isolated git worktree on the host machine. Provider authentication (API keys, OAuth) is configured per-user through the OpenCode sidecar.
 
 - **CI/CD and deployment:**
   GitHub Actions workflow deploys to a production droplet on push to `main`. Health checks verify deployment success.
@@ -155,9 +155,8 @@ These reflect the product and plan decisions.
 - **Batch** — Multiple tasks run together (parallel or queue); one PR possible.
 - **Project** — The connected GitHub repository, with optional local path and repo URL.
 - **Team** — A group of users with shared tasks, projects, and invite codes.
-- **OpenCode** — Default AI coding agent; runs in per-user Docker containers.
-- **Container** — Docker container running an OpenCode worker for a specific user.
-- **Sidecar** — The bundled API process that runs next to the desktop app.
+- **OpenCode** — Default AI coding agent; runs on the host machine as a sidecar.
+- **Sidecar** — The bundled API and OpenCode process that runs next to the desktop app.
 - **SSE** — Mechanism for real-time updates to the UI (no need to refresh).
 - **Outcome** — AI-generated summary of what was accomplished during task execution.
 
@@ -173,4 +172,4 @@ These reflect the product and plan decisions.
 
 ## 10. Summary
 
-OpenLinear is a **desktop kanban board for coding tasks that AI agents execute**. You create tasks, optionally group them in batches, run them (single or parallel/queue), and see results and PRs without leaving the board. The product is desktop-first, repo-centric (GitHub), and designed to support multiple AI agents while staying simple and predictable. Teams can collaborate via invite codes, and each user gets an isolated Docker container for AI execution. This document captures the ideas, workflow, and boundaries in non-technical terms for context, onboarding, and product discussions.
+OpenLinear is a **desktop kanban board for coding tasks that AI agents execute**. You create tasks, optionally group them in batches, run them (single or parallel/queue), and see results and PRs without leaving the board. The product is desktop-first, repo-centric (GitHub), and designed to support multiple AI agents while staying simple and predictable. Teams can collaborate via invite codes, and each user's AI execution runs directly on the host machine via a bundled OpenCode sidecar. This document captures the ideas, workflow, and boundaries in non-technical terms for context, onboarding, and product discussions.
