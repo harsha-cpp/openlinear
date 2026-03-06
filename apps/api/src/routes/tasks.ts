@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '@openlinear/db';
 import { z } from 'zod';
 import { broadcast } from '../sse';
-import { executeTask, cancelTask, isTaskRunning, getExecutionLogs } from '../services/execution';
 import { optionalAuth, AuthRequest } from '../middleware/auth';
 import { getUserTeamIds } from '../services/team-scope';
 
@@ -13,6 +12,7 @@ const CreateTaskSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z.string().optional(),
   priority: PriorityEnum.optional().default('medium'),
+  status: StatusEnum.optional().default('todo'),
   labelIds: z.array(z.string().uuid()).optional().default([]),
   teamId: z.string().uuid().optional(),
   projectId: z.string().uuid().optional(),
@@ -193,7 +193,7 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    const { title, description, priority, labelIds, teamId, projectId, dueDate } = parsed.data;
+    const { title, description, priority, status, labelIds, teamId, projectId, dueDate } = parsed.data;
 
     let resolvedTeamId = teamId;
 
@@ -214,7 +214,7 @@ router.post('/', async (req: Request, res: Response) => {
       }
     }
 
-    let task;
+    let task: TaskWithLabels;
 
     if (resolvedTeamId) {
       task = await prisma.$transaction(async (tx) => {
@@ -231,6 +231,7 @@ router.post('/', async (req: Request, res: Response) => {
             title,
             description,
             priority,
+            status,
             teamId: resolvedTeamId,
             projectId: projectId || undefined,
             number,
@@ -250,6 +251,7 @@ router.post('/', async (req: Request, res: Response) => {
           title,
           description,
           priority,
+          status,
           projectId: projectId || undefined,
           dueDate: dueDate ? new Date(dueDate) : undefined,
           labels: {
@@ -384,168 +386,6 @@ router.delete('/:id', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('[Tasks] Error archiving task:', error);
     res.status(500).json({ error: 'Failed to archive task' });
-  }
-});
-
-router.post('/:id/execute', optionalAuth, async (req: AuthRequest, res: Response) => {
-  try {
-    const id = req.params.id as string;
-    console.log(`[Tasks] Execute requested for task ${id.slice(0, 8)} (userId: ${req.userId || 'anonymous'})`);
-    const result = await executeTask({ taskId: id, userId: req.userId });
-
-    if (!result.success) {
-      console.log(`[Tasks] Execute failed: ${result.error}`);
-      res.status(400).json({ error: result.error });
-      return;
-    }
-
-    res.json({ message: 'Task execution started' });
-  } catch (error) {
-    console.error('[Tasks] Error executing task:', error);
-    res.status(500).json({ error: 'Failed to execute task' });
-  }
-});
-
-router.post('/:id/refresh-pr', optionalAuth, async (req: AuthRequest, res: Response) => {
-  try {
-    const id = req.params.id as string;
-    const task = await prisma.task.findUnique({
-      where: { id },
-      select: { prUrl: true, batchId: true },
-    });
-
-    if (!task) {
-      res.status(404).json({ error: 'Task not found' });
-      return;
-    }
-
-    if (!task.prUrl || !task.prUrl.includes('/compare/')) {
-      res.json({ prUrl: task.prUrl, refreshed: false });
-      return;
-    }
-
-    const match = task.prUrl.match(/github\.com\/([^/]+)\/([^/]+)\/compare\/.+\.\.\.(.+)$/);
-    if (!match) {
-      res.json({ prUrl: task.prUrl, refreshed: false });
-      return;
-    }
-
-    const [, owner, repo, rawBranch] = match;
-    const branch = decodeURIComponent(rawBranch);
-
-    let accessToken: string | null = null;
-    if (req.userId) {
-      const user = await prisma.user.findUnique({
-        where: { id: req.userId },
-        select: { accessToken: true },
-      });
-      accessToken = user?.accessToken ?? null;
-    }
-
-    if (!accessToken) {
-      res.status(400).json({ error: 'GitHub authentication required to refresh PR status' });
-      return;
-    }
-
-    const response = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/pulls?head=${owner}:${branch}&state=all&per_page=1`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: 'application/vnd.github.v3+json',
-        },
-      }
-    );
-
-    if (!response.ok) {
-      res.status(502).json({ error: 'GitHub API request failed' });
-      return;
-    }
-
-    const pulls = (await response.json()) as Array<{ html_url: string }>;
-    if (pulls.length > 0) {
-      const newPrUrl = pulls[0].html_url;
-      const oldPrUrl = task.prUrl;
-
-      const updated = await prisma.task.update({
-        where: { id },
-        data: { prUrl: newPrUrl },
-        include: taskInclude,
-      });
-
-      if (task.batchId) {
-        await prisma.task.updateMany({
-          where: { batchId: task.batchId, prUrl: oldPrUrl },
-          data: { prUrl: newPrUrl },
-        });
-      }
-
-      broadcast('task:updated', flattenLabels(updated));
-      res.json({ prUrl: newPrUrl, refreshed: true });
-      return;
-    }
-
-    res.json({ prUrl: task.prUrl, refreshed: false, message: 'No PR found for this branch yet' });
-  } catch (error) {
-    console.error('[Tasks] Error refreshing PR:', error);
-    res.status(500).json({ error: 'Failed to refresh PR status' });
-  }
-});
-
-router.get('/:id/running', async (req: Request, res: Response) => {
-  try {
-    const id = req.params.id as string;
-    res.json({ running: isTaskRunning(id) });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to check task status' });
-  }
-});
-
-router.get('/:id/logs', async (req: Request, res: Response) => {
-  try {
-    const id = req.params.id as string;
-    let logs = getExecutionLogs(id);
-
-    if (logs.length === 0) {
-      const result = await prisma.$queryRaw<Array<{ executionLogs: unknown }>>`
-        SELECT "executionLogs" FROM tasks WHERE id = ${id}
-      `;
-      if (result.length > 0 && Array.isArray(result[0].executionLogs)) {
-        logs = result[0].executionLogs as unknown as typeof logs;
-      }
-    }
-
-    res.json({ logs });
-  } catch (error) {
-    console.error('[Tasks] Error getting execution logs:', error);
-    res.status(500).json({ error: 'Failed to get execution logs' });
-  }
-});
-
-router.post('/:id/cancel', async (req: Request, res: Response) => {
-  try {
-    const id = req.params.id as string;
-    console.log(`[Tasks] Cancel requested for task ${id.slice(0, 8)}`);
-
-    if (!isTaskRunning(id)) {
-      console.log(`[Tasks] Task ${id.slice(0, 8)} is not running, cannot cancel`);
-      res.status(400).json({ error: 'Task is not running' });
-      return;
-    }
-
-    const result = await cancelTask(id);
-
-    if (!result.success) {
-      console.log(`[Tasks] Cancel failed: ${result.error}`);
-      res.status(400).json({ error: result.error });
-      return;
-    }
-
-    console.log(`[Tasks] Task ${id.slice(0, 8)} cancelled`);
-    res.json({ message: 'Task cancelled' });
-  } catch (error) {
-    console.error('[Tasks] Error cancelling task:', error);
-    res.status(500).json({ error: 'Failed to cancel task' });
   }
 });
 
