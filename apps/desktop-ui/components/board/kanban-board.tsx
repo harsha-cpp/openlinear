@@ -347,6 +347,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
         <TaskFormDialog
           open={isTaskFormOpen}
           onOpenChange={setIsTaskFormOpen}
+          onSuccess={() => fetchTasks({ silent: true })}
           defaultStatus={defaultStatus}
           defaultProjectId={props.projectId}
           projects={props.projects}
