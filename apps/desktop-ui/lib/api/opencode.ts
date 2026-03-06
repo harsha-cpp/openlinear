@@ -7,7 +7,6 @@ export interface ProviderInfo {
 }
 
 export interface SetupStatus {
-  container: { status: string; hostPort: number } | null;
   providers: ProviderInfo[];
   ready: boolean;
 }
@@ -23,15 +22,6 @@ export async function getSetupStatus(): Promise<SetupStatus> {
     headers: getAuthHeader(),
   });
   if (!res.ok) throw new Error('Failed to get setup status');
-  return res.json();
-}
-
-export async function ensureContainer(): Promise<{ status: string; hostPort: number; baseUrl: string }> {
-  const res = await fetch(`${API_URL}/api/opencode/container`, {
-    method: 'POST',
-    headers: getAuthHeader(),
-  });
-  if (!res.ok) throw new Error('Failed to ensure container');
   return res.json();
 }
 
