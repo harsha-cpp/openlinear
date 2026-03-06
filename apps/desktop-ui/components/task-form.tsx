@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Loader2, FolderKanban, CalendarDays } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -51,7 +51,8 @@ interface TaskFormDialogProps {
   projects?: Project[]
 }
 
-import { API_URL } from "@/lib/api/client"
+import { API_URL, getAuthHeader } from "@/lib/api/client"
+import { toast } from "sonner"
 
 const API_BASE_URL = `${API_URL}/api`
 
@@ -99,6 +100,43 @@ export function TaskFormDialog({
     }
   }, [defaultStatus, defaultProjectId, open, form, hasProjects])
 
+  const onSubmit = useCallback(async (values: FormValues) => {
+    try {
+      setIsSubmitting(true)
+
+      const response = await fetch(`${API_BASE_URL}/tasks`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeader(),
+        },
+         body: JSON.stringify({
+           title: values.title,
+           description: values.description || undefined,
+           status: values.status,
+           labelIds: values.labelIds.length > 0 ? values.labelIds : undefined,
+           projectId: values.projectId || undefined,
+           dueDate: values.dueDate ? new Date(values.dueDate).toISOString() : undefined,
+         }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }))
+        throw new Error(errorData.error || `Failed to create task: ${response.statusText}`)
+      }
+
+      form.reset()
+      onOpenChange(false)
+      onSuccess?.()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create task"
+      toast.error(message)
+      console.error("Error creating task:", error)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }, [form, onOpenChange, onSuccess])
+
   // ⌘+Enter keyboard shortcut
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -112,40 +150,7 @@ export function TaskFormDialog({
       window.addEventListener("keydown", handleKeyDown)
       return () => window.removeEventListener("keydown", handleKeyDown)
     }
-  }, [open, form])
-
-  const onSubmit = async (values: FormValues) => {
-    try {
-      setIsSubmitting(true)
-
-      const response = await fetch(`${API_BASE_URL}/tasks`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-         body: JSON.stringify({
-           title: values.title,
-           description: values.description || undefined,
-           status: values.status,
-           labelIds: values.labelIds.length > 0 ? values.labelIds : undefined,
-           projectId: values.projectId || undefined,
-           dueDate: values.dueDate ? new Date(values.dueDate).toISOString() : undefined,
-         }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to create task: ${response.statusText}`)
-      }
-
-      form.reset()
-      onOpenChange(false)
-      onSuccess?.()
-    } catch (error) {
-      console.error("Error creating task:", error)
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
+  }, [open, form, onSubmit])
 
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
