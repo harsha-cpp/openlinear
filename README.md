@@ -6,6 +6,8 @@
 
 Describe what you want built. Click execute. Get a pull request.
 
+[![npm version](https://img.shields.io/npm/v/openlinear.svg)](https://www.npmjs.com/package/openlinear)
+[![npm downloads](https://img.shields.io/npm/dm/openlinear.svg)](https://www.npmjs.com/package/openlinear)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
 [![pnpm](https://img.shields.io/badge/pnpm-9-orange)](https://pnpm.io)
