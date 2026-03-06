@@ -19,11 +19,6 @@ await build({
     'bcryptjs',
     'dotenv',
     'zod',
-    'dockerode',
-    '@anthropic-ai/sdk',
-    '@opencode-ai/sdk',
-    'openai',
-    'get-port',
   ],
   banner: {
     // Prisma generated client uses require() internally (CJS).

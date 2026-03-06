@@ -5,6 +5,12 @@
   "type": "module",
   "main": "./src/index.ts",
   "bin": "./dist/index.js",
+  "exports": {
+    ".": "./src/index.ts",
+    "./app": "./src/app.ts",
+    "./sse": "./src/sse.ts",
+    "./middleware": "./src/middleware/auth.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "node esbuild.config.js",
@@ -14,25 +20,19 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.74.0",
-    "@opencode-ai/sdk": "^1.2.5",
     "@openlinear/db": "workspace:*",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
-    "dockerode": "^4.0.9",
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
-    "get-port": "^7.1.0",
     "jsonwebtoken": "^9.0.3",
-    "openai": "^6.22.0",
     "zod": "^3.25.6"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.17",
-    "@types/dockerode": "^4.0.1",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.14.0",
