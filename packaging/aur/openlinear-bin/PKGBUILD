@@ -39,7 +39,8 @@ else
   export WEBKIT_DISABLE_DMABUF_RENDERER=1
   export APPIMAGE_EXTRACT_AND_RUN=1
 fi
-exec /opt/openlinear/openlinear.AppImage "$@"
+nohup /opt/openlinear/openlinear.AppImage "$@" > /dev/null 2>&1 &
+disown
 EOF
   chmod 755 "${pkgdir}/usr/bin/openlinear"
 
