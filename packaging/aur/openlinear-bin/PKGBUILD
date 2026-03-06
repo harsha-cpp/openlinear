@@ -13,6 +13,7 @@ optdepends=(
 )
 provides=('openlinear')
 conflicts=('openlinear')
+options=('!strip' '!debug')
 source=(
   "openlinear-${pkgver}-x86_64.AppImage::https://github.com/kaizen403/openlinear/releases/download/v${pkgver}/openlinear-${pkgver}-x86_64.AppImage"
   "openlinear.desktop"
