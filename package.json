@@ -12,7 +12,11 @@
     "db:seed": "pnpm --filter @openlinear/api exec tsx ../../packages/db/prisma/seed.ts",
     "db:studio": "pnpm --filter db db:studio",
     "build:sidecar": "./scripts/build-sidecar.sh",
-    "build:desktop": "pnpm --filter @openlinear/desktop tauri build"
+    "build:desktop": "pnpm --filter @openlinear/desktop tauri build",
+    "build:app": "./scripts/build-app.sh",
+    "build:app:fast": "./scripts/build-app.sh --skip-sidecar",
+    "run:app": "./scripts/run-app.sh",
+    "run:app:fresh": "./scripts/run-app.sh --build"
   },
   "devDependencies": {
     "turbo": "^2.8.9",
