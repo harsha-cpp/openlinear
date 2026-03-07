@@ -4,7 +4,7 @@
 
 - Node.js 18+
 - pnpm
-- Docker (for PostgreSQL and OpenCode worker containers)
+- Docker (for PostgreSQL database)
 
 ## Installation
 
@@ -22,17 +22,20 @@ pnpm db:push
 
 ## Running the App
 
-Start both the API sidecar and the desktop UI:
+For local development you need three processes: the cloud API (metadata), the local sidecar (execution), and the desktop app:
 
 ```bash
-# Terminal 1: API server
+# Terminal 1: Cloud metadata API
 pnpm --filter @openlinear/api dev
 
-# Terminal 2: Desktop app
+# Terminal 2: Local execution sidecar
+pnpm --filter @openlinear/sidecar dev
+
+# Terminal 3: Desktop app
 pnpm --filter @openlinear/desktop dev
 ```
 
-The API runs on `http://localhost:3001` by default. The desktop UI opens a Tauri window pointing at the Next.js dev server.
+The API runs on `http://localhost:3001` and handles all metadata (auth, tasks, teams, repos, etc.). The sidecar runs separately and handles task execution, OpenCode, batch runs, and brainstorm. The desktop app opens a Tauri window pointing at the Next.js dev server.
 
 ## Connect a Repository
 

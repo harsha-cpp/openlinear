@@ -1,139 +1,203 @@
-# CI/CD Pipeline
+# CI/CD
 
-Two GitHub Actions workflows handle all automation. One deploys the API + frontend to the production droplet and auto-tags releases. The other builds desktop releases and publishes to npm.
+A complete reference for the OpenLinear build, deploy, and release pipeline.
+
+## Flow Architecture
 
 ```
-main push ──→ deploy.yml ──→ checks ──→ SSH deploy ──→ health check ──→ auto-tag (v0.1.XX)
-tag push  ──→ release.yml ──→ build desktop (Tauri) ──→ GitHub Release ──→ npm publish
+  dev branch                   dev + main                     tags (v*)
+──────────────────────────────────────────────────────────────────────────
+
+  git push origin dev          git push origin dev:main       just release patch
+         │                              │                             │
+         ▼                              │                             ▼
+  ┌─────────────────┐                  │                 ┌──────────────────────────┐
+  │    dev.yml      │                  │                 │       release.yml         │
+  │                 │                  │                 │                          │
+  │ lint-typecheck  │                  │                 │  build-linux             │
+  │ test         (parallel)            │                 │  (ubuntu-22.04)     ──┐  │
+  │ build           │                  │                 │                       │  │
+  └─────────────────┘                  │                 │  build-macos-intel    │  │
+                                       ▼                 │  (macos-13)        ───┼──┼──→ create-release
+                              ┌────────────────────┐     │                       │  │    (GitHub Release)
+                              │    deploy.yml       │     │  build-macos-arm      │  │         │
+                              │                     │     │  (macos-14)        ───┘  │         ▼
+                              │  checks             │     │                          │  publish-cli
+                              │  (typecheck +       │     │  (3 builds parallel)     │  (GitHub Packages)
+                              │   build all +       │     └──────────────────────────┘
+                              │   tests vs pg)      │
+                              │       │             │
+                              │  deploy             │
+                              │  (SSH → droplet)    │
+                              │       │             │
+                              │  diagnostics        │
+                              │  (pm2 + port check) │
+                              │       │             │
+                              │  verify             │
+                              │  (curl /health)     │
+                              └────────────────────┘
+
+  fires on: push to dev         fires on: push to dev OR main
+  (checks only, no deploy)      (always — no path filter)
 ```
+
+### What triggers what
+
+| Event | Workflows fired |
+|-------|----------------|
+| `git push origin dev` | `dev.yml` (checks) + `deploy.yml` (deploy) |
+| `git push origin dev:main` | `deploy.yml` (deploy) |
+| `just release patch/minor/major` | `release.yml` (full release build) |
+
+> `deploy.yml` fires on **both `dev` and `main`**. If you push to `dev` and only want checks, use `[skip ci]` in your commit message or run `workflow_dispatch` on `dev.yml` manually instead of pushing.
+
+---
+
+## Branch Strategy
+
+- **`dev`** — default branch. All work happens here.
+- **`main`** — production. Promote when ready: `git push origin dev:main`
+- **tags** — releases. Created by `just release`, never auto-generated.
+
+```
+dev ──→ main ──→ v*
+(work) (deploy) (release)
+```
+
+---
 
 ## Workflows
 
-### `deploy.yml` — Deploy to Production + Auto Tag
+### `dev.yml` — Dev Checks
 
-**Trigger:** Push to `main` (ignores docs, landing, desktop, packaging changes).
+**Trigger:** Push to `dev`. Also `workflow_dispatch`.
 
-**Concurrency:** Cancels in-progress deploys when a new push arrives.
-
-| Job | What it does | Timeout |
-|-----|-------------|---------|
-| **checks** | Install deps, generate Prisma, push test schema, typecheck API + desktop-ui, build API, run API tests | 10 min |
-| **deploy** | SSH into droplet, run `scripts/deploy.sh` | 10 min |
-| **verify** | POST to `https://rixie.in/health`, retry 6 times | — |
-| **auto-tag** | After successful deploy, bump patch version across all files, commit, create + push git tag | — |
-
-Path filters skip the workflow entirely for changes that don't affect the deployed services:
-- `docs/**`, `*.md`, `LICENSE`
-- `apps/landing/**` (deployed via Vercel separately)
-- `apps/desktop/**`, `apps/intro-video/**`
-- `packaging/**`
-
-The auto-tag job bumps the version in `tauri.conf.json`, `package.json`, `PKGBUILD`, and `.SRCINFO`, commits with `[skip ci]`, and pushes a `v*` tag. This tag push triggers `release.yml`. Note: for the tag push to trigger `release.yml`, a `PAT_TOKEN` secret is needed (GitHub Actions won't trigger workflows from `GITHUB_TOKEN` pushes). Until then, tags can be pushed manually.
-
-### `release.yml` — Desktop Release + npm Publish
-
-**Trigger:** Tag push matching `v*` (e.g. `v0.1.23`).
-
-**Concurrency:** Per-tag group, does not cancel (releases must complete).
+**Concurrency:** Cancels in-progress run when a new push to `dev` arrives.
 
 | Job | What it does | Timeout |
 |-----|-------------|---------|
-| **build-release** | Build Tauri desktop app (AppImage + deb), strip Wayland libs from AppImage, create GitHub Release | 30 min |
-| **publish-npm** | Build + publish the `openlinear` npm package to npmjs.org | 10 min |
+| **lint-typecheck** | `pnpm typecheck` + `pnpm lint` across all packages | 10 min |
+| **test** | Spins up Postgres 16, pushes schema, runs `pnpm test` | 10 min |
+| **build** | `pnpm build` — verifies everything compiles | 10 min |
 
-The desktop app connects to the remote API (`https://rixie.in`) in production — no sidecar binary is bundled.
+All three jobs run in **parallel**.
 
-Caching:
-- **Rust build cache** — `~/.cargo` registry + `apps/desktop/src-tauri/target/`, keyed on `Cargo.lock` hash. Saves ~10 min on repeat builds.
-- **pnpm store** — via `actions/setup-node` `cache: pnpm`.
+---
 
-## Deploy Script (`scripts/deploy.sh`)
+### `deploy.yml` — API Deploy
 
-Runs on the droplet via SSH. Implements incremental deploys:
+**Trigger:** Push to `dev` **or** `main`. Also `workflow_dispatch`.
 
-1. **Pull** — `git pull origin main --ff-only`
-2. **Diff detection** — compares `OLD_HEAD` vs `NEW_HEAD` to determine what changed:
-   - `apps/api/**` → rebuild API
-   - `apps/desktop-ui/**` or `packages/**` → rebuild frontend
-   - `packages/db/**` → regenerate Prisma + push schema
-3. **Install** — only runs `pnpm install` if `package.json` or `pnpm-lock.yaml` changed
-4. **Build** — only rebuilds changed components
-5. **Restart** — PM2 `reload` for zero-downtime restart (only for changed services)
+**Concurrency:** `cancel-in-progress: false` — deploys always complete, never cancel mid-flight.
 
-On manual trigger (`workflow_dispatch`) or first deploy, everything rebuilds.
+| Job | Depends on | What it does |
+|-----|-----------|-------------|
+| **checks** | — | Typecheck + build all apps + run API tests vs fresh Postgres 16 |
+| **deploy** | checks | SSH into droplet → `scripts/deploy.sh` |
+| **diagnostics** | deploy (always runs) | `pm2 show`, port check, `curl localhost:3001/health` |
+| **verify** | — | Poll `https://rixie.in/health` for 200 |
 
-## Release Process
+`scripts/deploy.sh` pulls the latest code on the droplet, rebuilds what changed, and reloads PM2 for zero-downtime restarts.
 
-Releases are automated via the auto-tag job in `deploy.yml`. Every successful deploy to production automatically:
+---
 
-1. Bumps the patch version in all version files
-2. Commits with `[skip ci]` to prevent recursive triggers
-3. Creates and pushes a `v*` git tag
-4. The tag push triggers `release.yml` (builds desktop + publishes npm)
+### `release.yml` — Desktop + npm Release
 
-To release manually (e.g. if auto-tag isn't wired up with PAT_TOKEN yet):
+**Trigger:** Tag push matching `v*`.
 
-```bash
-# 1. Bump version in these files:
-#    - apps/desktop/src-tauri/tauri.conf.json  (version field)
-#    - packages/openlinear/package.json        (version field)
-#    - packaging/aur/openlinear-bin/PKGBUILD   (pkgver)
-#    - packaging/aur/openlinear-bin/.SRCINFO   (pkgver + source URLs)
+**Concurrency:** Per-tag, never cancels — releases must complete.
 
-# 2. Commit and tag
-git add -A && git commit -m "chore(release): vX.Y.Z [skip ci]"
-git tag vX.Y.Z
-git push origin main --tags
+| Job | Runner | What it does | Timeout |
+|-----|--------|-------------|---------|
+| **build-linux** | ubuntu-22.04 | Tauri → AppImage + .deb + API sidecar binary | 30 min |
+| **build-macos-intel** | macos-13 | Tauri → .dmg (x86_64) | 40 min |
+| **build-macos-arm** | macos-14 | Tauri → .dmg (aarch64) | 40 min |
+| **create-release** | ubuntu-22.04 | Collect artifacts → GitHub Release | 10 min |
+| **publish-cli** | ubuntu-22.04 | Publish `@kaizen403/openlinear-cli` to GitHub Packages | 10 min |
+
+All 3 build jobs run in parallel. `create-release` collects them. `publish-cli` fires after the release is created.
+
+**Artifacts per release:**
+
+```
+openlinear-{v}-x86_64.AppImage        Linux portable
+openlinear-{v}-x86_64.deb             Debian / Ubuntu
+openlinear-{v}-x86_64.dmg             macOS Intel
+openlinear-{v}-aarch64.dmg            macOS Apple Silicon
+openlinear-api-{v}-x86_64             API sidecar binary (Linux)
+@kaizen403/openlinear-cli@{v}         npm (GitHub Packages)
 ```
 
-## Artifacts
+---
 
-Each GitHub Release contains:
-- `openlinear-{version}-x86_64.AppImage` — Linux portable binary (~84 MB)
-- `openlinear-{version}-x86_64.deb` — Debian/Ubuntu package (~9 MB)
+## Releasing
 
-## Required GitHub Secrets
+### Cut a release
 
-| Secret | Description |
-|--------|-------------|
-| `DEPLOY_HOST` | Droplet IP address |
-| `DEPLOY_USER` | SSH username (root) |
-| `DEPLOY_SSH_KEY` | SSH private key for droplet access |
-| `NPM_TOKEN` | npm access token for publishing the `openlinear` package |
-| `PAT_TOKEN` | (Optional) GitHub PAT for auto-tag to trigger release.yml. Without this, tags must be pushed manually. |
+```bash
+just release patch   # 0.1.24 → 0.1.25  (bug fixes)
+just release minor   # 0.1.24 → 0.2.0   (new features)
+just release major   # 0.1.24 → 1.0.0   (breaking changes)
+```
 
-## Architecture Decisions
+What it does under the hood:
 
-**Why no sidecar in production builds?** The desktop app calls the remote API at `https://rixie.in` — the local sidecar binary is only for development. Removing it cut the AppImage size from ~108 MB to ~84 MB.
+1. Verifies working tree is clean
+2. Pulls latest `main` with `--ff-only`
+3. Bumps version in all 4 files:
+   - `apps/desktop/src-tauri/tauri.conf.json`
+   - `packages/openlinear/package.json`
+   - `packaging/aur/openlinear-bin/PKGBUILD`
+   - `packaging/aur/openlinear-bin/.SRCINFO`
+4. Commits: `chore(release): v0.2.0`
+5. Creates tag: `v0.2.0`
+6. Pushes commit + tag → `release.yml` fires
 
-**Why not deploy on `dev`?** Pushing to `dev` previously triggered production deploys. Removed to prevent accidental production deployments from development work.
+### Check version sync
 
-**Why `cancel-in-progress: true` on deploy?** If you push 3 commits in quick succession, only the latest one deploys. The earlier in-flight deploys are cancelled since they'd be immediately superseded.
+```bash
+just version
+```
 
-**Why `cancel-in-progress: false` on release?** Releases must complete — cancelling a half-uploaded GitHub Release corrupts it.
+Shows the version in all 4 files and flags any mismatch.
 
-**Why path filters?** Changes to docs, the landing page (Vercel), or the desktop app (release-only) don't need a production deploy. Saves CI minutes.
+### Set a specific version
 
-**Why Rust caching?** The Tauri/Rust compilation is the slowest step (~15 min cold, ~3 min cached). Caching `target/` and `~/.cargo` dramatically reduces release build times.
+```bash
+node scripts/bump-version.js 2.0.0
+```
 
-**Why is npm publish only in release.yml?** It was previously duplicated in both workflows. The deploy workflow would attempt to publish on every main push (wasteful, even with the version guard skip). npm publishes belong exclusively with tagged releases.
+---
+
+## Required Secrets
+
+Set these in GitHub → Settings → Secrets and variables → Actions:
+
+| Secret | Workflow | Description |
+|--------|---------|-------------|
+| `DEPLOY_HOST` | deploy.yml | Droplet IP or hostname |
+| `DEPLOY_USER` | deploy.yml | SSH username on the droplet |
+| `DEPLOY_SSH_KEY` | deploy.yml | SSH private key (contents, not path) |
+| `GITHUB_TOKEN` | release.yml | Auto-provided — used for GitHub Packages + Release creation |
+
+---
 
 ## Troubleshooting
 
-**Deploy fails with SSH timeout:**
-- Verify secrets are set: Settings → Secrets → Actions
-- Test manually: `ssh -i ~/.ssh/droplet_key root@<DEPLOY_HOST>`
+**Deploy ran when I only wanted checks**
+`deploy.yml` fires on `dev` too. Use `[skip ci]` in your commit message, or trigger `dev.yml` via `workflow_dispatch` instead of pushing directly.
 
-**Health check fails after deploy:**
-- SSH in and check PM2: `pm2 status && pm2 logs openlinear-api --lines 50`
-- Check port binding: `ss -ltnp | grep 3001`
+**Health check fails after deploy**
+SSH in and check: `pm2 status` and `pm2 logs openlinear-api --lines 50`. Check port: `ss -ltnp | grep 3001`.
 
-**Release build fails on Rust compilation:**
-- Usually a cache corruption issue. Delete the `rust-release-*` cache from the Actions → Caches page and re-run.
+**Release Rust build fails**
+Usually cache corruption. Delete `rust-linux-*` or `rust-macos-*` caches under Actions → Caches, then re-run the tag.
 
-**npm publish fails with ENEEDAUTH:**
-- Verify that the `NPM_TOKEN` secret is set in Settings → Secrets → Actions
-- Generate a new token at https://www.npmjs.com/ → Access Tokens → Automation
+**npm publish fails**
+`GITHUB_TOKEN` is auto-provided but the package must have `"publishConfig": {"registry": "https://npm.pkg.github.com"}` in `packages/openlinear-cli/package.json`.
 
-**Two workflows running on same commit:**
-- Expected when you push a tag to `main`. `deploy.yml` deploys the API. `release.yml` builds the desktop. They don't conflict — different concurrency groups.
+**Adding AUR publish**
+Add a `publish-aur` job that runs after `create-release`, updates `PKGBUILD` checksums, and pushes to the AUR git remote. Needs an `AUR_SSH_PRIVATE_KEY` secret.
+
+**Adding Windows builds**
+Add a `build-windows` job with `runs-on: windows-latest`, install Rust, build Tauri, upload `.msi`/`.exe`. Add `build-windows` to the `needs` list in `create-release`.

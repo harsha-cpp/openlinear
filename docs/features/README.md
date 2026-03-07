@@ -20,7 +20,7 @@ Complete documentation for every feature in OpenLinear.
 
 ## Integrations
 
-- [OpenCode Integration](opencode-integration.md) -- container-per-user AI agent architecture
+- [OpenCode Integration](opencode-integration.md) -- host-based AI agent integration
 - [GitHub Integration](github-integration.md) -- OAuth, repository management, PR creation
 
 ## Configuration
@@ -29,6 +29,6 @@ Complete documentation for every feature in OpenLinear.
 
 ## Technical Reference
 
-- [Architecture](architecture.md) -- monorepo structure, container architecture, deployment
+- [Architecture](architecture.md) -- monorepo structure, host-based execution, deployment
 - [Real-time Events](real-time-events.md) -- SSE event catalog
 - [API Reference](api-reference.md) -- all REST endpoints

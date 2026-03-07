@@ -9,11 +9,15 @@ openlinear/
       components/     React components (board, task forms, overlays, settings)
       hooks/          Custom hooks (SSE subscription, auth)
       lib/            API client, utilities
-    api/              Express API sidecar
+    api/              Cloud metadata API (deployed at rixie.in)
       src/
-        routes/       REST endpoints (tasks, labels, batches, auth, repos, teams, projects, inbox, settings)
-        services/     Business logic (execution, batch, opencode, github, worktree, delta-buffer)
-        middleware/    Auth middleware (JWT verification)
+        routes/       REST endpoints (auth, tasks, labels, settings, teams, projects, inbox, repos)
+        services/     Business logic (github, team-scope)
+        middleware/   Auth middleware (JWT verification)
+    sidecar/          Local execution sidecar (bundled in Tauri desktop app)
+      src/
+        routes/       Execution routes (execute, cancel, opencode, batches, brainstorm, transcribe)
+        services/     Execution logic (execution, opencode, batch, brainstorm, worktree, delta-buffer, git-identity)
   packages/
     db/               Prisma schema + generated client
       prisma/
@@ -25,7 +29,7 @@ openlinear/
 
 ## Desktop App
 
-Built with Tauri (Rust shell wrapping the Next.js frontend). The API runs as a sidecar process alongside the desktop window.
+Built with Tauri (Rust shell wrapping the Next.js frontend). The sidecar binary (`openlinear-sidecar`) runs as a Tauri sidecar process alongside the desktop window, handling all execution locally.
 
 Key Tauri integrations:
 - `check_opencode` command: checks if the OpenCode binary exists on the system
@@ -63,20 +67,29 @@ PostgreSQL via Prisma ORM. Schema lives at `packages/db/prisma/schema.prisma`.
 
 ## API
 
-Express server with JSON body parsing, CORS, and cookie support. Routes are mounted under `/api/`:
+The cloud API (`apps/api`) is an Express server deployed at rixie.in. It handles metadata only — no execution, no OpenCode. Routes are mounted under `/api/`:
 
+**Cloud API routes:**
 - `/api/auth` -- username/password registration and login, GitHub OAuth
 - `/api/repos` -- repository management
-- `/api/tasks` -- task CRUD and execution
+- `/api/tasks` -- task CRUD (no execution endpoints)
 - `/api/labels` -- label CRUD and task-label associations
 - `/api/settings` -- execution settings
-- `/api/batches` -- batch execution
 - `/api/teams` -- team CRUD and membership
 - `/api/projects` -- project CRUD
 - `/api/inbox` -- completed task notifications
 - `/api/events` -- SSE endpoint
-- `/api/opencode` -- OpenCode container management, provider auth, status
 - `/health` -- health check
+
+**Local Sidecar routes (`apps/sidecar`):**
+- `/api/tasks/:id/execute` -- trigger task execution
+- `/api/tasks/:id/cancel` -- cancel running execution
+- `/api/batches` -- batch execution (parallel and queue modes)
+- `/api/opencode` -- OpenCode management, provider auth, status
+- `/api/brainstorm` -- AI task generation
+- `/api/transcribe` -- audio transcription
+
+The sidecar imports the shared Express app via `@openlinear/api/app`, SSE utilities via `@openlinear/api/sse`, and auth middleware via `@openlinear/api/middleware`, then adds its execution routes on top.
 
 ### Authentication
 
@@ -94,51 +107,23 @@ Server-Sent Events (SSE) at `GET /api/events`. Each connected client gets a uniq
 
 **Batch execution:** bare clone as the main repo, git worktrees for each task. Worktrees are created from the default branch. After completion, task branches are merged into a batch branch via temporary worktrees with `--no-ff` merges.
 
-## Container-Per-User Architecture
+## Host-Based Execution
 
-Each user gets a dedicated Docker container running OpenCode for isolated task execution. The `container-manager` service handles:
+OpenCode runs directly on the host machine, managed by the local sidecar (`apps/sidecar`). The sidecar is a separate package from the cloud API. It connects to the cloud API for task metadata, then runs all execution locally. Each task is isolated in its own git worktree with an independent branch and working directory. Provider credentials are configured per-user through the OpenCode instance the sidecar manages.
 
-- **Port allocation**: dynamic host ports in the 30000--31000 range
-- **Container lifecycle**: create, health-check, recover on API restart, idle cleanup
-- **Resource limits**: 512 MB memory, 512 CPU shares, 256 max PIDs per container
-- **Persistent volumes**: auth tokens, config files, and cloned repos survive container restarts
+See [OpenCode Integration](opencode-integration.md) for full details.
 
-Containers idle for 2 hours are automatically stopped. See [OpenCode Integration](opencode-integration.md) for full details.
+## Production Database
 
-## Docker Services
-
-Defined in `docker-compose.yml`:
-
-| Service | Image | Purpose |
-|---------|-------|---------|
-| `postgres` | `postgres:16-alpine` | PostgreSQL database (port 5432) |
-| `opencode-worker` | `opencode-worker:latest` | Build target for the per-user worker container (build-only profile) |
-
-The `opencode-worker` image is built from `docker/opencode-worker/Dockerfile` (Node 20 Alpine with git, OpenCode CLI/SDK, non-root user).
+The cloud API uses Neon cloud PostgreSQL. The `DATABASE_URL` environment variable must point to the Neon connection string in production.
 
 ## CI/CD
 
 Release builds are triggered by pushing a `v*` tag. The GitHub Actions workflow at `.github/workflows/release.yml` builds:
-- Linux AppImage and .deb desktop bundles
-- A standalone API sidecar binary
+- Linux AppImage and .deb desktop bundles (Tauri, bundling `openlinear-sidecar` and OpenCode binaries)
+- The sidecar binary (`openlinear-sidecar`) for each supported target triple
 
 Artifacts are uploaded to the corresponding GitHub Release.
-
-## Local Development vs NPM Package
-
-There is an important distinction between developing OpenLinear locally and installing the published npm package:
-
-**1. Developing Locally (`pnpm dev`)**
-When you run `pnpm dev` in the cloned repository, it runs `./scripts/dev.sh`. This is strictly for contributors to test and build the application. It automatically:
-- Starts a temporary local PostgreSQL database using Docker (so you don't mess up production data).
-- Seeds the database with test data.
-- Starts the API server.
-- Starts the Tauri desktop app (or falls back to a Next.js web view if Tauri isn't fully configured on your machine).
-
-**2. The Published NPM Package (`npm install -g @kaizen403/openlinear`)**
-The published npm package is just a lightweight launcher for end-users. It does **not** include the `pnpm dev` script, does not require Docker, and does not start a local database. Instead, the npm package:
-- Downloads the pre-compiled, standalone Desktop Application (Linux AppImage) directly from GitHub Releases during the `postinstall` step.
-- Acts as a CLI shortcut (`openlinear`) that launches the downloaded desktop app.
 
 ## Distribution
 
@@ -147,5 +132,5 @@ The published npm package is just a lightweight launcher for end-users. It does 
 | AppImage | Linux | Self-contained, no install needed |
 | .deb | Linux (Debian/Ubuntu) | Standard package |
 | AUR | Arch Linux | `openlinear-bin` package in `packaging/aur/` |
-| npm installer | Any | `@kaizen403/openlinear` via GitHub Packages, downloads AppImage on install |
+| npm CLI | Any | `@openlinear/openlinear-cli` via GitHub Packages, downloads AppImage on install |
 | GitHub Releases | Any | Tag-triggered CI builds (`v*` tags) |

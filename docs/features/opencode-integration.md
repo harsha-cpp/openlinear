@@ -1,47 +1,36 @@
 # OpenCode Integration
 
-OpenCode is the AI coding agent that executes tasks. OpenLinear runs each user's OpenCode instance inside a dedicated Docker container, providing isolation between users.
+OpenCode is the AI coding agent that executes tasks. It runs directly on the host machine, managed by the local sidecar (`apps/sidecar`) — no containers, no isolation overhead.
 
 ## Architecture
 
-OpenLinear uses a **container-per-user** model. When a user triggers their first task execution (or explicitly starts a container), the system:
+The OpenCode binary is bundled with the desktop app alongside the sidecar binary. When the sidecar starts, it spawns the OpenCode server process and communicates with it via the `@opencode-ai/sdk` client. The cloud API (`apps/api`) has no involvement in OpenCode management.
 
-1. Pulls the `opencode-worker` Docker image
-2. Creates a container named `opencode-user-{userId}`
-3. Binds a dynamically allocated host port (range 30000--31000) to the container's internal port 4096
-4. Mounts three named volumes for persistence:
-   - `opencode-auth-{userId}` → `/home/opencode/.local/share/opencode` (auth tokens)
-   - `opencode-config-{userId}` → `/home/opencode/.config/opencode` (config files)
-   - `opencode-repos-{userId}` → `/home/opencode/repos` (cloned repositories)
-5. Waits for the OpenCode server inside the container to become healthy
-6. Returns the container's base URL for API calls
+### Binary Resolution
 
-Each container runs with resource limits: 512 MB memory, 512 CPU shares, 256 max PIDs.
+The sidecar resolves the OpenCode binary using this priority:
 
-## Container Lifecycle
+1. `OPENCODE_BIN` environment variable (explicit override)
+2. Bundled sibling binary next to `process.execPath` with Tauri target-triple naming (e.g., `opencode-x86_64-unknown-linux-gnu`)
+3. Fallback to `opencode` in system PATH (dev mode)
 
-| Status | Description |
-|--------|-------------|
-| `starting` | Container created, waiting for OpenCode server to respond |
-| `running` | Healthy and accepting requests |
-| `stopping` | Shutting down |
-| `stopped` | Removed |
-| `error` | Failed to start or became unhealthy |
+### Lifecycle
 
-### Idle Cleanup
+On sidecar startup:
+1. Resolve the OpenCode binary path
+2. Spawn the OpenCode server process
+3. Wait for the server to become healthy
+4. Create an SDK client connected to the server
 
-Containers idle for 2 hours (configurable via `CONTAINER_IDLE_TIMEOUT_MS`) are automatically stopped and removed. The cleanup check runs every 5 minutes.
-
-### Recovery
-
-On API restart, the container manager discovers existing containers by querying Docker for containers with labels `app=openlinear` and `component=opencode-worker`. Running containers are re-adopted; stopped containers are removed.
+On sidecar shutdown, the OpenCode process is gracefully terminated.
 
 ## SDK
 
 OpenLinear uses `@opencode-ai/sdk` which provides:
 - `createOpencodeClient()` -- creates a client for a running OpenCode server
-- `createOpencodeServer()` -- used inside the worker container to start the OpenCode server
 - `OpencodeClient` -- type for session management, event subscription, provider configuration
+
+Note: The SDK's `createOpencodeServer()` is **not used** because it hardcodes `spawn("opencode", ...)` which can't find the bundled sidecar binary. OpenLinear uses a custom `spawnOpencodeServer()` that accepts a resolved binary path.
 
 ## Session Management
 
@@ -76,56 +65,23 @@ Text and reasoning arrive as small character-by-character deltas. The delta buff
 
 Users configure which LLM provider OpenCode uses through the provider auth API. Two methods are supported:
 
-**API Key:** Set a provider's API key directly via `POST /api/opencode/auth`.
+**API Key:** Set a provider's API key directly via `POST /api/opencode/auth` (sidecar route).
 
-**OAuth:** Start an OAuth flow via `POST /api/opencode/auth/oauth/authorize`, then complete it with `POST /api/opencode/auth/oauth/callback`.
+**OAuth:** Start an OAuth flow via `POST /api/opencode/auth/oauth/authorize`, then complete it with `POST /api/opencode/auth/oauth/callback`. Both are sidecar routes.
 
-Provider credentials are stored inside the container's persistent volume, so they survive container restarts.
+Provider credentials are stored in the OpenCode config directory on the host machine.
 
 ## API Endpoints
 
-All endpoints except `/status` require authentication.
+All `/api/opencode/*` endpoints are served by the local sidecar (`apps/sidecar`), not the cloud API. All endpoints except `/status` require authentication.
 
 ### `GET /api/opencode/status`
 
-Returns the overall OpenCode system state.
-
-```json
-{
-  "mode": "container-per-user",
-  "activeContainers": 2,
-  "containers": [
-    {
-      "userId": "...",
-      "status": "running",
-      "hostPort": 30001,
-      "baseUrl": "http://127.0.0.1:30001",
-      "lastActivity": "2025-01-15T10:30:00.000Z",
-      "createdAt": "2025-01-15T09:00:00.000Z"
-    }
-  ]
-}
-```
-
-### `GET /api/opencode/container`
-
-**Auth: required.** Get the authenticated user's container status. Returns `{ status: "none" }` if no container exists, or the container's status, host port, base URL, last activity, and creation time.
-
-### `POST /api/opencode/container`
-
-**Auth: required.** Create or start a container for the authenticated user. Idempotent -- returns the existing container if one is already running.
-
-Response: `{ status, hostPort, baseUrl }`
-
-### `DELETE /api/opencode/container`
-
-**Auth: required.** Stop and remove the authenticated user's container.
-
-Response: `{ success: true }`
+Returns the overall OpenCode system state (whether the sidecar is running and healthy).
 
 ### `GET /api/opencode/providers`
 
-**Auth: required.** List available LLM providers from the user's OpenCode instance.
+**Auth: required.** List available LLM providers from the OpenCode instance.
 
 ### `GET /api/opencode/providers/auth`
 
@@ -157,24 +113,12 @@ Returns the result of the OAuth token exchange.
 
 ## Model Configuration
 
-OpenLinear does not configure which model OpenCode uses. That comes from OpenCode's own config files (stored in the container's persistent config volume at `/home/opencode/.config/opencode`).
-
-## Worker Container
-
-The `opencode-worker` Docker image is defined in `docker/opencode-worker/Dockerfile`. It is based on `node:20-alpine` and includes:
-
-- `git`, `curl`, `openssh-client` for repository operations
-- `@opencode-ai/opencode` and `@opencode-ai/sdk` installed globally
-- A non-root `opencode` user (UID 1000)
-- A health check that pings `http://localhost:4096/` every 30 seconds
-- An entrypoint script that starts the OpenCode server on port 4096
-
-The image is built via `docker compose build opencode-worker` (defined in `docker-compose.yml` under the `build-only` profile).
+OpenLinear does not configure which model OpenCode uses. That comes from OpenCode's own config files (stored in the host's OpenCode config directory, typically `~/.config/opencode`).
 
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OPENCODE_IMAGE` | Docker image for worker containers | `opencode-worker:latest` |
-| `DOCKER_HOST` | Docker daemon socket path | `/var/run/docker.sock` |
-| `CONTAINER_IDLE_TIMEOUT_MS` | Idle time before auto-cleanup | `7200000` (2 hours) |
+| `OPENCODE_BIN` | Path to the OpenCode binary (overrides bundled sidecar) | -- |
+| `OPENCODE_PORT` | OpenCode server port | `4096` |
+| `OPENCODE_HOST` | OpenCode server host | `127.0.0.1` |

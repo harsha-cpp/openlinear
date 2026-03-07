@@ -276,20 +276,7 @@ SSE endpoint. Optional query param: `clientId`. See [Real-time Events](real-time
 ## OpenCode
 
 ### `GET /api/opencode/status`
-Returns OpenCode system state: `{ mode, activeContainers, containers[] }`.
-
-### `GET /api/opencode/container`
-**Auth: required.** Get the authenticated user's container status. Returns `{ status: "none" }` if no container exists.
-
-### `POST /api/opencode/container`
-**Auth: required.** Create or start a container for the authenticated user. Idempotent.
-
-Response: `{ status, hostPort, baseUrl }`
-
-### `DELETE /api/opencode/container`
-**Auth: required.** Stop and remove the authenticated user's container.
-
-Response: `{ success: true }`
+Returns OpenCode system state (whether the sidecar is running and healthy).
 
 ### `GET /api/opencode/providers`
 **Auth: required.** List available LLM providers from the user's OpenCode instance.

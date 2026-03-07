@@ -15,7 +15,9 @@ Running a single task through an AI agent. This is the core feature of OpenLinea
 
 ## Starting Execution
 
-**API:** `POST /api/tasks/:id/execute`
+**Sidecar:** `POST /api/tasks/:id/execute`
+
+This endpoint is served by the local sidecar (`apps/sidecar`), not the cloud API. The sidecar fetches task metadata from the cloud API, then handles execution entirely on the host machine.
 
 The endpoint checks:
 - Task is not already running
@@ -67,7 +69,7 @@ Each task has a 30-minute timeout. If the agent hasn't finished by then, the tas
 
 ## Cancellation
 
-**API:** `POST /api/tasks/:id/cancel`
+**Sidecar:** `POST /api/tasks/:id/cancel`
 
 Cancelling a task:
 1. Calls `client.session.abort()` to stop the OpenCode session
@@ -81,7 +83,7 @@ On completion with changes:
 - If a GitHub access token is available, creates a real PR via `POST https://api.github.com/repos/:owner/:repo/pulls`
 - If no token or the API call fails, returns a GitHub compare URL for manual PR creation
 
-**Refresh PR:** `POST /api/tasks/:id/refresh-pr` -- checks if a PR has been created for a compare-URL branch and updates the task's `prUrl` if found.
+**Refresh PR:** `POST /api/tasks/:id/refresh-pr` (sidecar) -- checks if a PR has been created for a compare-URL branch and updates the task's `prUrl` if found.
 
 ## Execution Drawer
 
@@ -100,6 +102,6 @@ After execution completes, the system generates a brief outcome summary stored o
 
 The outcome is displayed in the task detail view, giving a quick summary of what the AI agent accomplished without opening the full log.
 
-## Container Isolation
+## Execution Isolation
 
-Task execution runs inside per-user Docker containers. Each user's OpenCode instance is isolated with its own filesystem, resources, and provider credentials. See [OpenCode Integration](opencode-integration.md) for details on the container-per-user architecture.
+Task execution runs on the host machine via the local sidecar (`apps/sidecar`). The sidecar connects to the cloud API for task metadata, then runs OpenCode directly on your machine. Each task is isolated in its own git worktree with an independent branch and working directory. Provider credentials are configured per-user through the OpenCode instance managed by the sidecar. See [OpenCode Integration](opencode-integration.md) for details.
