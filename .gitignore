@@ -14,3 +14,7 @@ coverage
 *.tsbuildinfo
 package-lock.json
 \nnpm-recovery-codes.txt
+
+# Desktop binaries (built by scripts/build-sidecar.sh)
+apps/desktop/src-tauri/binaries/
+.tmp/
