@@ -234,7 +234,7 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
         },
         include: projectInclude,
       });
-    });
+    }, { maxWait: 10000, timeout: 15000 });
 
     const result = transformProject(project);
     broadcast('project:updated', result);

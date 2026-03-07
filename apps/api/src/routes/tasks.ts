@@ -219,7 +219,9 @@ router.post('/', async (req: Request, res: Response) => {
     let task: any;
 
     if (resolvedTeamId) {
-      task = await prisma.$transaction(async (tx) => {
+      // Create task inside transaction (for atomic issue number increment),
+      // but keep the include outside to minimize lock duration.
+      const created = await prisma.$transaction(async (tx) => {
         const team = await tx.team.update({
           where: { id: resolvedTeamId },
           data: { nextIssueNumber: { increment: 1 } },
@@ -228,7 +230,7 @@ router.post('/', async (req: Request, res: Response) => {
         const number = team.nextIssueNumber - 1;
         const identifier = `${team.key}-${number}`;
 
-        const created = await tx.task.create({
+        return tx.task.create({
           data: {
             title,
             description,
@@ -243,9 +245,13 @@ router.post('/', async (req: Request, res: Response) => {
               create: labelIds.map((labelId) => ({ labelId })),
             },
           },
-          include: taskInclude,
+          select: { id: true },
         });
-        return created;
+      }, { maxWait: 10000, timeout: 15000 });
+
+      task = await prisma.task.findUniqueOrThrow({
+        where: { id: created.id },
+        include: taskInclude,
       });
     } else {
       task = await prisma.task.create({

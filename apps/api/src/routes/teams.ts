@@ -216,7 +216,7 @@ router.delete('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
       await tx.projectTeam.deleteMany({ where: { teamId: id } });
       await tx.task.updateMany({ where: { teamId: id }, data: { teamId: null } });
       await tx.team.delete({ where: { id } });
-    });
+    }, { maxWait: 10000, timeout: 15000 });
     broadcast('team:deleted', { id });
     res.status(204).send();
   } catch (error: unknown) {

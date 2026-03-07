@@ -128,7 +128,7 @@ router.post('/register', async (req: Request, res: Response) => {
       });
 
       return newUser;
-    });
+    }, { maxWait: 10000, timeout: 15000 });
 
     const token = jwt.sign(
       { userId: user.id, username: user.username },
