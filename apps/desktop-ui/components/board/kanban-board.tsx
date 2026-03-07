@@ -215,6 +215,8 @@ export function KanbanBoard(props: KanbanBoardProps) {
     showProviderSetup,
     setShowProviderSetup,
     handleProviderSetupComplete,
+    pendingPermissions,
+    handlePermissionRespond,
   } = useKanbanBoard(props);
 
   // Lift live config state up to the page header
@@ -262,6 +264,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
             isBatchTask={batchTaskIds.includes(task.id)}
             isCompletedBatchTask={isCompletedBatch}
             isDragging={snapshot.isDragging}
+            pendingPermissions={(pendingPermissions[task.id] || []).length}
           />
         </div>
       )}
@@ -447,6 +450,8 @@ export function KanbanBoard(props: KanbanBoardProps) {
           }
           onUpdate={handleUpdateTask}
           isExecuting={selectedTask?.status === "in_progress"}
+          pendingPermissions={selectedTaskId ? pendingPermissions[selectedTaskId] || [] : []}
+          onPermissionRespond={handlePermissionRespond}
         />
 
         {(() => {

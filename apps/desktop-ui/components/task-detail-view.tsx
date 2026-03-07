@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { X, ArrowLeft, Bot, Wrench, CheckCircle, AlertCircle, Info, Clock, AlertTriangle, Flag, Tag, Folder, Square, Archive, GitMerge, ExternalLink, Play, Check, Loader2 } from "lucide-react"
+import { X, ArrowLeft, Bot, Wrench, CheckCircle, AlertCircle, Info, Clock, AlertTriangle, Flag, Tag, Folder, Square, Archive, GitMerge, ExternalLink, Play, Check, Loader2, ShieldAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn, openExternal } from "@/lib/utils"
-import { Task, ExecutionProgress, ExecutionLogEntry, formatDuration } from "@/types/task"
+import { Task, ExecutionProgress, ExecutionLogEntry, PendingPermission, formatDuration } from "@/types/task"
 
 interface TaskDetailViewProps {
   task: Task | null
@@ -17,6 +17,8 @@ interface TaskDetailViewProps {
   onExecute?: (taskId: string) => void
   onUpdate?: (taskId: string, data: { title?: string; description?: string | null }) => void
   isExecuting?: boolean
+  pendingPermissions?: PendingPermission[]
+  onPermissionRespond?: (taskId: string, permissionId: string, response: 'once' | 'always' | 'reject') => void
 }
 
 const statusConfig = {
@@ -67,7 +69,7 @@ function formatDate(timestamp: string): string {
   })
 }
 
-export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, onCancel, onExecute, onUpdate, isExecuting }: TaskDetailViewProps) {
+export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, onCancel, onExecute, onUpdate, isExecuting, pendingPermissions, onPermissionRespond }: TaskDetailViewProps) {
   const logsContainerRef = useRef<HTMLDivElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const descriptionRef = useRef<HTMLTextAreaElement>(null)
@@ -76,6 +78,7 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
   const [titleDraft, setTitleDraft] = useState("")
   const [descriptionDraft, setDescriptionDraft] = useState("")
   const [cancelling, setCancelling] = useState(false)
+  const [respondingId, setRespondingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (logsContainerRef.current && open && logs.length > 0) {
@@ -86,6 +89,35 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
   useEffect(() => {
     if (!isExecuting) setCancelling(false)
   }, [isExecuting])
+
+  // Keyboard shortcuts: 1=Allow Once, 2=Always Allow, 3=Deny
+  useEffect(() => {
+    if (!open || !task || !pendingPermissions?.length || !onPermissionRespond) return
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+
+      const firstPerm = pendingPermissions![0]
+      if (!firstPerm || respondingId) return
+
+      if (e.key === '1') {
+        e.preventDefault()
+        setRespondingId(firstPerm.id)
+        onPermissionRespond!(task!.id, firstPerm.id, 'once')
+      } else if (e.key === '2') {
+        e.preventDefault()
+        setRespondingId(firstPerm.id)
+        onPermissionRespond!(task!.id, firstPerm.id, 'always')
+      } else if (e.key === '3') {
+        e.preventDefault()
+        setRespondingId(firstPerm.id)
+        onPermissionRespond!(task!.id, firstPerm.id, 'reject')
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [open, task, pendingPermissions, onPermissionRespond, respondingId])
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -338,6 +370,83 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                     </button>
                   )}
                 </div>
+
+                {pendingPermissions && pendingPermissions.length > 0 && task && (
+                  <div className="mb-8 space-y-3">
+                    {pendingPermissions.map((perm) => (
+                      <div
+                        key={perm.id}
+                        className="p-4 bg-amber-500/[0.06] border border-amber-500/20 rounded-lg"
+                      >
+                        <div className="flex items-start gap-3 mb-3">
+                          <div className="w-8 h-8 rounded-full bg-amber-500/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <ShieldAlert className="w-4 h-4 text-amber-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-medium text-linear-text mb-1">
+                              Permission Required
+                            </h4>
+                            <p className="text-sm text-linear-text-secondary">
+                              {perm.title}
+                            </p>
+                            <div className="flex items-center gap-3 mt-1.5 text-xs text-linear-text-tertiary">
+                              <span className="font-mono bg-white/[0.04] px-1.5 py-0.5 rounded">
+                                {perm.type}
+                              </span>
+                              {perm.pattern && (
+                                <span className="font-mono truncate">
+                                  {perm.pattern}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-11">
+                          <Button
+                            size="sm"
+                            className="h-7 px-3 text-xs bg-green-600 hover:bg-green-700 text-white border-0"
+                            disabled={respondingId === perm.id}
+                            onClick={() => {
+                              setRespondingId(perm.id)
+                              onPermissionRespond?.(task.id, perm.id, 'once')
+                            }}
+                          >
+                            {respondingId === perm.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                            ) : null}
+                            Allow Once
+                            <kbd className="ml-1.5 text-[10px] opacity-60 bg-white/10 px-1 rounded">1</kbd>
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="h-7 px-3 text-xs bg-blue-600 hover:bg-blue-700 text-white border-0"
+                            disabled={respondingId === perm.id}
+                            onClick={() => {
+                              setRespondingId(perm.id)
+                              onPermissionRespond?.(task.id, perm.id, 'always')
+                            }}
+                          >
+                            Always Allow
+                            <kbd className="ml-1.5 text-[10px] opacity-60 bg-white/10 px-1 rounded">2</kbd>
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-3 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                            disabled={respondingId === perm.id}
+                            onClick={() => {
+                              setRespondingId(perm.id)
+                              onPermissionRespond?.(task.id, perm.id, 'reject')
+                            }}
+                          >
+                            Deny
+                            <kbd className="ml-1.5 text-[10px] opacity-60 bg-white/10 px-1 rounded">3</kbd>
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 <div className="border-t border-linear-border pt-6">
                   <h2 className="text-sm font-medium text-linear-text-secondary mb-4 flex items-center gap-2">

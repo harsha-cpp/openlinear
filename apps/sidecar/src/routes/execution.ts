@@ -2,7 +2,8 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '@openlinear/db';
 import { broadcast } from '@openlinear/api/sse';
 import { optionalAuth, AuthRequest } from '@openlinear/api/middleware';
-import { executeTask, cancelTask, isTaskRunning, getExecutionLogs } from '../services/execution';
+import { executeTask, cancelTask, isTaskRunning, getExecutionLogs, getPendingPermissions } from '../services/execution';
+import { activeExecutions, removePendingPermission } from '../services/execution/state';
 
 const taskInclude = {
   labels: { include: { label: true } },
@@ -158,6 +159,51 @@ router.get('/:id/logs', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('[Tasks] Error getting execution logs:', error);
     res.status(500).json({ error: 'Failed to get execution logs' });
+  }
+});
+
+// GET /:id/permissions
+router.get('/:id/permissions', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const permissions = getPendingPermissions(id);
+    res.json({ permissions });
+  } catch (error) {
+    console.error('[Tasks] Error getting permissions:', error);
+    res.status(500).json({ error: 'Failed to get permissions' });
+  }
+});
+
+// POST /:id/permissions/:permissionId/respond
+router.post('/:id/permissions/:permissionId/respond', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const permissionId = req.params.permissionId as string;
+    const { response } = req.body as { response: string };
+
+    if (!response || !['once', 'always', 'reject'].includes(response)) {
+      res.status(400).json({ error: 'Invalid response. Must be: once, always, or reject' });
+      return;
+    }
+
+    const execution = activeExecutions.get(id);
+    if (!execution) {
+      res.status(404).json({ error: 'Task execution not found' });
+      return;
+    }
+
+    removePendingPermission(id, permissionId);
+
+    await execution.client.postSessionIdPermissionsPermissionId({
+      path: { id: execution.sessionId, permissionID: permissionId },
+      body: { response: response as 'once' | 'always' | 'reject' },
+    });
+
+    broadcast('permission:resolved', { taskId: id, permissionId });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[Tasks] Error responding to permission:', error);
+    res.status(500).json({ error: 'Failed to respond to permission' });
   }
 });
 

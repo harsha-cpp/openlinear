@@ -2,12 +2,14 @@ import { prisma } from '@openlinear/db';
 
 import type { OpencodeClient } from '@opencode-ai/sdk';
 import { appendTextDelta, appendReasoningDelta, flushDeltaBuffer, markThinking } from '../delta-buffer';
+import { broadcast } from '@openlinear/api/sse';
 
 import { commitAndPush, createPullRequest } from './git';
 import {
   activeExecutions,
   broadcastProgress,
   addLogEntry,
+  addPendingPermission,
   updateTaskStatus,
   persistLogs,
   cleanupExecution,
@@ -310,6 +312,35 @@ async function handleOpenCodeEvent(event: { type: string; properties?: Record<st
         if (execution) execution.filesChanged++;
         addLogEntry(taskId, 'success', `Edited file: ${file}`);
       }
+      break;
+    }
+
+    case 'permission.updated': {
+      if (!taskId) break;
+      const props = event.properties || {};
+      const permId = props.id as string;
+      const permType = props.type as string || 'unknown';
+      const permTitle = props.title as string || 'Permission requested';
+      const rawPattern = props.pattern;
+      const permPattern = Array.isArray(rawPattern) ? rawPattern.join(', ') : (rawPattern as string || '');
+      const permMetadata = props.metadata as Record<string, unknown> | undefined;
+      const permCreatedAt = typeof (props.time as { created?: number })?.created === 'number' 
+        ? new Date((props.time as { created: number }).created).toISOString()
+        : new Date().toISOString();
+
+      const permission = {
+        id: permId,
+        type: permType,
+        title: permTitle,
+        pattern: permPattern,
+        metadata: permMetadata,
+        createdAt: permCreatedAt,
+      };
+
+      addPendingPermission(taskId, permission);
+      addLogEntry(taskId, 'info', `Permission requested: ${permTitle}`);
+      broadcastProgress(taskId, 'executing', `Waiting for permission: ${permTitle}`);
+      broadcast('permission:requested', { taskId, permission });
       break;
     }
 

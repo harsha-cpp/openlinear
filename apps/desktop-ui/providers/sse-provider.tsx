@@ -39,6 +39,8 @@ const ALL_EVENT_TYPES: SSEEventType[] = [
   'batch:completed',
   'batch:failed',
   'batch:cancelled',
+  'permission:requested',
+  'permission:resolved',
   'team:created',
   'team:updated',
   'team:deleted',

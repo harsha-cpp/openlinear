@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Loader2, GitBranch, Code, GitPullRequest, Check, X, ExternalLink, Play, ArrowRight, Archive, Clock, CalendarDays, Cloud, CloudOff, CloudUpload, RefreshCw } from "lucide-react"
+import { Loader2, GitBranch, Code, GitPullRequest, Check, X, ExternalLink, Play, ArrowRight, Archive, Clock, CalendarDays, Cloud, CloudOff, CloudUpload, RefreshCw, AlertTriangle } from "lucide-react"
 import { cn, openExternal } from "@/lib/utils"
 import { Task, ExecutionProgress, formatDuration } from "@/types/task"
 import { TaskSyncState, metadataQueue } from "@/lib/api/metadata-queue"
@@ -23,6 +23,7 @@ interface TaskCardProps {
   isBatchTask?: boolean
   isCompletedBatchTask?: boolean
   isDragging?: boolean
+  pendingPermissions?: number
 }
 
 function formatDueDate(dateStr: string): { text: string; isOverdue: boolean } {
@@ -49,7 +50,7 @@ const progressConfig = {
   error: { icon: X, label: 'Error', color: 'text-red-400' },
 }
 
-export function TaskCard({ task, onExecute, onCancel, onDelete, onMoveToInProgress, onTaskClick, executionProgress, syncState, selected, onToggleSelect, selectionMode, isBatchTask, isCompletedBatchTask, isDragging }: TaskCardProps) {
+export function TaskCard({ task, onExecute, onCancel, onDelete, onMoveToInProgress, onTaskClick, executionProgress, syncState, selected, onToggleSelect, selectionMode, isBatchTask, isCompletedBatchTask, isDragging, pendingPermissions }: TaskCardProps) {
   const [liveElapsedMs, setLiveElapsedMs] = useState<number>(0)
   const [cancelling, setCancelling] = useState(false)
 
@@ -148,6 +149,12 @@ export function TaskCard({ task, onExecute, onCancel, onDelete, onMoveToInProgre
             </div>
           )}
           <h4 className="text-sm font-light leading-tight line-clamp-2 flex-1">{task.title}</h4>
+          {!!pendingPermissions && pendingPermissions > 0 && (
+            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-amber-500/15 text-amber-400 border border-amber-500/20 flex-shrink-0 animate-pulse">
+              <AlertTriangle className="w-3 h-3" />
+              {pendingPermissions}
+            </span>
+          )}
           {(isBatchTask || isActiveProgress) && (
             task.status === 'done' ? (
               <Check className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-linear-accent" />

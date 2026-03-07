@@ -43,6 +43,15 @@ export interface ExecutionLogEntry {
   details?: string
 }
 
+export interface PendingPermission {
+  id: string
+  type: string
+  title: string
+  pattern: string
+  metadata?: Record<string, unknown>
+  createdAt: string
+}
+
 export function formatDuration(ms: number): string {
   if (ms < 0) ms = 0
   const totalSeconds = Math.floor(ms / 1000)
