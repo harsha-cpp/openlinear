@@ -5,6 +5,11 @@
   "type": "module",
   "main": "./src/index.ts",
   "bin": "./dist/index.js",
+  "exports": {
+    "./app": "./src/app.ts",
+    "./sse": "./src/sse.ts",
+    "./middleware": "./src/middleware/auth.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "node esbuild.config.js",
@@ -14,7 +19,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.74.0",
     "@openlinear/db": "workspace:*",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
@@ -22,7 +26,6 @@
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
-    "openai": "^6.22.0",
     "zod": "^3.25.6"
   },
   "devDependencies": {

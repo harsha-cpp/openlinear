@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '@openlinear/db';
 import { z } from 'zod';
 import { broadcast } from '../sse';
-import { executeTask, cancelTask, isTaskRunning } from '../services/execution';
 import { getLegacyTokenForOperation } from '../services/auth-migration';
 import { optionalAuth, requireAuth, AuthRequest } from '../middleware/auth';
 import { getUserTeamIds } from '../services/team-scope';
@@ -392,27 +391,6 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/:id/execute', requireAuth, async (req: AuthRequest, res: Response) => {
-  try {
-    const id = req.params.id as string;
-    console.log(`[Tasks] Execute requested for task ${id.slice(0, 8)} (userId: ${req.userId})`);
-    
-    const result = await executeTask({ taskId: id, userId: req.userId });
-
-    if (!result.success) {
-      console.log(`[Tasks] Execute failed: ${result.error}`);
-      res.status(400).json({ error: result.error, code: result.code });
-      return;
-    }
-
-    console.log(`[Tasks] Execute allowed for task ${id.slice(0, 8)} (userId: ${req.userId})`);
-    res.json({ message: 'Task execution started' });
-  } catch (error) {
-    console.error('[Tasks] Error executing task:', error);
-    res.status(500).json({ error: 'Failed to execute task' });
-  }
-});
-
 router.post('/:id/refresh-pr', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
@@ -491,55 +469,6 @@ router.post('/:id/refresh-pr', requireAuth, async (req: AuthRequest, res: Respon
   } catch (error) {
     console.error('[Tasks] Error refreshing PR:', error);
     res.status(500).json({ error: 'Failed to refresh PR status' });
-  }
-});
-
-router.get('/:id/running', requireAuth, async (req: AuthRequest, res: Response) => {
-  try {
-    const id = req.params.id as string;
-    res.json({ running: isTaskRunning(id) });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to check task status' });
-  }
-});
-
-router.get('/:id/logs', requireAuth, async (req: AuthRequest, res: Response) => {
-  try {
-    // We no longer persist or expose historical raw execution logs for privacy/compliance.
-    // Return a controlled response indicating logs are unavailable.
-    res.status(403).json({ 
-      error: 'Execution logs are not available. Raw execution logs are no longer persisted or exposed for privacy and compliance reasons.' 
-    });
-  } catch (error) {
-    console.error('[Tasks] Error getting execution logs:', error);
-    res.status(500).json({ error: 'Failed to get execution logs' });
-  }
-});
-
-router.post('/:id/cancel', requireAuth, async (req: AuthRequest, res: Response) => {
-  try {
-    const id = req.params.id as string;
-    console.log(`[Tasks] Cancel requested for task ${id.slice(0, 8)} (userId: ${req.userId})`);
-
-    if (!isTaskRunning(id)) {
-      console.log(`[Tasks] Task ${id.slice(0, 8)} is not running, cannot cancel`);
-      res.status(400).json({ error: 'Task is not running' });
-      return;
-    }
-
-    const result = await cancelTask(id);
-
-    if (!result.success) {
-      console.log(`[Tasks] Cancel failed: ${result.error}`);
-      res.status(400).json({ error: result.error });
-      return;
-    }
-
-    console.log(`[Tasks] Cancel allowed for task ${id.slice(0, 8)} (userId: ${req.userId})`);
-    res.json({ message: 'Task cancelled' });
-  } catch (error) {
-    console.error('[Tasks] Error cancelling task:', error);
-    res.status(500).json({ error: 'Failed to cancel task' });
   }
 });
 

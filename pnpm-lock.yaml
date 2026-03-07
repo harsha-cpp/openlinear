@@ -17,9 +17,6 @@ importers:
 
   apps/api:
     dependencies:
-      '@anthropic-ai/sdk':
-        specifier: ^0.74.0
-        version: 0.74.0(zod@3.25.76)
       '@openlinear/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -41,9 +38,6 @@ importers:
       jsonwebtoken:
         specifier: ^9.0.3
         version: 9.0.3
-      openai:
-        specifier: ^6.22.0
-        version: 6.22.0(ws@8.17.1)(zod@3.25.76)
       zod:
         specifier: ^3.25.6
         version: 3.25.76
@@ -415,6 +409,76 @@ importers:
       typescript:
         specifier: 5.7.3
         version: 5.7.3
+
+  apps/sidecar:
+    dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.74.0
+        version: 0.74.0(zod@3.25.76)
+      '@opencode-ai/sdk':
+        specifier: ^1.2.5
+        version: 1.2.20
+      '@openlinear/api':
+        specifier: workspace:*
+        version: link:../api
+      '@openlinear/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      bcryptjs:
+        specifier: ^2.4.3
+        version: 2.4.3
+      cookie-parser:
+        specifier: ^1.4.7
+        version: 1.4.7
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.6
+      dotenv:
+        specifier: ^17.2.4
+        version: 17.2.4
+      express:
+        specifier: ^5.2.1
+        version: 5.2.1
+      jsonwebtoken:
+        specifier: ^9.0.2
+        version: 9.0.3
+      openai:
+        specifier: ^6.22.0
+        version: 6.22.0(ws@8.17.1)(zod@3.25.76)
+      zod:
+        specifier: ^3.25.6
+        version: 3.25.76
+    devDependencies:
+      '@types/bcryptjs':
+        specifier: ^2.4.6
+        version: 2.4.6
+      '@types/cookie-parser':
+        specifier: ^1.4.8
+        version: 1.4.10(@types/express@5.0.6)
+      '@types/cors':
+        specifier: ^2.8.17
+        version: 2.8.19
+      '@types/express':
+        specifier: ^5.0.6
+        version: 5.0.6
+      '@types/jsonwebtoken':
+        specifier: ^9.0.9
+        version: 9.0.10
+      '@types/node':
+        specifier: ^20.14.0
+        version: 20.19.32
+      '@yao-pkg/pkg':
+        specifier: ^5.12.0
+        version: 5.16.1
+      esbuild:
+        specifier: ^0.27.3
+        version: 0.27.3
+      tsx:
+        specifier: ^4.19.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
 
   packages/db:
     dependencies:
@@ -1103,6 +1167,9 @@ packages:
   '@nodelib/fs.walk@1.2.8':
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
+
+  '@opencode-ai/sdk@1.2.20':
+    resolution: {integrity: sha512-U5ROpG21D8jg9rkc1IgKAk1g5dn6X/rkOBfveupd0peSDO9n6VM9aikYccVLaMObxVqdjtG08IeQOFTPVS8ySQ==}
 
   '@paralleldrive/cuid2@2.3.1':
     resolution: {integrity: sha512-XO7cAxhnTZl0Yggq6jOgjiOHhbgcO4NqFqwSmQpjK3b6TEE6Uj/jfSk6wzYyemh3+I0sHirKSetjQwn5cZktFw==}
@@ -5609,6 +5676,8 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.1
 
+  '@opencode-ai/sdk@1.2.20': {}
+
   '@paralleldrive/cuid2@2.3.1':
     dependencies:
       '@noble/hashes': 1.8.0
@@ -7270,7 +7339,7 @@ snapshots:
   '@types/body-parser@1.19.6':
     dependencies:
       '@types/connect': 3.4.38
-      '@types/node': 20.19.32
+      '@types/node': 25.3.2
 
   '@types/chai@5.2.3':
     dependencies:
@@ -7279,7 +7348,7 @@ snapshots:
 
   '@types/connect@3.4.38':
     dependencies:
-      '@types/node': 20.19.32
+      '@types/node': 25.3.2
 
   '@types/cookie-parser@1.4.10(@types/express@5.0.6)':
     dependencies:
@@ -7337,7 +7406,7 @@ snapshots:
 
   '@types/express-serve-static-core@5.1.1':
     dependencies:
-      '@types/node': 20.19.32
+      '@types/node': 25.3.2
       '@types/qs': 6.14.0
       '@types/range-parser': 1.2.7
       '@types/send': 1.2.1
@@ -7402,18 +7471,18 @@ snapshots:
 
   '@types/send@1.2.1':
     dependencies:
-      '@types/node': 20.19.32
+      '@types/node': 25.3.2
 
   '@types/serve-static@2.2.0':
     dependencies:
       '@types/http-errors': 2.0.5
-      '@types/node': 20.19.32
+      '@types/node': 25.3.2
 
   '@types/superagent@8.1.9':
     dependencies:
       '@types/cookiejar': 2.1.5
       '@types/methods': 1.1.4
-      '@types/node': 20.19.32
+      '@types/node': 25.3.2
       form-data: 4.0.5
 
   '@types/supertest@6.0.3':
@@ -7425,7 +7494,7 @@ snapshots:
 
   '@types/yauzl@2.10.3':
     dependencies:
-      '@types/node': 20.19.32
+      '@types/node': 25.3.2
     optional: true
 
   '@vitest/expect@4.0.18':
@@ -8468,7 +8537,7 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 20.19.32
+      '@types/node': 25.3.2
       merge-stream: 2.0.0
       supports-color: 8.1.1
 

@@ -4,16 +4,11 @@ import cookieParser from 'cookie-parser';
 import labelRoutes from './routes/labels';
 import tasksRouter from './routes/tasks';
 import settingsRouter from './routes/settings';
-import batchesRouter from './routes/batches';
 import authRouter from './routes/auth';
 import reposRouter from './routes/repos';
 import teamsRouter from './routes/teams';
 import projectsRouter from './routes/projects';
 import inboxRouter from './routes/inbox';
-import opencodeRouter from './routes/opencode';
-import executionRouter from './routes/execution';
-import brainstormRouter from './routes/brainstorm';
-import transcribeRouter from './routes/transcribe';
 import { clients, SSEClient } from './sse';
 
 export function createApp(): Application {
@@ -61,14 +56,9 @@ export function createApp(): Application {
   app.use('/api/labels', labelRoutes);
   app.use('/api/tasks', tasksRouter);
   app.use('/api/settings', settingsRouter);
-  app.use('/api/batches', batchesRouter);
   app.use('/api/teams', teamsRouter);
   app.use('/api/projects', projectsRouter);
   app.use('/api/inbox', inboxRouter);
-  app.use('/api/opencode', opencodeRouter);
-  app.use('/api/execution', executionRouter);
-  app.use('/api/brainstorm', brainstormRouter);
-  app.use('/api/transcribe', transcribeRouter);
 
   app.get('/api/install', (_req: Request, res: Response) => {
     res.redirect(302, 'https://raw.githubusercontent.com/kaizen403/openlinear/main/apps/landing/public/install.sh');

@@ -6,21 +6,12 @@ config({ path: resolve(import.meta.dirname, '../../../.env') });
 
 import { createApp } from './app';
 import { broadcast, sendToClient, getClientCount } from './sse';
-import { initOpenCode, registerShutdownHandlers } from './services/opencode';
 
 const app = createApp();
 const PORT = Number(process.env.API_PORT ?? 3001);
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
-registerShutdownHandlers();
-
 async function start() {
-  try {
-    await initOpenCode();
-  } catch (error) {
-    console.error('[API] Failed to initialize OpenCode:', error);
-  }
-
   app.listen(PORT, () => {
     console.log(`[API] Server running on http://localhost:${PORT}`);
     console.log(`[API] Health: http://localhost:${PORT}/health`);
