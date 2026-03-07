@@ -8,6 +8,7 @@ import { Loader2, Check, AlertCircle, Brain, RefreshCw, Settings } from "lucide-
 import {
   getSetupStatus,
   getConfiguredProviderIds,
+  getModelConfig,
   ProviderInfo,
   SetupStatus,
 } from "@/lib/api/opencode"
@@ -27,6 +28,7 @@ export function ProviderSetupDialog({ open, onOpenChange, onSetupComplete }: Pro
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
+  const [currentModelName, setCurrentModelName] = useState<string | null>(null)
   const pollRef = useRef(false)
 
   const applyProviderData = useCallback((status: SetupStatus) => {
@@ -87,10 +89,13 @@ export function ProviderSetupDialog({ open, onOpenChange, onSetupComplete }: Pro
     setLoadError(null)
     setSelectedProvider(null)
 
-    loadWithPolling().catch((err: unknown) => {
-      setLoadError(err instanceof Error ? err.message : "Failed to load providers")
-      setLoading(false)
-    })
+    getModelConfig()
+      .then((cfg) => {
+        if (cfg.model) setCurrentModelName(cfg.model)
+      })
+      .catch(() => {})
+
+    loadWithPolling()
 
     return () => {
       pollRef.current = false
@@ -100,11 +105,7 @@ export function ProviderSetupDialog({ open, onOpenChange, onSetupComplete }: Pro
   const handleRetry = () => {
     setLoadError(null)
     setLoading(true)
-
-    loadWithPolling().catch((err: unknown) => {
-      setLoadError(err instanceof Error ? err.message : "Failed to load providers")
-      setLoading(false)
-    })
+    loadWithPolling()
   }
 
   const handleUse = () => {
@@ -173,7 +174,6 @@ export function ProviderSetupDialog({ open, onOpenChange, onSetupComplete }: Pro
           ) : (
             <div className="space-y-1">
               <button
-                type="button"
                 onClick={handleGoToSettings}
                 className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-linear-text-secondary hover:text-linear-text bg-linear-bg border border-dashed border-linear-border hover:border-linear-text-tertiary transition-colors"
               >
@@ -182,12 +182,16 @@ export function ProviderSetupDialog({ open, onOpenChange, onSetupComplete }: Pro
               </button>
 
               {configuredProviders.map((provider) => {
+                const modelForProvider = currentModelName?.startsWith(`${provider.id}/`)
+                  ? currentModelName.slice(provider.id.length + 1)
+                  : undefined
                 return (
                   <ProviderRow
                     key={provider.id}
                     provider={provider}
                     selected={selectedProvider === provider.id}
                     onSelect={() => setSelectedProvider(provider.id)}
+                    activeModel={modelForProvider}
                   />
                 )
               })}
@@ -232,13 +236,13 @@ interface ProviderRowProps {
   provider: ProviderInfo
   selected: boolean
   onSelect: () => void
+  activeModel?: string
 }
 
-function ProviderRow({ provider, selected, onSelect }: ProviderRowProps) {
+function ProviderRow({ provider, selected, onSelect, activeModel }: ProviderRowProps) {
   return (
-    <button
-      type="button"
-      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors cursor-pointer text-left ${
+    <div
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors cursor-pointer ${
         selected
           ? "bg-linear-bg border border-linear-accent ring-1 ring-linear-accent/30"
           : "bg-linear-bg border border-linear-border hover:border-linear-text-tertiary"
@@ -255,6 +259,9 @@ function ProviderRow({ provider, selected, onSelect }: ProviderRowProps) {
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-linear-text truncate">{provider.name}</p>
+        {activeModel && (
+          <p className="text-xs text-linear-text-tertiary truncate">Using: {activeModel}</p>
+        )}
       </div>
       {provider.authenticated ? (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-500/10 text-green-400 border border-green-500/20 flex-shrink-0">
@@ -266,6 +273,6 @@ function ProviderRow({ provider, selected, onSelect }: ProviderRowProps) {
           Not configured
         </span>
       )}
-    </button>
+    </div>
   )
 }

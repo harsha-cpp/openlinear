@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Loader2, FolderKanban, CalendarDays } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -53,6 +53,7 @@ interface TaskFormDialogProps {
 }
 
 import { API_URL, getAuthHeader } from "@/lib/api/client"
+import { toast } from "sonner"
 
 const API_BASE_URL = `${API_URL}/api`
 
@@ -101,22 +102,7 @@ export function TaskFormDialog({
     }
   }, [defaultStatus, defaultProjectId, open, form, hasProjects])
 
-  // ⌘+Enter keyboard shortcut
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && open) {
-        e.preventDefault()
-        form.handleSubmit(onSubmit)()
-      }
-    }
-
-    if (open) {
-      window.addEventListener("keydown", handleKeyDown)
-      return () => window.removeEventListener("keydown", handleKeyDown)
-    }
-  }, [open, form])
-
-  const onSubmit = async (values: FormValues) => {
+  const onSubmit = useCallback(async (values: FormValues) => {
     try {
       setIsSubmitting(true)
 
@@ -138,18 +124,36 @@ export function TaskFormDialog({
       })
 
       if (!response.ok) {
-        throw new Error(`Failed to create task: ${response.statusText}`)
+        const errorData = await response.json().catch(() => ({ error: response.statusText }))
+        throw new Error(errorData.error || `Failed to create task: ${response.statusText}`)
       }
 
       form.reset()
       onOpenChange(false)
       onSuccess?.()
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create task"
+      toast.error(message)
       console.error("Error creating task:", error)
     } finally {
       setIsSubmitting(false)
     }
-  }
+  }, [form, onOpenChange, onSuccess, defaultTeamId])
+
+  // ⌘+Enter keyboard shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && open) {
+        e.preventDefault()
+        form.handleSubmit(onSubmit)()
+      }
+    }
+
+    if (open) {
+      window.addEventListener("keydown", handleKeyDown)
+      return () => window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [open, form, onSubmit])
 
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {

@@ -9,6 +9,7 @@ import { BatchProgress } from "./batch-progress";
 import { DashboardLoading } from "./dashboard-loading";
 import { TaskFormDialog } from "@/components/task-form";
 import { TaskDetailView } from "@/components/task-detail-view";
+import { ProviderSetupDialog } from "@/components/provider-setup-dialog";
 import {
   Plus,
   Settings2,
@@ -211,6 +212,9 @@ export function KanbanBoard(props: KanbanBoardProps) {
     toggleColumnSelectAll,
     clearSelection,
     fetchTasks,
+    showProviderSetup,
+    setShowProviderSetup,
+    handleProviderSetupComplete,
   } = useKanbanBoard(props);
 
   // Lift live config state up to the page header
@@ -419,6 +423,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
         <TaskFormDialog
           open={isTaskFormOpen}
           onOpenChange={setIsTaskFormOpen}
+          onSuccess={() => fetchTasks({ silent: true })}
           defaultStatus={defaultStatus}
           defaultProjectId={props.projectId}
           defaultTeamId={props.teamId}
@@ -475,6 +480,12 @@ export function KanbanBoard(props: KanbanBoardProps) {
           );
         })()}
       </div>
+
+      <ProviderSetupDialog
+        open={showProviderSetup}
+        onOpenChange={setShowProviderSetup}
+        onSetupComplete={handleProviderSetupComplete}
+      />
     </DragDropContext>
   );
 }

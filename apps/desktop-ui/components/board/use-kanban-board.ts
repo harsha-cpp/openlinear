@@ -7,6 +7,7 @@ import { Project } from "@/lib/api";
 import type { Repository } from "@/lib/api";
 import { Task, ExecutionProgress, ExecutionLogEntry } from "@/types/task";
 import { API_URL, getAuthHeader, isDesktopRuntime } from "@/lib/api/client";
+import { getSetupStatus, hasConfiguredProviders } from "@/lib/api/opencode";
 import {
   metadataQueue,
   TaskSyncState,
@@ -108,6 +109,9 @@ export interface UseKanbanBoardReturn {
     resetRetry?: boolean;
     silent?: boolean;
   }) => Promise<void>;
+  showProviderSetup: boolean;
+  setShowProviderSetup: (show: boolean) => void;
+  handleProviderSetupComplete: () => void;
 }
 
 export function useKanbanBoard({
@@ -142,6 +146,8 @@ export function useKanbanBoard({
     prUrl: string | null;
     mode: string;
   } | null>(null);
+  const [showProviderSetup, setShowProviderSetup] = useState(false);
+  const [pendingExecuteTaskId, setPendingExecuteTaskId] = useState<string | null>(null);
   const { isAuthenticated, activeRepository, refreshActiveRepository } =
     useAuth();
   const metadataUnsubscribersRef = useRef<Map<string, () => void>>(new Map());
@@ -794,6 +800,16 @@ export function useKanbanBoard({
     }
 
     try {
+      // Check if a provider is configured before executing
+      if (!desktopRuntime) {
+        const status = await getSetupStatus().catch(() => null);
+        if (status && !status.ready && !hasConfiguredProviders()) {
+          setPendingExecuteTaskId(taskId);
+          setShowProviderSetup(true);
+          return;
+        }
+      }
+
       if (desktopRuntime) {
         const localPath = selectedProject?.localPath;
         if (!localPath) {
@@ -947,6 +963,24 @@ export function useKanbanBoard({
     return tasks.filter((task) => task.status === status);
   };
 
+  const handleProviderSetupComplete = useCallback(async () => {
+    setShowProviderSetup(false);
+    if (pendingExecuteTaskId) {
+      const taskId = pendingExecuteTaskId;
+      setPendingExecuteTaskId(null);
+      try {
+        const token = localStorage.getItem("token");
+        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+        await fetch(`${API_BASE_URL}/api/tasks/${taskId}/execute`, {
+          method: "POST",
+          headers,
+        });
+      } catch (err) {
+        console.error("Error executing task after provider setup:", err);
+      }
+    }
+  }, [pendingExecuteTaskId]);
+
   return {
     tasks,
     loading,
@@ -987,5 +1021,8 @@ export function useKanbanBoard({
     toggleColumnSelectAll,
     clearSelection,
     fetchTasks,
+    showProviderSetup,
+    setShowProviderSetup,
+    handleProviderSetupComplete,
   };
 }
