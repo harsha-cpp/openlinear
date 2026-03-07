@@ -102,7 +102,10 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
 
 router.get('/github', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const accessToken = await getLegacyTokenForOperation(req.userId!, 'repos.list-github');
+    const headerToken = req.headers['x-github-token'];
+    const accessToken = typeof headerToken === 'string' && headerToken.trim().length > 0
+      ? headerToken
+      : await getLegacyTokenForOperation(req.userId!, 'repos.list-github');
 
     if (!accessToken) {
       res.status(403).json({ error: 'GitHub account not linked. Please sign in with GitHub first.' });

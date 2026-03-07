@@ -18,6 +18,8 @@ pub struct AuthCallbackResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub github_connect_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
 
@@ -114,6 +116,19 @@ async fn process_oauth_callback(url_str: &str) -> AuthCallbackResult {
             return AuthCallbackResult {
                 success: true,
                 token: Some(token.to_string()),
+                github_connect_token: None,
+                error: None,
+            };
+        }
+
+        if let Some((_, github_connect_token)) = url
+            .query_pairs()
+            .find(|(key, _)| key == "github_connect_token")
+        {
+            return AuthCallbackResult {
+                success: true,
+                token: None,
+                github_connect_token: Some(github_connect_token.to_string()),
                 error: None,
             };
         }
@@ -128,6 +143,7 @@ async fn process_oauth_callback(url_str: &str) -> AuthCallbackResult {
             return AuthCallbackResult {
                 success: false,
                 token: None,
+                github_connect_token: None,
                 error: Some(error_desc),
             };
         }
@@ -140,6 +156,7 @@ async fn process_oauth_callback(url_str: &str) -> AuthCallbackResult {
             return AuthCallbackResult {
                 success: false,
                 token: None,
+                github_connect_token: None,
                 error: Some(e),
             };
         }
@@ -150,11 +167,13 @@ async fn process_oauth_callback(url_str: &str) -> AuthCallbackResult {
         Ok(token) => AuthCallbackResult {
             success: true,
             token: Some(token),
+            github_connect_token: None,
             error: None,
         },
         Err(e) => AuthCallbackResult {
             success: false,
             token: None,
+            github_connect_token: None,
             error: Some(e),
         },
     }
@@ -285,6 +304,17 @@ mod tests {
         let result = process_oauth_callback(url).await;
         assert!(result.success);
         assert_eq!(result.token.as_deref(), Some("jwt.token.here"));
+        assert!(result.github_connect_token.is_none());
+        assert!(result.error.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_process_oauth_callback_with_github_connect_token_in_deeplink() {
+        let url = "openlinear://callback?github_connect_token=jwt.connect.token";
+        let result = process_oauth_callback(url).await;
+        assert!(result.success);
+        assert!(result.token.is_none());
+        assert_eq!(result.github_connect_token.as_deref(), Some("jwt.connect.token"));
         assert!(result.error.is_none());
     }
 
@@ -294,6 +324,7 @@ mod tests {
         let result = process_oauth_callback(url).await;
         assert!(!result.success);
         assert!(result.token.is_none());
+        assert!(result.github_connect_token.is_none());
         assert_eq!(result.error.as_deref(), Some("access_denied"));
     }
 }

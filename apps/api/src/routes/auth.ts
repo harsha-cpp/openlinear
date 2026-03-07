@@ -243,13 +243,25 @@ router.get('/github/callback', async (req: Request, res: Response) => {
     const githubUser = await getGitHubUser(accessToken);
 
     if (isConnect) {
+      const tempTokenPayload: {
+        githubId: number;
+        githubLogin: string;
+        githubEmail: string | null;
+        githubAvatarUrl: string;
+        githubAccessToken?: string;
+      } = {
+        githubId: githubUser.id,
+        githubLogin: githubUser.login,
+        githubEmail: githubUser.email,
+        githubAvatarUrl: githubUser.avatar_url,
+      };
+
+      if (isDesktopConnect) {
+        tempTokenPayload.githubAccessToken = accessToken;
+      }
+
       const tempToken = jwt.sign(
-        { 
-          githubId: githubUser.id, 
-          githubLogin: githubUser.login, 
-          githubEmail: githubUser.email, 
-          githubAvatarUrl: githubUser.avatar_url 
-        },
+        tempTokenPayload,
         getJwtSecret(),
         { expiresIn: '15m', algorithm: 'HS256' }
       );
@@ -300,7 +312,13 @@ router.post('/github/connect/confirm', async (req: Request, res: Response) => {
 
   try {
     const decodedAuth = jwt.verify(authHeader.substring(7), getJwtSecret(), { algorithms: ['HS256'] }) as { userId: string };
-    const decodedGithub = jwt.verify(github_connect_token, getJwtSecret(), { algorithms: ['HS256'] }) as { githubId: number, githubLogin: string, githubEmail: string, githubAvatarUrl: string };
+    const decodedGithub = jwt.verify(github_connect_token, getJwtSecret(), { algorithms: ['HS256'] }) as {
+      githubId: number;
+      githubLogin: string;
+      githubEmail: string | null;
+      githubAvatarUrl: string;
+      githubAccessToken?: string;
+    };
 
     const githubUser: GitHubUser = {
       id: decodedGithub.githubId,
@@ -318,7 +336,14 @@ router.post('/github/connect/confirm', async (req: Request, res: Response) => {
       { expiresIn: '7d', algorithm: 'HS256' }
     );
 
-    res.json({ success: true, token });
+    const isDesktopClient = req.headers['x-openlinear-client'] === 'desktop';
+    res.json({
+      success: true,
+      token,
+      ...(isDesktopClient && decodedGithub.githubAccessToken
+        ? { githubAccessToken: decodedGithub.githubAccessToken }
+        : {}),
+    });
   } catch (err) {
     res.status(401).json({ error: 'Invalid or expired token' });
   }

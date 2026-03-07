@@ -1,6 +1,20 @@
 import { API_URL, getAuthHeader } from './client';
 import type { GitHubRepo, PublicRepository, Repository } from './types';
 
+async function getDesktopGitHubToken(): Promise<string | null> {
+  if (typeof window === 'undefined' || !("__TAURI_INTERNALS__" in window)) {
+    return null;
+  }
+
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const token = await invoke<string>('retrieve_secret', { key: 'github_token' });
+    return token || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchUserRepositories(): Promise<Repository[]> {
   const res = await fetch(`${API_URL}/api/repos`, {
     headers: getAuthHeader(),
@@ -11,8 +25,12 @@ export async function fetchUserRepositories(): Promise<Repository[]> {
 }
 
 export async function fetchGitHubRepos(): Promise<GitHubRepo[]> {
+  const githubToken = await getDesktopGitHubToken();
   const res = await fetch(`${API_URL}/api/repos/github`, {
-    headers: getAuthHeader(),
+    headers: {
+      ...getAuthHeader(),
+      ...(githubToken ? { 'x-github-token': githubToken } : {}),
+    },
   });
 
   if (!res.ok) throw new Error('Failed to fetch GitHub repos');
