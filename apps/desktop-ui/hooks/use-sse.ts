@@ -37,6 +37,15 @@ export interface SSEEventData {
     title: string
     status: 'queued' | 'running' | 'completed' | 'failed' | 'skipped' | 'cancelled'
   }>
+  permission?: {
+    id: string
+    type: string
+    title: string
+    pattern: string
+    metadata?: Record<string, unknown>
+    createdAt: string
+  }
+  permissionId?: string
 }
 
 export type SSEEventType =
@@ -61,6 +70,8 @@ export type SSEEventType =
   | 'batch:completed'
   | 'batch:failed'
   | 'batch:cancelled'
+  | 'permission:requested'
+  | 'permission:resolved'
   | 'team:created'
   | 'team:updated'
   | 'team:deleted'
@@ -286,6 +297,24 @@ export function useSSE(
         onEventRef.current('batch:cancelled', data)
       } catch (err) {
         console.error("[SSE] Failed to parse batch:cancelled:", err)
+      }
+    })
+
+    eventSource.addEventListener("permission:requested", (event) => {
+      try {
+        const data = JSON.parse((event as MessageEvent).data)
+        onEventRef.current('permission:requested', data)
+      } catch (err) {
+        console.error("[SSE] Failed to parse permission:requested:", err)
+      }
+    })
+
+    eventSource.addEventListener("permission:resolved", (event) => {
+      try {
+        const data = JSON.parse((event as MessageEvent).data)
+        onEventRef.current('permission:resolved', data)
+      } catch (err) {
+        console.error("[SSE] Failed to parse permission:resolved:", err)
       }
     })
 

@@ -40,6 +40,7 @@ export interface ExecutionState {
   toolsExecuted: number;
   promptSent: boolean;
   cancelled: boolean;
+  pendingPermissions: PendingPermission[];
 }
 
 export interface ExecutionLogEntry {
@@ -57,6 +58,15 @@ export interface ExecuteTaskParams {
 export interface PullRequestResult {
   url: string;
   type: 'pr' | 'compare';
+}
+
+export interface PendingPermission {
+  id: string;
+  type: string;
+  title: string;
+  pattern: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
 }
 
 export const activeExecutions = new Map<string, ExecutionState>();
@@ -193,4 +203,22 @@ export function findTaskBySessionId(sessionId: string): string | undefined {
     }
   }
   return undefined;
+}
+
+export function addPendingPermission(taskId: string, permission: PendingPermission): void {
+  const execution = activeExecutions.get(taskId);
+  if (!execution) return;
+  execution.pendingPermissions.push(permission);
+}
+
+export function removePendingPermission(taskId: string, permissionId: string): void {
+  const execution = activeExecutions.get(taskId);
+  if (!execution) return;
+  execution.pendingPermissions = execution.pendingPermissions.filter(p => p.id !== permissionId);
+}
+
+export function getPendingPermissions(taskId: string): PendingPermission[] {
+  const execution = activeExecutions.get(taskId);
+  if (!execution) return [];
+  return execution.pendingPermissions || [];
 }

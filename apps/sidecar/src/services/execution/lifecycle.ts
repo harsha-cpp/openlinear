@@ -146,6 +146,7 @@ export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promis
       toolsExecuted: 0,
       promptSent: false,
       cancelled: false,
+      pendingPermissions: [],
     };
 
     activeExecutions.set(taskId, executionState);

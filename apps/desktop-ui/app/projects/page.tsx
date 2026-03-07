@@ -49,6 +49,7 @@ import {
   deleteProject,
   fetchGitHubRepos,
   getLoginUrl,
+  getGitHubConnectUrl,
   type Project,
   type Team,
   type GitHubRepo,
@@ -204,6 +205,16 @@ function ProjectsContent() {
       } else {
         setReposLoading(false)
       }
+    }
+  }, [])
+
+  const openGitHubConnect = useCallback(async () => {
+    try {
+      const url = await getGitHubConnectUrl()
+      await openExternal(url)
+    } catch (error) {
+      console.error("Failed to start GitHub connection:", error)
+      await openExternal(getLoginUrl())
     }
   }, [])
 
@@ -685,13 +696,13 @@ function ProjectsContent() {
                                 ) : githubError ? (
                                   <div className="text-sm text-linear-text-secondary py-4">
                                     Connect your GitHub account to browse repos.{" "}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        void openExternal(getLoginUrl())
-                                      }}
-                                      className="text-linear-accent hover:underline"
-                                    >
+                                     <button
+                                       type="button"
+                                       onClick={() => {
+                                         void openGitHubConnect()
+                                       }}
+                                       className="text-linear-accent hover:underline"
+                                     >
                                       Connect GitHub
                                     </button>
                                   </div>
@@ -1250,13 +1261,13 @@ function ProjectsContent() {
                       ) : editGithubError ? (
                         <div className="text-sm text-linear-text-secondary py-4">
                           Connect your GitHub account to browse repos.{" "}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void openExternal(getLoginUrl())
-                            }}
-                            className="text-linear-accent hover:underline"
-                          >
+                           <button
+                             type="button"
+                             onClick={() => {
+                               void openGitHubConnect()
+                             }}
+                             className="text-linear-accent hover:underline"
+                           >
                             Connect GitHub
                           </button>
                         </div>

@@ -3,6 +3,19 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { User, Repository, fetchCurrentUser, getActiveRepository, logout as apiLogout } from '@/lib/api';
 
+async function storeGitHubAccessToken(accessToken?: string) {
+  if (!accessToken || typeof window === 'undefined' || !("__TAURI_INTERNALS__" in window)) {
+    return;
+  }
+
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('store_secret', { key: 'github_token', value: accessToken });
+  } catch (error) {
+    console.error('Failed to store GitHub token:', error);
+  }
+}
+
 interface AuthCallbackPayload {
   success: boolean;
   token?: string;
@@ -54,7 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (githubConnectToken) {
       import('@/lib/api/auth').then(({ confirmGitHubConnect }) => {
         confirmGitHubConnect(githubConnectToken)
-          .then((res) => {
+          .then(async (res) => {
+            await storeGitHubAccessToken(res.githubAccessToken)
             localStorage.setItem('token', res.token);
             window.history.replaceState({}, '', window.location.pathname);
             Promise.all([refreshUser(), refreshActiveRepository()]);
@@ -90,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               try {
                 const { confirmGitHubConnect } = await import('@/lib/api/auth');
                 const res = await confirmGitHubConnect(payload.github_connect_token);
+                await storeGitHubAccessToken(res.githubAccessToken)
                 localStorage.setItem('token', res.token);
                 await Promise.all([refreshUser(), refreshActiveRepository()]);
               } catch (e) {

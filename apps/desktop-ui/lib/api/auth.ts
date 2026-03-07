@@ -36,7 +36,7 @@ export async function getGitHubConnectUrl(): Promise<string> {
   return data.url;
 }
 
-export async function confirmGitHubConnect(githubConnectToken: string): Promise<{ token: string }> {
+export async function confirmGitHubConnect(githubConnectToken: string): Promise<{ token: string; githubAccessToken?: string }> {
   const res = await fetch(`${API_URL}/api/auth/github/connect/confirm`, {
     method: 'POST',
     headers: {

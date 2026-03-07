@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { DropResult } from "@hello-pangea/dnd";
+import { toast } from "sonner";
 import { SSEEventType, SSEEventData } from "@/hooks/use-sse";
 import { useSSESubscription } from "@/providers/sse-provider";
 import { useAuth } from "@/hooks/use-auth";
 import { Project } from "@/lib/api";
 import type { Repository } from "@/lib/api";
-import { Task, ExecutionProgress, ExecutionLogEntry } from "@/types/task";
+import { Task, ExecutionProgress, ExecutionLogEntry, PendingPermission } from "@/types/task";
 import { API_URL, getAuthHeader, isDesktopRuntime } from "@/lib/api/client";
 import { getSetupStatus, hasConfiguredProviders } from "@/lib/api/opencode";
 import {
@@ -98,6 +99,8 @@ export interface UseKanbanBoardReturn {
   handleBatchMoveToInProgress: () => Promise<void>;
   handleBatchExecute: (mode: "parallel" | "queue") => Promise<void>;
   handleCancelBatch: (batchId: string) => Promise<void>;
+  pendingPermissions: Record<string, PendingPermission[]>;
+  handlePermissionRespond: (taskId: string, permissionId: string, response: 'once' | 'always' | 'reject') => Promise<void>;
   toggleTaskSelect: (taskId: string) => void;
   toggleColumnSelection: (columnId: string) => void;
   toggleColumnSelectAll: (status: Task["status"]) => void;
@@ -148,6 +151,7 @@ export function useKanbanBoard({
   } | null>(null);
   const [showProviderSetup, setShowProviderSetup] = useState(false);
   const [pendingExecuteTaskId, setPendingExecuteTaskId] = useState<string | null>(null);
+  const [pendingPermissions, setPendingPermissions] = useState<Record<string, PendingPermission[]>>({});
   const { isAuthenticated, activeRepository, refreshActiveRepository } =
     useAuth();
   const metadataUnsubscribersRef = useRef<Map<string, () => void>>(new Map());
@@ -531,6 +535,36 @@ export function useKanbanBoard({
                 logData.entry,
               ],
             }));
+          }
+          break;
+        }
+
+        case "permission:requested": {
+          const taskId = data.taskId || data.id;
+          const permission = data.permission;
+          if (taskId && permission) {
+            setPendingPermissions((prev) => ({
+              ...prev,
+              [taskId]: [...(prev[taskId] || []), permission as PendingPermission],
+            }));
+            const perm = permission as PendingPermission;
+            toast.warning("Permission Required", {
+              description: perm.title || "A task needs your approval to continue",
+              duration: 10000,
+            });
+          }
+          break;
+        }
+
+        case "permission:resolved": {
+          const taskId = data.taskId || data.id;
+          const permissionId = data.permissionId;
+          if (taskId && permissionId) {
+            setPendingPermissions((prev) => ({
+              ...prev,
+              [taskId]: (prev[taskId] || []).filter((p) => p.id !== permissionId),
+            }));
+            toast.success("Permission resolved", { duration: 3000 });
           }
           break;
         }
@@ -971,6 +1005,38 @@ export function useKanbanBoard({
     }
   }, [pendingExecuteTaskId]);
 
+  const handlePermissionRespond = useCallback(async (
+    taskId: string,
+    permissionId: string,
+    response: 'once' | 'always' | 'reject',
+  ) => {
+    try {
+      const sidecarUrl = process.env.NEXT_PUBLIC_SIDECAR_URL || "http://localhost:3001";
+      const token = localStorage.getItem("token");
+      const res = await fetch(
+        `${sidecarUrl}/api/tasks/${taskId}/permissions/${permissionId}/respond`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ response }),
+        },
+      );
+      if (!res.ok) {
+        throw new Error(`Failed to respond to permission: ${res.statusText}`);
+      }
+      // Optimistically remove the permission
+      setPendingPermissions((prev) => ({
+        ...prev,
+        [taskId]: (prev[taskId] || []).filter((p) => p.id !== permissionId),
+      }));
+    } catch (err) {
+      console.error("Error responding to permission:", err);
+    }
+  }, []);
+
   return {
     tasks,
     loading,
@@ -1006,6 +1072,8 @@ export function useKanbanBoard({
     handleBatchMoveToInProgress,
     handleBatchExecute,
     handleCancelBatch,
+    pendingPermissions,
+    handlePermissionRespond,
     toggleTaskSelect,
     toggleColumnSelection,
     toggleColumnSelectAll,
