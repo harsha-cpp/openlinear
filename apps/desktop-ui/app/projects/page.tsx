@@ -48,7 +48,6 @@ import {
   updateProject,
   deleteProject,
   fetchGitHubRepos,
-  getLoginUrl,
   getGitHubConnectUrl,
   type Project,
   type Team,
@@ -209,13 +208,8 @@ function ProjectsContent() {
   }, [])
 
   const openGitHubConnect = useCallback(async () => {
-    try {
-      const url = await getGitHubConnectUrl()
-      await openExternal(url)
-    } catch (error) {
-      console.error("Failed to start GitHub connection:", error)
-      await openExternal(getLoginUrl())
-    }
+    const url = await getGitHubConnectUrl()
+    await openExternal(url)
   }, [])
 
   useEffect(() => {
@@ -695,15 +689,13 @@ function ProjectsContent() {
                                   </div>
                                 ) : githubError ? (
                                   <div className="text-sm text-linear-text-secondary py-4">
-                                    Connect your GitHub account to browse repos.{" "}
-                                     <button
-                                       type="button"
-                                       onClick={() => {
-                                         void openGitHubConnect()
-                                       }}
-                                       className="text-linear-accent hover:underline"
-                                     >
-                                      Connect GitHub
+                                    Failed to load repos.{" "}
+                                    <button
+                                      type="button"
+                                      onClick={() => loadGitHubRepos()}
+                                      className="text-linear-accent hover:underline"
+                                    >
+                                      Retry
                                     </button>
                                   </div>
                                 ) : (
@@ -1260,15 +1252,13 @@ function ProjectsContent() {
                         </div>
                       ) : editGithubError ? (
                         <div className="text-sm text-linear-text-secondary py-4">
-                          Connect your GitHub account to browse repos.{" "}
-                           <button
-                             type="button"
-                             onClick={() => {
-                               void openGitHubConnect()
-                             }}
-                             className="text-linear-accent hover:underline"
-                           >
-                            Connect GitHub
+                          Failed to load repos.{" "}
+                          <button
+                            type="button"
+                            onClick={() => loadGitHubRepos(true)}
+                            className="text-linear-accent hover:underline"
+                          >
+                            Retry
                           </button>
                         </div>
                       ) : (
