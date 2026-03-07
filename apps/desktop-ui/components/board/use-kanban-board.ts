@@ -818,36 +818,26 @@ export function useKanbanBoard({
           );
         }
 
-        const task = tasks.find((item) => item.id === taskId);
-        if (!task) {
-          throw new Error("Task not found");
+        const token = localStorage.getItem("token");
+        const headers: HeadersInit = {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+
+        const sidecarUrl =
+          process.env.NEXT_PUBLIC_SIDECAR_URL || "http://localhost:3001";
+        const response = await fetch(
+          `${sidecarUrl}/api/tasks/${taskId}/execute`,
+          {
+            method: "POST",
+            headers,
+          },
+        );
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(
+            error.error || `Failed to execute task: ${response.statusText}`,
+          );
         }
-
-        const prompt = [task.title, task.description]
-          .filter(Boolean)
-          .join("\n\n")
-          .trim();
-        if (!prompt) {
-          throw new Error("Task prompt is empty");
-        }
-
-        if (!metadataUnsubscribersRef.current.has(taskId)) {
-          const unsubscribe = await listenToTaskMetadata(taskId);
-          metadataUnsubscribersRef.current.set(taskId, unsubscribe);
-        }
-
-        const runId =
-          typeof crypto !== "undefined" && crypto.randomUUID
-            ? crypto.randomUUID()
-            : `${taskId}-${Date.now()}`;
-
-        const { invoke } = await import("@tauri-apps/api/core");
-        await invoke("run_opencode_task", {
-          taskId,
-          runId,
-          prompt,
-          repoPath: localPath,
-        });
 
         return;
       }

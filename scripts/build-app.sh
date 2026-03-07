@@ -103,6 +103,7 @@ ok "Dependencies ready"
 
 # ── Step 4: Build Tauri app ───────────────────────────────────────
 step "Building Tauri desktop app..."
+export NO_STRIP=true
 if [ -n "$BUNDLE_TARGET" ]; then
   pnpm --filter @openlinear/desktop tauri build --bundles "$BUNDLE_TARGET"
 else
