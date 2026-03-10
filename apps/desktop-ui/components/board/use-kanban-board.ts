@@ -41,6 +41,7 @@ export interface ActiveBatch {
 }
 
 export const API_BASE_URL = API_URL;
+const SIDECAR_URL = process.env.NEXT_PUBLIC_SIDECAR_URL || "http://localhost:3001";
 
 export interface KanbanBoardConfigState {
   tasks: Task[];
@@ -272,7 +273,7 @@ export function useKanbanBoard({
         (id) => tasks.find((t) => t.id === id)?.status !== "done",
       );
       if (nonDoneTaskIds.length === 0) return;
-      const response = await fetch(`${API_BASE_URL}/api/batches`, {
+      const response = await fetch(`${SIDECAR_URL}/api/batches`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -293,7 +294,7 @@ export function useKanbanBoard({
   const handleCancelBatch = async (batchId: string) => {
     try {
       const token = localStorage.getItem("token");
-      await fetch(`${API_BASE_URL}/api/batches/${batchId}/cancel`, {
+      await fetch(`${SIDECAR_URL}/api/batches/${batchId}/cancel`, {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -857,10 +858,8 @@ export function useKanbanBoard({
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         };
 
-        const sidecarUrl =
-          process.env.NEXT_PUBLIC_SIDECAR_URL || "http://localhost:3001";
         const response = await fetch(
-          `${sidecarUrl}/api/tasks/${taskId}/execute`,
+          `${SIDECAR_URL}/api/tasks/${taskId}/execute`,
           {
             method: "POST",
             headers,
@@ -881,7 +880,7 @@ export function useKanbanBoard({
         ? { Authorization: `Bearer ${token}` }
         : {};
       const response = await fetch(
-        `${API_BASE_URL}/api/tasks/${taskId}/execute`,
+        `${SIDECAR_URL}/api/tasks/${taskId}/execute`,
         {
           method: "POST",
           headers,
@@ -902,7 +901,7 @@ export function useKanbanBoard({
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
-        `${API_BASE_URL}/api/tasks/${taskId}/cancel`,
+        `${SIDECAR_URL}/api/tasks/${taskId}/cancel`,
         {
           method: "POST",
           headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -922,7 +921,7 @@ export function useKanbanBoard({
     if (!taskLogs[taskId]) {
       try {
         const response = await fetch(
-          `${API_BASE_URL}/api/tasks/${taskId}/logs`,
+          `${SIDECAR_URL}/api/tasks/${taskId}/logs`,
           { headers: getAuthHeader() },
         );
         if (response.ok) {
@@ -995,7 +994,7 @@ export function useKanbanBoard({
       try {
         const token = localStorage.getItem("token");
         const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-        await fetch(`${API_BASE_URL}/api/tasks/${taskId}/execute`, {
+        await fetch(`${SIDECAR_URL}/api/tasks/${taskId}/execute`, {
           method: "POST",
           headers,
         });
@@ -1011,10 +1010,9 @@ export function useKanbanBoard({
     response: 'once' | 'always' | 'reject',
   ) => {
     try {
-      const sidecarUrl = process.env.NEXT_PUBLIC_SIDECAR_URL || "http://localhost:3001";
       const token = localStorage.getItem("token");
       const res = await fetch(
-        `${sidecarUrl}/api/tasks/${taskId}/permissions/${permissionId}/respond`,
+        `${SIDECAR_URL}/api/tasks/${taskId}/permissions/${permissionId}/respond`,
         {
           method: "POST",
           headers: {
