@@ -40,7 +40,7 @@ pnpm add -g openlinear
 # or
 yarn global add openlinear
 # or
-curl -fsSL https://openlinear.vercel.app/api/install | bash
+curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash
 # or
 paru -S openlinear-bin
 ```

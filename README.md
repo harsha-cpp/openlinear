@@ -58,6 +58,7 @@ pnpm --filter @openlinear/landing dev
 
 ## Releases
 
+- curl installer: `curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash`
 - GitHub Releases: [github.com/kaizen403/openlinear/releases](https://github.com/kaizen403/openlinear/releases)
 - npm package: `npm install -g openlinear`
 - Arch/AUR package: `openlinear-bin`

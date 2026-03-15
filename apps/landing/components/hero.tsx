@@ -1,21 +1,16 @@
 "use client"
 
 import { ArrowRight, CheckCircle2, Copy, ExternalLink, GitMerge, Image as ImageIcon, Loader2, MessageSquare, Sparkles, Zap } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
-const DEFAULT_INSTALL_ORIGIN = "https://openlinear.vercel.app"
+const CURL_INSTALL_COMMAND = "curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash"
 
 function InstallTabs() {
   const [activeTab, setActiveTab] = useState<"curl" | "npm" | "aur">("curl")
   const [copied, setCopied] = useState(false)
-  const [installOrigin, setInstallOrigin] = useState(DEFAULT_INSTALL_ORIGIN)
-
-  useEffect(() => {
-    setInstallOrigin(window.location.origin)
-  }, [])
 
   const commands = {
-    curl: `curl -fsSL ${installOrigin}/api/install | bash`,
+    curl: CURL_INSTALL_COMMAND,
     npm: "npm install -g openlinear",
     aur: "paru -S openlinear-bin",
   }
@@ -240,7 +235,7 @@ export function Hero() {
                     <div className="h-3 w-3 rounded-full bg-green-400/80" />
                   </div>
                   <div className="h-4 w-[1px] bg-white/10 mx-2" />
-                  <span className="text-sm text-white/40 font-mono">openlinear.vercel.app</span>
+                  <span className="text-sm text-white/40 font-mono">github.com/kaizen403/openlinear</span>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06]">

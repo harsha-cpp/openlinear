@@ -8,6 +8,8 @@ OpenLinear now ships as a local-first desktop release with optional landing/docs
 GitHub repository
   -> GitHub Releases
     -> Linux AppImage / .deb
+  -> raw install.sh
+    -> curl installer
   -> npm
     -> openlinear launcher
   -> AUR
@@ -15,7 +17,6 @@ GitHub repository
   -> Optional Vercel project
     -> apps/landing
       -> static pages
-      -> /api/install
 ```
 
 ## Repository structure
@@ -38,7 +39,8 @@ openlinear/
 - GitHub Releases publish the desktop AppImage and `.deb`.
 - npm publishes the `openlinear` launcher package.
 - AUR publishes `openlinear-bin` metadata that points at the GitHub release artifacts.
-- The landing app exists for marketing, docs, and the shell installer route.
+- `install.sh` in the repository is the canonical shell installer used by the `curl` command.
+- The landing app exists for marketing and docs.
 
 ## Landing app
 
@@ -46,11 +48,13 @@ openlinear/
 - Deploy target: Vercel
 - Effective project root: `apps/landing`
 - Static routes: `/`, `/product`, `/pricing`, `/enterprise`, `/contact`, `/docs`
-- Dynamic route: `/api/install`
+- Optional mirror route: `/api/install`
 
-## Install endpoint
+## Install script
 
-`apps/landing/app/api/install/route.ts` returns a shell installer that uses the active host origin so copied commands work on the current deployed domain.
+- Canonical installer: `install.sh`
+- Canonical command: `curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash`
+- `apps/landing/app/api/install/route.ts` mirrors that installer when the landing app is deployed.
 
 ## Hosted surface
 

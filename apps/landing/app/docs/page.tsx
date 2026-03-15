@@ -73,7 +73,7 @@ pnpm --filter @openlinear/landing dev`}</CodeBlock>
 
         <Section title="Install the CLI">
           <p>Choose the release channel that matches your machine.</p>
-          <CodeBlock>{`curl -fsSL https://your-domain/api/install | bash
+          <CodeBlock>{`curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash
 npm install -g openlinear
 paru -S openlinear-bin`}</CodeBlock>
           <p>The `curl` installer and npm launcher currently target Linux x64. Arch users should prefer `openlinear-bin`.</p>
@@ -98,7 +98,7 @@ openlinear github whoami`}</CodeBlock>
         </Section>
 
         <Section title="Deploy on Vercel">
-          <p>The landing site is optional. If you deploy it, Vercel only serves marketing/docs pages and the `curl` installer route.</p>
+          <p>The landing site is optional. If you deploy it, Vercel only serves marketing and docs pages. The canonical `curl` installer is the repo-hosted `install.sh` script.</p>
           <ul className="space-y-3">
             {installSteps.map((step) => (
               <li key={step} className="flex gap-3">

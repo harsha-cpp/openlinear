@@ -26,7 +26,7 @@ git tag vX.Y.Z -> GitHub Actions -> build desktop artifacts -> GitHub Release ->
 
 ## Required secrets
 
-- `NPM_TOKEN`
+- `NPM_TOKEN` (use an npm automation token if you want fully automated publishes)
 - `AUR_SSH_PRIVATE_KEY`
 
 ## Local verification
@@ -57,3 +57,4 @@ git push origin main --follow-tags
 
 - The desktop sidecar still exposes a local API inside the app, but CI/CD does not deploy it as a hosted service.
 - The Arch package path in this repo is the existing `PKGBUILD`/AUR flow under `packaging/aur/openlinear-bin`.
+- The canonical `curl` installer is `https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh`, so it does not depend on a Vercel deployment.

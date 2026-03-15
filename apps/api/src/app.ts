@@ -64,7 +64,7 @@ export function createApp(): Application {
     res.status(410).json({
       error: 'Install no longer ships from the local API server.',
       install: {
-        curl: 'curl -fsSL https://openlinear.vercel.app/api/install | bash',
+        curl: 'curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash',
         npm: 'npm install -g openlinear',
         aur: 'openlinear-bin',
         releases: 'https://github.com/kaizen403/openlinear/releases/latest',

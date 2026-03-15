@@ -103,6 +103,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -118,7 +119,7 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Verify tag matches package version
         run: |
@@ -142,7 +143,7 @@ jobs:
             echo "Version $LOCAL_VERSION already published, skipping"
             exit 0
           fi
-          npm publish --access public
+          npm publish --access public --provenance
 
   publish-aur:
     name: Publish Arch package metadata
