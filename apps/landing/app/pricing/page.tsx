@@ -15,7 +15,7 @@ import {
   FolderOpen,
   Gauge,
   GraduationCap,
-  Infinity,
+  Infinity as InfinityIcon,
   Layers,
   MessageCircle,
   ScrollText,
@@ -37,7 +37,7 @@ const plans = [
     price: "$0",
     period: "/month",
     description: "For individual developers exploring AI execution.",
-    cta: { label: "Get Started", href: "https://dashboard.rixie.in", style: "secondary" as const },
+    cta: { label: "Read docs", href: "/docs", style: "secondary" as const },
     features: [
       { text: "Single project", icon: FolderOpen as LucideIcon },
       { text: "Basic execution", icon: Zap as LucideIcon },
@@ -52,14 +52,14 @@ const plans = [
     period: "/month",
     description: "For developers who need more power and flexibility.",
     popular: true,
-    cta: { label: "Upgrade to Pro", href: "https://dashboard.rixie.in", style: "primary" as const },
+    cta: { label: "View on GitHub", href: "https://github.com/kaizen403/openlinear", style: "primary" as const },
     features: [
       { text: "Multiple projects", icon: Layers as LucideIcon },
       { text: "Batch execution (parallel + queue)", icon: Cpu as LucideIcon },
       { text: "Configurable concurrency limits", icon: Settings as LucideIcon },
       { text: "Advanced agent settings", icon: Sliders as LucideIcon },
       { text: "Priority support", icon: MessageCircle as LucideIcon },
-      { text: "Unlimited executions", icon: Infinity as LucideIcon },
+      { text: "Unlimited executions", icon: InfinityIcon as LucideIcon },
       { text: "All premium agents", icon: Crown as LucideIcon },
     ],
   },
@@ -111,6 +111,7 @@ function FAQItem({ q, a }: { q: string; a: string }) {
   return (
     <div className="border-b border-border/20">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between py-5 text-left group"
       >

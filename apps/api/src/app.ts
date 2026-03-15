@@ -46,7 +46,7 @@ export function createApp(): Application {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-openlinear-client'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-openlinear-client', 'x-github-token'],
   }));
   app.use(express.json());
   app.use(cookieParser());
@@ -61,7 +61,15 @@ export function createApp(): Application {
   app.use('/api/inbox', inboxRouter);
 
   app.get('/api/install', (_req: Request, res: Response) => {
-    res.redirect(302, 'https://raw.githubusercontent.com/kaizen403/openlinear/main/apps/landing/public/install.sh');
+    res.status(410).json({
+      error: 'Install no longer ships from the local API server.',
+      install: {
+        curl: 'curl -fsSL https://openlinear.vercel.app/api/install | bash',
+        npm: 'npm install -g openlinear',
+        aur: 'openlinear-bin',
+        releases: 'https://github.com/kaizen403/openlinear/releases/latest',
+      },
+    });
   });
 
   app.get('/health', (_req: Request, res: Response) => {

@@ -1,15 +1,23 @@
 "use client"
 
 import { ArrowRight, CheckCircle2, Copy, ExternalLink, GitMerge, Image as ImageIcon, Loader2, MessageSquare, Sparkles, Zap } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
+
+const DEFAULT_INSTALL_ORIGIN = "https://openlinear.vercel.app"
 
 function InstallTabs() {
-  const [activeTab, setActiveTab] = useState<"curl" | "npm">("curl")
+  const [activeTab, setActiveTab] = useState<"curl" | "npm" | "aur">("curl")
   const [copied, setCopied] = useState(false)
+  const [installOrigin, setInstallOrigin] = useState(DEFAULT_INSTALL_ORIGIN)
+
+  useEffect(() => {
+    setInstallOrigin(window.location.origin)
+  }, [])
 
   const commands = {
-    curl: "curl -fsSL https://rixie.in/api/install | bash",
+    curl: `curl -fsSL ${installOrigin}/api/install | bash`,
     npm: "npm install -g openlinear",
+    aur: "paru -S openlinear-bin",
   }
 
   const copyToClipboard = async () => {
@@ -43,6 +51,17 @@ function InstallTabs() {
             }`}
           >
             npm
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("aur")}
+            className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
+              activeTab === "aur"
+                ? "text-white bg-white/[0.06]"
+                : "text-white/50 hover:text-white/70 hover:bg-white/[0.03]"
+            }`}
+          >
+            AUR
           </button>
         </div>
 
@@ -117,10 +136,10 @@ export function Hero() {
 
         <div className="hero-reveal-4 flex flex-wrap items-center justify-center gap-4 mt-12">
           <a
-            href="https://dashboard.rixie.in"
+            href="/docs"
             className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-blue-500 to-blue-600 px-6 py-3.5 text-sm font-medium text-white hover:from-blue-400 hover:to-blue-500 transition-all duration-300 shadow-lg shadow-blue-500/25"
           >
-            Setup in 5 mins
+            View docs
           </a>
           <a
             href="https://github.com/kaizen403/openlinear"
@@ -221,7 +240,7 @@ export function Hero() {
                     <div className="h-3 w-3 rounded-full bg-green-400/80" />
                   </div>
                   <div className="h-4 w-[1px] bg-white/10 mx-2" />
-                  <span className="text-sm text-white/40 font-mono">rixie.in</span>
+                  <span className="text-sm text-white/40 font-mono">openlinear.vercel.app</span>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06]">

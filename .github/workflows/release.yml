@@ -3,22 +3,23 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
-  packages: write
 
 concurrency:
   group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
 jobs:
   build-release:
+    name: Build Release Artifacts
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
-    env:
-      TURBO_TELEMETRY_DISABLED: 1
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,16 +37,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust build artifacts
-        uses: actions/cache@v4
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            apps/desktop/src-tauri/target/
-          key: rust-release-${{ runner.os }}-${{ hashFiles('apps/desktop/src-tauri/Cargo.lock') }}
-          restore-keys: |
-            rust-release-${{ runner.os }}-
+          workspaces: apps/desktop/src-tauri -> target
 
       - name: Install Linux dependencies
         run: |
@@ -61,8 +55,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Generate Prisma client
-        run: pnpm --filter @openlinear/db db:generate
+      - name: Verify release version metadata
+        run: bash ./scripts/sync-aur-metadata.sh "${GITHUB_REF_NAME#v}"
+
+      - name: Build sidecar artifacts
+        run: bash ./scripts/build-sidecar.sh
 
       - name: Build desktop
         run: pnpm build:desktop
@@ -88,6 +85,7 @@ jobs:
           VERSION=${GITHUB_REF_NAME#v}
           APPIMAGE=$(ls apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage | head -n 1)
           DEB=$(ls apps/desktop/src-tauri/target/release/bundle/deb/*.deb | head -n 1)
+
           mkdir -p dist/release
           cp "$APPIMAGE" "dist/release/openlinear-${VERSION}-x86_64.AppImage"
           cp "$DEB" "dist/release/openlinear-${VERSION}-x86_64.deb"
@@ -99,25 +97,44 @@ jobs:
           files: dist/release/*
 
   publish-npm:
-    name: Publish NPM Package
+    name: Publish npm package
     needs: build-release
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
           registry-url: https://registry.npmjs.org
-      - run: pnpm install --frozen-lockfile
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify tag matches package version
+        run: |
+          set -euo pipefail
+          VERSION=${GITHUB_REF_NAME#v}
+          PACKAGE_VERSION=$(node -p "require('./packages/openlinear/package.json').version")
+          if [ "$VERSION" != "$PACKAGE_VERSION" ]; then
+            echo "Tag version $VERSION does not match packages/openlinear/package.json version $PACKAGE_VERSION" >&2
+            exit 1
+          fi
+
       - name: Publish openlinear
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          set -euo pipefail
           cd packages/openlinear
           LOCAL_VERSION=$(node -p "require('./package.json').version")
           REMOTE_VERSION=$(npm view openlinear version 2>/dev/null || echo "0.0.0")
@@ -128,49 +145,16 @@ jobs:
           npm publish --access public
 
   publish-aur:
-    name: Publish AUR Package
+    name: Publish Arch package metadata
     needs: build-release
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Update PKGBUILD and .SRCINFO
-        run: |
-          set -euo pipefail
-          VERSION=${GITHUB_REF_NAME#v}
-          cd packaging/aur/openlinear-bin
-
-          sed -i "s/^pkgver=.*/pkgver=${VERSION}/" PKGBUILD
-          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
-
-          cat > .SRCINFO << EOF
-          pkgbase = openlinear-bin
-          	pkgdesc = AI-powered project management that actually writes the code — desktop app
-          	pkgver = ${VERSION}
-          	pkgrel = 1
-          	url = https://github.com/kaizen403/openlinear
-          	arch = x86_64
-          	license = MIT
-          	depends = glibc
-          	depends = gtk3
-          	depends = webkit2gtk-4.1
-          	optdepends = libappindicator-gtk3: system tray support
-          	optdepends = xdg-utils: open links in browser
-          	provides = openlinear
-          	conflicts = openlinear
-          	source = openlinear-${VERSION}-x86_64.AppImage::https://github.com/kaizen403/openlinear/releases/download/v${VERSION}/openlinear-${VERSION}-x86_64.AppImage
-          	source = openlinear.desktop
-          	source = openlinear.png::https://raw.githubusercontent.com/kaizen403/openlinear/v${VERSION}/apps/desktop/src-tauri/icons/icon.png
-          	sha256sums = SKIP
-          	sha256sums = SKIP
-          	sha256sums = SKIP
-
-          pkgname = openlinear-bin
-          EOF
-
-          # Remove leading whitespace from heredoc
-          sed -i 's/^          //' .SRCINFO
+      - name: Sync Arch package metadata
+        run: bash ./scripts/sync-aur-metadata.sh "${GITHUB_REF_NAME#v}"
 
       - name: Publish to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v3.0.1

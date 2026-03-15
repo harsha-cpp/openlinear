@@ -150,7 +150,7 @@ function GitHubRepoTab({
     setIsLoadingRepos(true)
     fetchGitHubRepos()
       .then(setRepos)
-      .catch(() => toast.error("Failed to load repositories"))
+      .catch((err) => toast.error(err instanceof Error ? err.message : "Failed to load repositories"))
       .finally(() => setIsLoadingRepos(false))
   }, [hasGitHub])
 

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '@openlinear/db';
 import { z } from 'zod';
-import { requireAuth, AuthRequest } from '../middleware/auth';
+import { requireAuth, optionalAuth, AuthRequest } from '../middleware/auth';
 import { getLegacyTokenForOperation } from '../services/auth-migration';
 import {
   getGitHubRepos,
@@ -11,6 +11,7 @@ import {
   getUserRepositories,
   GitHubRepo,
   addRepositoryByUrl,
+  getDesktopGitHubAuthSource,
 } from '../services/github';
 
 const router: Router = Router();
@@ -100,12 +101,30 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.get('/github', requireAuth, async (req: AuthRequest, res: Response) => {
+router.get('/github', optionalAuth, async (req: AuthRequest, res: Response) => {
+  console.log('[Repos] GET /github — userId=%s hasGithubHeader=%s hasAuth=%s client=%s',
+    req.userId ?? 'none',
+    !!req.headers['x-github-token'],
+    !!req.headers['authorization'],
+    req.headers['x-openlinear-client'] ?? 'none');
+
   try {
     const headerToken = req.headers['x-github-token'];
-    const accessToken = typeof headerToken === 'string' && headerToken.trim().length > 0
+    let accessToken = typeof headerToken === 'string' && headerToken.trim().length > 0
       ? headerToken
-      : await getLegacyTokenForOperation(req.userId!, 'repos.list-github');
+      : req.userId
+        ? await getLegacyTokenForOperation(req.userId, 'repos.list-github')
+        : null;
+
+    let source = accessToken ? (headerToken ? 'header' : 'legacy-db') : 'none';
+
+    if (!accessToken) {
+      const authSource = getDesktopGitHubAuthSource();
+      accessToken = authSource?.accessToken ?? null;
+      if (accessToken) source = `local-${authSource!.source}`;
+    }
+
+    console.log('[Repos] Token source=%s hasToken=%s', source, !!accessToken);
 
     if (!accessToken) {
       res.status(403).json({ error: 'GitHub account not linked. Please sign in with GitHub first.' });
@@ -113,6 +132,7 @@ router.get('/github', requireAuth, async (req: AuthRequest, res: Response) => {
     }
 
     const repos = await getGitHubRepos(accessToken);
+    console.log('[Repos] Success — %d repos returned', repos.length);
     res.json(repos);
   } catch (err) {
     console.error('[Repos] Failed to fetch GitHub repos:', err);

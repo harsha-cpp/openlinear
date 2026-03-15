@@ -5,6 +5,10 @@ import crypto from 'crypto';
 import { prisma } from '@openlinear/db';
 import {
   getAuthorizationUrl,
+  getGitHubOAuthConfigError,
+  getDesktopGitHubAuthSource,
+  startGitHubDeviceFlow,
+  pollGitHubDeviceFlow,
   exchangeCodeForToken,
   getGitHubUser,
   createOrUpdateUser,
@@ -70,6 +74,47 @@ function isDesktopOAuthRequest(req: Request): boolean {
   return false;
 }
 
+function handleOAuthConfigError(req: Request, res: Response, message: string) {
+  if (isDesktopOAuthRequest(req)) {
+    res.redirect(getDesktopCallbackUrl({ error: message }));
+    return;
+  }
+
+  res.redirect(`${getFrontendUrl()}?error=${encodeURIComponent(message)}`);
+}
+
+function buildSessionToken(user: { id: string; username: string }) {
+  return jwt.sign(
+    { userId: user.id, username: user.username },
+    getJwtSecret(),
+    { expiresIn: '7d', algorithm: 'HS256' }
+  );
+}
+
+function buildAuthUserPayload(user: {
+  id: string;
+  username: string;
+  email: string | null;
+  avatarUrl: string | null;
+  githubId: number | null;
+}) {
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    avatarUrl: user.avatarUrl,
+    githubId: user.githubId,
+  };
+}
+
+async function completeGitHubLogin(accessToken: string) {
+  const githubUser = await getGitHubUser(accessToken);
+  const user = await createOrUpdateUser(githubUser);
+  const token = buildSessionToken(user);
+
+  return { githubUser, user, token };
+}
+
 // --- Email/Password Auth ---
 
 const registerSchema = z.object({
@@ -81,6 +126,10 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
+});
+
+const githubDevicePollSchema = z.object({
+  deviceCode: z.string().min(1),
 });
 
 router.post('/register', async (req: Request, res: Response) => {
@@ -181,13 +230,114 @@ router.post('/login', async (req: Request, res: Response) => {
 // --- GitHub OAuth ---
 
 router.get('/github', (req: Request, res: Response) => {
+  const configError = getGitHubOAuthConfigError();
+  if (configError) {
+    handleOAuthConfigError(req, res, configError);
+    return;
+  }
+
   const isDesktop = isDesktopOAuthRequest(req);
   const state = isDesktop
     ? `${DESKTOP_STATE_PREFIX}${generateState()}`
     : generateState();
-  
-  const authUrl = getAuthorizationUrl(state);
+
+  const authUrl = getAuthorizationUrl(state, isDesktop);
   res.redirect(authUrl);
+});
+
+router.get('/github/desktop/check', (req: Request, res: Response) => {
+  if (req.headers['x-openlinear-client'] !== 'desktop') {
+    res.status(400).json({ error: 'Desktop-only endpoint.' });
+    return;
+  }
+
+  const authSource = getDesktopGitHubAuthSource();
+  res.json({ available: !!authSource, source: authSource?.source ?? null });
+});
+
+router.post('/github/desktop/login', async (req: Request, res: Response) => {
+  if (req.headers['x-openlinear-client'] !== 'desktop') {
+    res.status(400).json({ error: 'Desktop GitHub login is only available for desktop clients.' });
+    return;
+  }
+
+  const authSource = getDesktopGitHubAuthSource();
+  if (!authSource) {
+    res.status(400).json({
+      error: 'No local GitHub auth found. Run `gh auth login` or set GITHUB_TOKEN in your local .env.',
+    });
+    return;
+  }
+
+  try {
+    const { user, token } = await completeGitHubLogin(authSource.accessToken);
+    res.json({
+      token,
+      githubAccessToken: authSource.accessToken,
+      source: authSource.source,
+      user: buildAuthUserPayload(user),
+    });
+  } catch (err) {
+    console.error('[Auth] Desktop GitHub login error:', err);
+    const errorMsg = err instanceof Error ? err.message : 'Desktop GitHub login failed';
+    res.status(400).json({ error: errorMsg });
+  }
+});
+
+router.post('/github/device/start', async (req: Request, res: Response) => {
+  if (req.headers['x-openlinear-client'] !== 'desktop') {
+    res.status(400).json({ error: 'GitHub device flow is only available for desktop clients.' });
+    return;
+  }
+
+  const configError = getGitHubOAuthConfigError(false);
+  if (configError) {
+    res.status(500).json({ error: configError });
+    return;
+  }
+
+  try {
+    const device = await startGitHubDeviceFlow();
+    res.json(device);
+  } catch (err) {
+    console.error('[Auth] GitHub device flow start error:', err);
+    const errorMsg = err instanceof Error ? err.message : 'Failed to start GitHub device flow';
+    res.status(500).json({ error: errorMsg });
+  }
+});
+
+router.post('/github/device/poll', async (req: Request, res: Response) => {
+  if (req.headers['x-openlinear-client'] !== 'desktop') {
+    res.status(400).json({ error: 'GitHub device flow is only available for desktop clients.' });
+    return;
+  }
+
+  const parsed = githubDevicePollSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'deviceCode is required' });
+    return;
+  }
+
+  try {
+    const result = await pollGitHubDeviceFlow(parsed.data.deviceCode);
+    if (result.status === 'pending') {
+      res.status(202).json(result);
+      return;
+    }
+
+    const { user, token } = await completeGitHubLogin(result.accessToken);
+
+    res.json({
+      status: 'complete',
+      token,
+      githubAccessToken: result.accessToken,
+      user: buildAuthUserPayload(user),
+    });
+  } catch (err) {
+    console.error('[Auth] GitHub device flow poll error:', err);
+    const errorMsg = err instanceof Error ? err.message : 'GitHub device flow failed';
+    res.status(400).json({ error: errorMsg });
+  }
 });
 
 router.get('/github/connect', async (req: Request, res: Response) => {
@@ -199,11 +349,17 @@ router.get('/github/connect', async (req: Request, res: Response) => {
 
   try {
     jwt.verify(authHeader.substring(7), getJwtSecret(), { algorithms: ['HS256'] });
+    const configError = getGitHubOAuthConfigError();
+    if (configError) {
+      res.status(500).json({ error: configError });
+      return;
+    }
+
     const isDesktop = req.headers['x-openlinear-client'] === 'desktop';
     const state = isDesktop
       ? `${DESKTOP_CONNECT_STATE_PREFIX}${generateState()}`
       : `connect:${generateState()}`;
-    const authUrl = getAuthorizationUrl(state);
+    const authUrl = getAuthorizationUrl(state, isDesktop);
     res.json({ url: authUrl });
   } catch {
     res.status(401).json({ error: 'Invalid token' });
@@ -215,6 +371,16 @@ router.get('/github/callback', async (req: Request, res: Response) => {
   const stateStr = typeof state === 'string' ? decodeURIComponent(state) : '';
   const isDesktop = stateStr.startsWith(DESKTOP_STATE_PREFIX);
   const isDesktopConnect = stateStr.startsWith(DESKTOP_CONNECT_STATE_PREFIX);
+
+  const configError = getGitHubOAuthConfigError();
+  if (configError) {
+    if (isDesktop || isDesktopConnect) {
+      res.redirect(getDesktopCallbackUrl({ error: configError }));
+      return;
+    }
+    res.redirect(`${getFrontendUrl()}?error=${encodeURIComponent(configError)}`);
+    return;
+  }
 
   if (error) {
     console.error('[Auth] GitHub OAuth error:', error, error_description);
@@ -239,10 +405,10 @@ router.get('/github/callback', async (req: Request, res: Response) => {
   const isConnect = isDesktopConnect || stateStr.startsWith('connect:');
 
   try {
-    const accessToken = await exchangeCodeForToken(code);
-    const githubUser = await getGitHubUser(accessToken);
+    const accessToken = await exchangeCodeForToken(code, isDesktop || isDesktopConnect);
 
     if (isConnect) {
+      const githubUser = await getGitHubUser(accessToken);
       const tempTokenPayload: {
         githubId: number;
         githubLogin: string;
@@ -272,13 +438,7 @@ router.get('/github/callback', async (req: Request, res: Response) => {
       }
       res.redirect(`${getFrontendUrl()}?github_connect_token=${tempToken}`);
     } else {
-      const user = await createOrUpdateUser(githubUser);
-
-      const token = jwt.sign(
-        { userId: user.id, username: user.username },
-        getJwtSecret(),
-        { expiresIn: '7d', algorithm: 'HS256' }
-      );
+      const { token } = await completeGitHubLogin(accessToken);
 
       if (isDesktop) {
         res.redirect(getDesktopCallbackUrl({ token }));

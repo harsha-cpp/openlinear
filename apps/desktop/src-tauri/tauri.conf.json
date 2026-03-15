@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "OpenLinear",
-  "version": "0.1.26",
+  "version": "0.1.27",
   "identifier": "com.openlinear.app",
   "build": {
     "beforeDevCommand": "PORT=3000 pnpm --filter @openlinear/desktop-ui dev",
     "devUrl": "http://localhost:3000",
-    "beforeBuildCommand": "pnpm --filter @openlinear/desktop-ui build",
+    "beforeBuildCommand": "bash ../../scripts/build-sidecar-cjs.sh && pnpm --filter @openlinear/desktop-ui build",
     "frontendDist": "../../desktop-ui/out"
   },
   "app": {
@@ -35,6 +35,9 @@
       "icons/icon.png"
     ],
     "externalBin": ["binaries/openlinear-sidecar"],
+    "resources": {
+      "../../sidecar/dist/sidecar-entry.cjs": "sidecar-entry.cjs"
+    },
     "macOS": {
       "minimumSystemVersion": "10.15",
       "dmg": {

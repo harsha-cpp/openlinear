@@ -9,6 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 BUNDLE_DIR="$ROOT_DIR/apps/desktop/src-tauri/target/release/bundle"
+RAW_BINARY="$ROOT_DIR/apps/desktop/src-tauri/target/release/openlinear-desktop"
 
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
@@ -37,14 +38,23 @@ OS="$(uname -s)"
 case "$OS" in
   Linux)
     APP=$(find "$BUNDLE_DIR/appimage" -name "*.AppImage" 2>/dev/null | sort -V | tail -1)
-    if [ -z "$APP" ]; then
-      fail "No AppImage found in $BUNDLE_DIR/appimage — run: pnpm build:app"
+    if [ -n "$APP" ]; then
+      chmod +x "$APP"
+      ok "Launching: $(basename "$APP")"
+      echo -e "  ${YELLOW}→${NC} $APP"
+      echo ""
+      exec "$APP"
     fi
-    chmod +x "$APP"
-    ok "Launching: $(basename "$APP")"
-    echo -e "  ${YELLOW}→${NC} $APP"
-    echo ""
-    exec "$APP"
+
+    if [ -f "$RAW_BINARY" ]; then
+      chmod +x "$RAW_BINARY"
+      warn "No AppImage found. Falling back to the raw desktop binary."
+      echo -e "  ${YELLOW}→${NC} $RAW_BINARY"
+      echo ""
+      exec "$RAW_BINARY"
+    fi
+
+    fail "No AppImage or raw desktop binary found — run: pnpm build:app"
     ;;
   Darwin)
     APP=$(find "$BUNDLE_DIR" -name "*.app" -maxdepth 3 2>/dev/null | sort -V | tail -1)

@@ -70,7 +70,7 @@ export function Column({ id, title, taskCount, children, onAddTask, selectionAct
         className={cn(
           "flex-1 p-2.5 sm:p-3 overflow-y-auto",
           "space-y-3",
-          isDraggingOver && "bg-white/[0.02] border border-dashed border-white/[0.1] rounded-xl backdrop-blur-sm"
+          isDraggingOver && "bg-white/[0.02] border border-dashed border-white/[0.1] rounded-xl"
         )}
       >
         {children}

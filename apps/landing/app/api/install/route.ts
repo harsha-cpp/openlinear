@@ -1,9 +1,12 @@
-export async function GET() {
-  const installScript = `#!/bin/bash
-# OpenLinear Installer Script
-# Usage: curl -fsSL https://rixie.in/api/install | bash
+import type { NextRequest } from 'next/server'
 
-set -e
+export async function GET(request: NextRequest) {
+  const origin = request.nextUrl.origin
+  const installScript = `#!/usr/bin/env bash
+# OpenLinear Installer Script
+# Usage: curl -fsSL ${origin}/api/install | bash
+
+set -euo pipefail
 
 RED='\\033[0;31m'
 GREEN='\\033[0;32m'
@@ -13,8 +16,11 @@ NC='\\033[0m'
 
 REPO="kaizen403/openlinear"
 API_URL="https://api.github.com/repos/\${REPO}/releases/latest"
-INSTALL_DIR="\${HOME}/.local/bin"
-BIN_NAME="openlinear"
+RELEASES_URL="https://github.com/\${REPO}/releases/latest"
+INSTALL_DIR="\${HOME}/.openlinear"
+APPIMAGE_PATH="\${INSTALL_DIR}/openlinear.AppImage"
+BIN_DIR="\${HOME}/.local/bin"
+BIN_PATH="\${BIN_DIR}/openlinear"
 
 echo -e "\${BLUE}OpenLinear Installer\${NC}"
 echo "===================="
@@ -23,47 +29,34 @@ echo ""
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
 
-case "$OS" in
-    linux)
-        case "$ARCH" in
-            x86_64) PLATFORM="linux-x64" ;;
-            aarch64|arm64) PLATFORM="linux-arm64" ;;
-            *) echo -e "\${RED}Unsupported architecture: $ARCH\${NC}"; exit 1 ;;
-        esac
-        ;;
-    darwin)
-        case "$ARCH" in
-            x86_64) PLATFORM="macos-x64" ;;
-            arm64) PLATFORM="macos-arm64" ;;
-            *) echo -e "\${RED}Unsupported architecture: $ARCH\${NC}"; exit 1 ;;
-        esac
-        ;;
-    *)
-        echo -e "\${RED}Unsupported OS: $OS\${NC}"
-        exit 1
-        ;;
-esac
-
-echo -e "Detected: \${YELLOW}$PLATFORM\${NC}"
-echo ""
-
-if ! command -v curl \u0026> /dev/null \u0026\u0026 ! command -v wget \u0026> /dev/null; then
-    echo -e "\${RED}Error: curl or wget is required\${NC}"
+if [ "$OS" != "linux" ] || [ "$ARCH" != "x86_64" ]; then
+    echo -e "\${RED}This installer currently supports Linux x86_64 only.\${NC}"
+    echo "Use one of these instead:"
+    echo "  npm install -g openlinear"
+    echo "  paru -S openlinear-bin"
+    echo "  \${RELEASES_URL}"
     exit 1
 fi
 
-if command -v curl \u0026> /dev/null; then
-    RELEASE_DATA=$(curl -s "$API_URL")
-else
-    RELEASE_DATA=$(wget -qO- "$API_URL")
+echo -e "Detected: \${YELLOW}$OS / $ARCH\${NC}"
+echo ""
+
+if ! command -v curl \u0026> /dev/null; then
+    echo -e "\${RED}Error: curl is required\${NC}"
+    exit 1
 fi
+
+echo -e "\${BLUE}Fetching latest release metadata...\${NC}"
+RELEASE_DATA=$(curl -fsSL -H "Accept: application/vnd.github+json" -H "User-Agent: openlinear-installer" "$API_URL")
 
 if [ -z "$RELEASE_DATA" ] || echo "$RELEASE_DATA" | grep -q "Not Found"; then
     echo -e "\${RED}Error: Failed to fetch release information\${NC}"
     exit 1
 fi
 
-VERSION=$(echo "$RELEASE_DATA" | grep -o '"tag_name": "[^"]*"' | cut -d'"' -f4)
+VERSION=$(echo "$RELEASE_DATA" | grep -o '"tag_name":[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+ASSET_URL=$(echo "$RELEASE_DATA" | grep -o '"browser_download_url":[[:space:]]*"[^"]*' | cut -d'"' -f4 | grep -- '-x86_64.AppImage$' | head -1)
+
 if [ -z "$VERSION" ]; then
     echo -e "\${RED}Error: Failed to parse version\${NC}"
     exit 1
@@ -72,95 +65,92 @@ fi
 echo -e "Latest version: \${GREEN}$VERSION\${NC}"
 echo ""
 
-ASSET_PATTERN="\${PLATFORM}"
-ASSET_URL=$(echo "$RELEASE_DATA" | grep -o '"browser_download_url": "[^"]*' | grep "$ASSET_PATTERN" | head -1 | cut -d'"' -f4)
-
 if [ -z "$ASSET_URL" ]; then
-    echo -e "\${YELLOW}No prebuilt binary found for $PLATFORM\${NC}"
-    echo "Falling back to npm installation..."
-    echo ""
-    
-    if ! command -v npm \u0026> /dev/null; then
-        echo -e "\${RED}Error: npm is not installed\${NC}"
-        echo "Please install Node.js first: https://nodejs.org"
-        exit 1
-    fi
-    
-    echo -e "\${BLUE}Installing via npm...\${NC}"
-    npm install -g openlinear
-    
-    if command -v openlinear \u0026> /dev/null; then
-        echo ""
-        echo -e "\${GREEN}✓ OpenLinear installed successfully!\${NC}"
-        echo ""
-        echo "Run 'openlinear --help' to get started"
-    else
-        echo -e "\${RED}Error: Installation failed\${NC}"
-        exit 1
-    fi
-    
-    exit 0
+    echo -e "\${RED}No Linux AppImage found in the latest release.\${NC}"
+    echo "Open \${RELEASES_URL} and download it manually."
+    exit 1
 fi
 
 echo -e "\${BLUE}Downloading...\${NC}"
 
 TMP_DIR=$(mktemp -d)
-trap "rm -rf $TMP_DIR" EXIT
+trap 'rm -rf "$TMP_DIR"' EXIT
 
-DOWNLOAD_FILE="$TMP_DIR/openlinear-\${PLATFORM}.tar.gz"
+DOWNLOAD_FILE="$TMP_DIR/openlinear.AppImage"
 
-if command -v curl \u0026> /dev/null; then
-    curl -fsSL "$ASSET_URL" -o "$DOWNLOAD_FILE" --progress-bar
-else
-    wget -q --show-progress "$ASSET_URL" -O "$DOWNLOAD_FILE"
-fi
+curl -fL "$ASSET_URL" -o "$DOWNLOAD_FILE" --progress-bar
 
 echo ""
-echo -e "\${BLUE}Extracting...\${NC}"
+mkdir -p "$INSTALL_DIR" "$BIN_DIR"
+install -m 755 "$DOWNLOAD_FILE" "$APPIMAGE_PATH"
 
-tar -xzf "$DOWNLOAD_FILE" -C "$TMP_DIR"
+cat > "$BIN_PATH" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
 
-mkdir -p "$INSTALL_DIR"
+APPIMAGE_PATH="\${HOME}/.openlinear/openlinear.AppImage"
 
-if [ -f "$TMP_DIR/openlinear" ]; then
-    BINARY_PATH="$TMP_DIR/openlinear"
-elif [ -f "$TMP_DIR/openlinear-desktop" ]; then
-    BINARY_PATH="$TMP_DIR/openlinear-desktop"
-else
-    BINARY_PATH=$(find "$TMP_DIR" -type f -executable | head -1)
+if [ ! -x "$APPIMAGE_PATH" ]; then
+  echo "OpenLinear AppImage not found at $APPIMAGE_PATH" >&2
+  echo "Reinstall with: curl -fsSL ${origin}/api/install | bash" >&2
+  exit 1
 fi
 
-cp "$BINARY_PATH" "$INSTALL_DIR/$BIN_NAME"
-chmod +x "$INSTALL_DIR/$BIN_NAME"
+IS_WAYLAND=false
+if [ "\${XDG_SESSION_TYPE:-}" = "wayland" ] || [ -n "\${WAYLAND_DISPLAY:-}" ]; then
+  IS_WAYLAND=true
+fi
 
-if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+export WEBKIT_DISABLE_DMABUF_RENDERER=1
+
+if [ "$IS_WAYLAND" = true ] && [ -z "\${LD_PRELOAD:-}" ]; then
+  for lib in \
+    /usr/lib/libwayland-client.so \
+    /usr/lib64/libwayland-client.so \
+    /usr/lib/x86_64-linux-gnu/libwayland-client.so; do
+    if [ -f "$lib" ]; then
+      export LD_PRELOAD="$lib"
+      break
+    fi
+  done
+
+  if [ -z "\${LD_PRELOAD:-}" ]; then
+    export GDK_BACKEND=x11
+    export WEBKIT_DISABLE_COMPOSITING_MODE=1
+  fi
+else
+  export WEBKIT_DISABLE_COMPOSITING_MODE=1
+fi
+
+export APPIMAGE_EXTRACT_AND_RUN=1
+exec "$APPIMAGE_PATH" "$@"
+EOF
+
+chmod +x "$BIN_PATH"
+
+if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
     echo ""
-    echo -e "\${YELLOW}Warning: $INSTALL_DIR is not in your PATH\${NC}"
+    echo -e "\${YELLOW}Warning: $BIN_DIR is not in your PATH\${NC}"
     echo ""
     echo "Add the following to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
     echo ""
-    echo "    export PATH=\"\\$PATH:$INSTALL_DIR\""
+    echo "    export PATH=\"\\$HOME/.local/bin:\\$PATH\""
     echo ""
 fi
 
 echo ""
 echo -e "\${GREEN}✓ OpenLinear $VERSION installed successfully!\${NC}"
 echo ""
-echo "Location: $INSTALL_DIR/$BIN_NAME"
+echo "AppImage: $APPIMAGE_PATH"
+echo "Launcher: $BIN_PATH"
 echo ""
-
-if command -v openlinear \u0026> /dev/null; then
-    echo "Run 'openlinear --help' to get started"
-else
-    echo "Please restart your terminal or run:"
-    echo "    export PATH=\"\\$PATH:$INSTALL_DIR\""
-fi
+echo "Run 'openlinear'"
 `
 
   return new Response(installScript, {
     headers: {
-      'Content-Type': 'text/plain',
-      'Cache-Control': 'public, max-age=3600',
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-store',
     },
   })
 }

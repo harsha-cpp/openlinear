@@ -33,7 +33,11 @@ export async function fetchGitHubRepos(): Promise<GitHubRepo[]> {
     },
   });
 
-  if (!res.ok) throw new Error('Failed to fetch GitHub repos');
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to fetch GitHub repos');
+  }
+
   return res.json();
 }
 

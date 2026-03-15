@@ -1,9 +1,30 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app';
 
 describe('Auth API', () => {
   const app = createApp();
+  const originalClientId = process.env.GITHUB_CLIENT_ID;
+  const originalClientSecret = process.env.GITHUB_CLIENT_SECRET;
+
+  beforeEach(() => {
+    process.env.GITHUB_CLIENT_ID = 'test-client-id';
+    process.env.GITHUB_CLIENT_SECRET = 'test-client-secret';
+  });
+
+  afterEach(() => {
+    if (originalClientId === undefined) {
+      delete process.env.GITHUB_CLIENT_ID;
+    } else {
+      process.env.GITHUB_CLIENT_ID = originalClientId;
+    }
+
+    if (originalClientSecret === undefined) {
+      delete process.env.GITHUB_CLIENT_SECRET;
+    } else {
+      process.env.GITHUB_CLIENT_SECRET = originalClientSecret;
+    }
+  });
 
   describe('GET /api/auth/github', () => {
     it('redirects to GitHub OAuth URL', async () => {
@@ -17,6 +38,21 @@ describe('Auth API', () => {
       const location = res.headers.location;
       expect(location).toContain('scope=');
       expect(location).toContain('read%3Auser');  // read:user URL-encoded
+    });
+
+    it('redirects desktop clients back with a config error when OAuth secret is missing', async () => {
+      delete process.env.GITHUB_CLIENT_SECRET;
+
+      const res = await request(app).get('/api/auth/github?source=desktop').redirects(0);
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toContain('openlinear://callback?error=');
+      expect(res.headers.location).toContain('GITHUB_CLIENT_SECRET');
+    });
+
+    it('uses the desktop localhost callback for desktop OAuth requests', async () => {
+      const res = await request(app).get('/api/auth/github?source=desktop').redirects(0);
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toContain('redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fcallback');
     });
   });
 

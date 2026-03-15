@@ -20,10 +20,10 @@ export function FinalCTASection() {
 
         <div className="flex flex-wrap items-center justify-center gap-4">
           <a
-            href="https://dashboard.rixie.in"
+            href="/docs"
             className="group inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-gradient-to-b from-blue-500 to-blue-600 text-white font-medium hover:from-blue-400 hover:to-blue-500 transition-all shadow-lg shadow-blue-500/25"
           >
-            Get Started Free
+            Installation docs
             <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
           </a>
           
@@ -39,7 +39,7 @@ export function FinalCTASection() {
         </div>
 
         <p className="mt-8 text-sm text-white/30">
-          Free forever for up to 100 tasks/month. No credit card required.
+          Static site only. The hosted dashboard and auth flow have been retired.
         </p>
       </div>
     </section>

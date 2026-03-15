@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app';
 import { prisma } from '@openlinear/db';
@@ -24,10 +24,28 @@ vi.mock('../services/github', async (importOriginal) => {
 
 describe('Auth Migration', () => {
   const app = createApp();
+  const originalClientId = process.env.GITHUB_CLIENT_ID;
+  const originalClientSecret = process.env.GITHUB_CLIENT_SECRET;
 
   beforeEach(async () => {
+    process.env.GITHUB_CLIENT_ID = 'test-client-id';
+    process.env.GITHUB_CLIENT_SECRET = 'test-client-secret';
     await prisma.user.deleteMany();
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    if (originalClientId === undefined) {
+      delete process.env.GITHUB_CLIENT_ID;
+    } else {
+      process.env.GITHUB_CLIENT_ID = originalClientId;
+    }
+
+    if (originalClientSecret === undefined) {
+      delete process.env.GITHUB_CLIENT_SECRET;
+    } else {
+      process.env.GITHUB_CLIENT_SECRET = originalClientSecret;
+    }
   });
 
   it('API auth flow proves secret is not newly persisted', async () => {

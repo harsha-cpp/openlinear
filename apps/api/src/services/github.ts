@@ -1,12 +1,33 @@
+import { spawnSync } from 'node:child_process';
 import { prisma } from '@openlinear/db';
+
+const DEFAULT_GITHUB_CLIENT_ID = 'Ov23liv55o39UNsk7m1v';
+const DEFAULT_GITHUB_DESKTOP_REDIRECT_URI = 'http://localhost:1455/callback';
+const DEFAULT_GITHUB_SCOPES = 'read:user user:email repo';
 
 // Read env vars lazily to avoid ESM import hoisting issues with dotenv
 function getGitHubConfig() {
   return {
-    clientId: process.env.GITHUB_CLIENT_ID || '',
-    clientSecret: process.env.GITHUB_CLIENT_SECRET || '',
+    clientId: process.env.OPENLINEAR_GITHUB_CLIENT_ID || process.env.GITHUB_CLIENT_ID || DEFAULT_GITHUB_CLIENT_ID,
+    clientSecret: process.env.OPENLINEAR_GITHUB_CLIENT_SECRET || process.env.GITHUB_CLIENT_SECRET || '',
     redirectUri: process.env.GITHUB_REDIRECT_URI || 'http://localhost:3001/api/auth/github/callback',
+    desktopRedirectUri: process.env.GITHUB_DESKTOP_REDIRECT_URI || DEFAULT_GITHUB_DESKTOP_REDIRECT_URI,
+    scopes: process.env.OPENLINEAR_GITHUB_SCOPES || DEFAULT_GITHUB_SCOPES,
   };
+}
+
+export function getGitHubOAuthConfigError(requireSecret = true): string | null {
+  const { clientId, clientSecret } = getGitHubConfig();
+
+  if (!clientId) {
+    return 'GitHub OAuth is not configured. Set OPENLINEAR_GITHUB_CLIENT_ID or GITHUB_CLIENT_ID.';
+  }
+
+  if (requireSecret && !clientSecret) {
+    return 'GitHub OAuth is not configured. Set OPENLINEAR_GITHUB_CLIENT_SECRET or GITHUB_CLIENT_SECRET.';
+  }
+
+  return null;
 }
 
 export interface GitHubUser {
@@ -24,6 +45,54 @@ export interface GitHubRepo {
   default_branch: string;
   private: boolean;
   description: string | null;
+}
+
+export interface DesktopGitHubAuthSource {
+  accessToken: string;
+  source: 'gh' | 'env';
+}
+
+export function tryGitHubCliToken(): string | null {
+  const status = spawnSync('gh', ['auth', 'status'], {
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+
+  if (status.status !== 0) {
+    return null;
+  }
+
+  const token = spawnSync('gh', ['auth', 'token'], {
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+
+  if (token.status !== 0) {
+    return null;
+  }
+
+  const value = token.stdout.trim();
+  return value || null;
+}
+
+export function getDesktopGitHubAuthSource(): DesktopGitHubAuthSource | null {
+  const ghToken = tryGitHubCliToken();
+  if (ghToken) {
+    return {
+      accessToken: ghToken,
+      source: 'gh',
+    };
+  }
+
+  const envToken = process.env.OPENLINEAR_GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+  if (envToken?.trim()) {
+    return {
+      accessToken: envToken.trim(),
+      source: 'env',
+    };
+  }
+
+  return null;
 }
 
 export function parseGitHubUrl(url: string): { owner: string; repo: string } | null {
@@ -120,11 +189,11 @@ export async function addRepositoryByUrl(url: string): Promise<{
   });
 }
 
-export function getAuthorizationUrl(state: string): string {
-  const { clientId, redirectUri } = getGitHubConfig();
+export function getAuthorizationUrl(state: string, useDesktopRedirect = false): string {
+  const { clientId, redirectUri, desktopRedirectUri } = getGitHubConfig();
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: redirectUri,
+    redirect_uri: useDesktopRedirect ? desktopRedirectUri : redirectUri,
     scope: 'read:user user:email repo',
     state,
   });
@@ -135,10 +204,111 @@ interface TokenResponse {
   access_token?: string;
   error?: string;
   error_description?: string;
+  scope?: string;
+  token_type?: string;
 }
 
-export async function exchangeCodeForToken(code: string): Promise<string> {
-  const { clientId, clientSecret } = getGitHubConfig();
+export interface GitHubDeviceCodeResponse {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete?: string;
+  expires_in: number;
+  interval?: number;
+}
+
+export interface GitHubDevicePollPendingResponse {
+  status: 'pending';
+  retryAfterSeconds?: number;
+}
+
+export interface GitHubDevicePollSuccessResponse {
+  status: 'complete';
+  accessToken: string;
+  scope?: string;
+  tokenType?: string;
+}
+
+export async function startGitHubDeviceFlow(): Promise<GitHubDeviceCodeResponse> {
+  const { clientId, scopes } = getGitHubConfig();
+
+  if (!clientId) {
+    throw new Error('GitHub OAuth is not configured. Set OPENLINEAR_GITHUB_CLIENT_ID or GITHUB_CLIENT_ID.');
+  }
+
+  const response = await fetch('https://github.com/login/device/code', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
+    },
+    body: new URLSearchParams({
+      client_id: clientId,
+      scope: scopes,
+    }),
+  });
+
+  const data = (await response.json()) as TokenResponse & GitHubDeviceCodeResponse;
+
+  if (!response.ok || data.error) {
+    throw new Error(data.error_description || data.error || 'Failed to start GitHub device flow.');
+  }
+
+  return data;
+}
+
+export async function pollGitHubDeviceFlow(deviceCode: string): Promise<GitHubDevicePollPendingResponse | GitHubDevicePollSuccessResponse> {
+  const { clientId } = getGitHubConfig();
+
+  if (!clientId) {
+    throw new Error('GitHub OAuth is not configured. Set OPENLINEAR_GITHUB_CLIENT_ID or GITHUB_CLIENT_ID.');
+  }
+
+  const response = await fetch('https://github.com/login/oauth/access_token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
+    },
+    body: new URLSearchParams({
+      client_id: clientId,
+      device_code: deviceCode,
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+    }),
+  });
+
+  const data = (await response.json()) as TokenResponse;
+
+  if (data.error === 'authorization_pending') {
+    return { status: 'pending' };
+  }
+
+  if (data.error === 'slow_down') {
+    return { status: 'pending', retryAfterSeconds: 10 };
+  }
+
+  if (!response.ok || data.error) {
+    throw new Error(data.error_description || data.error || 'GitHub device flow failed.');
+  }
+
+  if (!data.access_token) {
+    throw new Error('GitHub device flow did not return an access token.');
+  }
+
+  return {
+    status: 'complete',
+    accessToken: data.access_token,
+    scope: data.scope,
+    tokenType: data.token_type,
+  };
+}
+
+export async function exchangeCodeForToken(code: string, useDesktopRedirect = false): Promise<string> {
+  const { clientId, clientSecret, redirectUri, desktopRedirectUri } = getGitHubConfig();
+  if (!clientSecret) {
+    throw new Error('GitHub OAuth is not configured. Set OPENLINEAR_GITHUB_CLIENT_SECRET or GITHUB_CLIENT_SECRET.');
+  }
+
   const response = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
     headers: {
@@ -149,6 +319,7 @@ export async function exchangeCodeForToken(code: string): Promise<string> {
       client_id: clientId,
       client_secret: clientSecret,
       code,
+      redirect_uri: useDesktopRedirect ? desktopRedirectUri : redirectUri,
     }),
   });
 

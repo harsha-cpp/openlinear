@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
+jobs:
+  release-readiness:
+    name: Release Readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify Arch package metadata
+        run: |
+          set -euo pipefail
+          bash ./scripts/sync-aur-metadata.sh
+          git diff --exit-code -- packaging/aur/openlinear-bin/PKGBUILD packaging/aur/openlinear-bin/.SRCINFO
+
+      - name: Build sidecar artifacts
+        run: bash ./scripts/build-sidecar.sh
+
+      - name: Typecheck desktop UI
+        run: pnpm --filter @openlinear/desktop-ui lint
+
+      - name: Build npm package
+        run: pnpm --filter ./packages/openlinear build

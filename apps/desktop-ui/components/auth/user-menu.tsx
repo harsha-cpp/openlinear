@@ -1,11 +1,13 @@
 "use client";
 
+import { useRouter } from 'next/navigation';
 import { Github, LogOut } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import { getLoginUrl } from '@/lib/api';
+import { getLoginUrl, isDesktopRuntime } from '@/lib/api';
 import { openExternal } from '@/lib/utils';
 
 export function UserMenu() {
+  const router = useRouter();
   const { user, isLoading, isAuthenticated, logout } = useAuth();
 
   if (isLoading) {
@@ -19,6 +21,11 @@ export function UserMenu() {
       <button
         type="button"
         onClick={() => {
+          if (isDesktopRuntime()) {
+            router.push('/login');
+            return;
+          }
+
           void openExternal(getLoginUrl());
         }}
         className="flex items-center gap-2 h-9 px-4 rounded-md bg-linear-bg-tertiary hover:bg-linear-border text-sm font-medium transition-colors"

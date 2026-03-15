@@ -107,13 +107,17 @@ export NO_STRIP=true
 if [ -n "$BUNDLE_TARGET" ]; then
   pnpm --filter @openlinear/desktop tauri build --bundles "$BUNDLE_TARGET"
 else
-  pnpm --filter @openlinear/desktop tauri build
+  if ! pnpm --filter @openlinear/desktop tauri build; then
+    warn "Bundled build failed. Retrying without bundling so the desktop binary is still runnable."
+    pnpm --filter @openlinear/desktop tauri build --no-bundle
+  fi
 fi
 ok "Tauri build complete"
 
 # ── Step 5: Report output ─────────────────────────────────────────
 step "Build artifacts:"
 BUNDLE_DIR="$ROOT_DIR/apps/desktop/src-tauri/target/release/bundle"
+RAW_BINARY="$ROOT_DIR/apps/desktop/src-tauri/target/release/openlinear-desktop"
 
 if [ -d "$BUNDLE_DIR" ]; then
   find "$BUNDLE_DIR" -type f \( -name "*.AppImage" -o -name "*.dmg" -o -name "*.deb" \) | while read -r f; do
@@ -123,6 +127,12 @@ if [ -d "$BUNDLE_DIR" ]; then
   done
 else
   warn "Bundle directory not found at $BUNDLE_DIR"
+fi
+
+if [ -f "$RAW_BINARY" ]; then
+  SIZE=$(du -sh "$RAW_BINARY" | cut -f1)
+  echo -e "  ${GREEN}✓${NC} $(basename "$RAW_BINARY")  ${CYAN}($SIZE)${NC}"
+  echo -e "    ${YELLOW}→${NC} $RAW_BINARY"
 fi
 
 echo ""

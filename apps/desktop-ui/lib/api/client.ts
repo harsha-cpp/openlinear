@@ -1,5 +1,5 @@
 const LOCAL_API_URL = 'http://localhost:3001';
-const PRODUCTION_API_URL = 'https://rixie.in';
+const DESKTOP_API_URL = process.env.NEXT_PUBLIC_DESKTOP_API_URL || LOCAL_API_URL;
 
 export function isDesktopRuntime(): boolean {
   if (typeof window === 'undefined') {
@@ -29,7 +29,7 @@ function getDefaultApiUrl(): string {
   const hostname = window.location.hostname;
 
   if (isDesktopRuntime()) {
-    return process.env.NODE_ENV === 'production' ? PRODUCTION_API_URL : LOCAL_API_URL;
+    return DESKTOP_API_URL;
   }
 
   if (hostname === 'localhost' || hostname === '127.0.0.1') {

@@ -2,6 +2,7 @@ import { config } from 'dotenv';
 import { resolve } from 'path';
 import express from 'express';
 
+config({ path: resolve(import.meta.dirname, '../.env') });
 config({ path: resolve(import.meta.dirname, '../../../.env') });
 
 import { createApp } from './app';
@@ -10,6 +11,7 @@ import { broadcast, sendToClient, getClientCount } from './sse';
 const app = createApp();
 const PORT = Number(process.env.API_PORT ?? 3001);
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+const DESKTOP_CALLBACK_URL = process.env.OPENLINEAR_DESKTOP_CALLBACK_URL || 'openlinear://callback';
 
 async function start() {
   app.listen(PORT, () => {
@@ -19,6 +21,10 @@ async function start() {
   });
 
   const interceptApp = express();
+  interceptApp.get('/callback', (req, res) => {
+    const searchParams = new URLSearchParams(req.query as Record<string, string>);
+    res.redirect(`${DESKTOP_CALLBACK_URL}?${searchParams.toString()}`);
+  });
   interceptApp.get('/auth/callback', (req, res) => {
     const searchParams = new URLSearchParams(req.query as Record<string, string>);
     res.redirect(`${FRONTEND_URL}/auth/callback?${searchParams.toString()}`);

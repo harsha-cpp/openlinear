@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { User, Repository, fetchCurrentUser, getActiveRepository, logout as apiLogout } from '@/lib/api';
+import { toast } from 'sonner';
 
 async function storeGitHubAccessToken(accessToken?: string) {
   if (!accessToken || typeof window === 'undefined' || !("__TAURI_INTERNALS__" in window)) {
@@ -73,7 +74,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             window.history.replaceState({}, '', window.location.pathname);
             Promise.all([refreshUser(), refreshActiveRepository()]);
           })
-          .catch(err => console.error('GitHub connect error:', err));
+          .catch(err => {
+            console.error('GitHub connect error:', err);
+            toast.error(err instanceof Error ? err.message : 'GitHub connection failed');
+          });
       });
     } else if (token) {
       localStorage.setItem('token', token);
@@ -82,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       console.error('Auth error:', error);
+      toast.error(error);
       window.history.replaceState({}, '', window.location.pathname);
     }
 
@@ -109,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 await Promise.all([refreshUser(), refreshActiveRepository()]);
               } catch (e) {
                 console.error('GitHub connect error via callback:', e);
+                toast.error(e instanceof Error ? e.message : 'GitHub connection failed');
               }
               return;
             } else if (payload.token) {
@@ -120,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (payload.error) {
             console.error('Auth callback error:', payload.error);
+            toast.error(payload.error);
           }
         });
       } catch {}

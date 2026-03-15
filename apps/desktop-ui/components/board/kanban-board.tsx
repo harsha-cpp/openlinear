@@ -74,6 +74,19 @@ export function ProjectConfigPanel({
     selectedProject?.repository?.defaultBranch ||
     activeRepository?.defaultBranch ||
     null;
+  const activeTaskExecutionCount = tasks.filter(
+    (task) =>
+      task.status === "in_progress" &&
+      task.executionStartedAt &&
+      !task.executionPausedAt,
+  ).length;
+  const workflowValue = activeBatch
+    ? `${activeBatch.mode} mode`
+    : activeTaskExecutionCount > 0
+      ? `${activeTaskExecutionCount} issue${activeTaskExecutionCount === 1 ? "" : "s"} running`
+      : "Idle";
+  const workflowStatus =
+    activeBatch || activeTaskExecutionCount > 0 ? "active" : "neutral";
 
   const items = [
     {
@@ -97,8 +110,8 @@ export function ProjectConfigPanel({
     {
       icon: Play,
       label: "Workflow",
-      value: activeBatch ? `${activeBatch.mode} mode` : "Idle",
-      status: activeBatch ? "active" : "neutral",
+      value: workflowValue,
+      status: workflowStatus,
     },
     {
       icon: Layers,
@@ -228,7 +241,14 @@ export function KanbanBoard(props: KanbanBoardProps) {
       selectedProject,
       activeRepository,
     });
-  }, [tasks, selectedTaskIds, activeBatch, selectedProject, activeRepository]);
+  }, [
+    tasks,
+    selectedTaskIds,
+    activeBatch,
+    selectedProject,
+    activeRepository,
+    props.onConfigState,
+  ]);
 
   const renderTask = (
     task: Task,

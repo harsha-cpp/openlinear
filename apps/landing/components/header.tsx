@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Menu, X, Github, ChevronDown } from "lucide-react"
+import { useState } from "react"
+import { Menu, X, ChevronDown } from "lucide-react"
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -13,7 +13,7 @@ export function Header() {
           {/* Logo */}
           <a href="/" className="flex items-center gap-2.5 group">
             <div className="h-6 w-6 text-white flex items-center justify-center">
-              <svg viewBox="0 0 24 24" className="w-full h-full" fill="currentColor">
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="w-full h-full" fill="currentColor">
                 <path d="M12 2L12 10L19 6L19 14L12 10L12 22L10 22L10 10L3 14L3 6L10 10L10 2Z" />
               </svg>
             </div>
@@ -25,7 +25,7 @@ export function Header() {
           {/* Desktop Nav */}
           <nav className="hidden lg:flex items-center gap-1.5 ml-4">
             <NavLink href="/product">Research</NavLink>
-            <button className="flex items-center gap-1 px-3 py-2 text-sm text-white/70 hover:text-white transition-colors rounded-lg hover:bg-white/[0.04]">
+            <button type="button" className="flex items-center gap-1 px-3 py-2 text-sm text-white/70 hover:text-white transition-colors rounded-lg hover:bg-white/[0.04]">
               Use cases <ChevronDown className="h-3.5 w-3.5 opacity-70" />
             </button>
             <NavLink href="/pricing">Pricing</NavLink>
@@ -49,10 +49,12 @@ export function Header() {
           </a>
 
           <a
-            href="https://dashboard.rixie.in"
+            href="https://github.com/kaizen403/openlinear"
             className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.1] text-sm font-medium text-white/90 hover:text-white hover:bg-white/[0.08] transition-all"
+            target="_blank"
+            rel="noopener noreferrer"
           >
-            Try for Free <ArrowRight className="h-3.5 w-3.5 ml-0.5 opacity-70" />
+            View on GitHub <ArrowRight className="h-3.5 w-3.5 ml-0.5 opacity-70" />
           </a>
         </div>
 
@@ -81,10 +83,12 @@ export function Header() {
             <hr className="border-white/[0.06] my-4" />
             
             <a
-              href="https://dashboard.rixie.in"
+              href="https://github.com/kaizen403/openlinear"
               className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white/[0.06] border border-white/[0.12] text-sm font-medium text-white hover:bg-white/[0.1] transition-all"
+              target="_blank"
+              rel="noopener noreferrer"
             >
-              Try for Free <ArrowRight className="h-4 w-4" />
+              View on GitHub <ArrowRight className="h-4 w-4" />
             </a>
           </div>
         </div>
@@ -117,7 +121,7 @@ function MobileNavLink({ href, children }: { href: string; children: React.React
 
 function ArrowRight({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg aria-hidden="true" className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M3.33331 8H12.6666" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
       <path d="M8 3.33337L12.6667 8.00004L8 12.6667" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>

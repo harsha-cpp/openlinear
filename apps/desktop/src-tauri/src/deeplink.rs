@@ -9,7 +9,7 @@ use tauri::Emitter;
 use tauri_plugin_deep_link::DeepLinkExt;
 use url::Url;
 
-const API_BASE_URL: &str = "https://rixie.in";
+const DEFAULT_API_BASE_URL: &str = "http://localhost:3001";
 
 /// Payload emitted to frontend after OAuth callback processing
 #[derive(Clone, Serialize)]
@@ -150,8 +150,8 @@ async fn process_oauth_callback(url_str: &str) -> AuthCallbackResult {
     }
 
     // Parse the deep link URL to extract the code parameter
-    let code = match extract_code_from_url(url_str) {
-        Ok(code) => code,
+    let (code, state) = match extract_code_and_state_from_url(url_str) {
+        Ok(result) => result,
         Err(e) => {
             return AuthCallbackResult {
                 success: false,
@@ -163,7 +163,7 @@ async fn process_oauth_callback(url_str: &str) -> AuthCallbackResult {
     };
 
     // Call the Express API to exchange code for token
-    match exchange_code_for_token(&code).await {
+    match exchange_code_for_token(&code, state.as_deref()).await {
         Ok(token) => AuthCallbackResult {
             success: true,
             token: Some(token),
@@ -179,8 +179,8 @@ async fn process_oauth_callback(url_str: &str) -> AuthCallbackResult {
     }
 }
 
-/// Extract the OAuth code from the callback URL
-fn extract_code_from_url(url_str: &str) -> Result<String, String> {
+/// Extract the OAuth code and state from the callback URL
+fn extract_code_and_state_from_url(url_str: &str) -> Result<(String, Option<String>), String> {
     let url = Url::parse(url_str).map_err(|e| format!("Failed to parse URL: {}", e))?;
 
     // Check for error parameter first
@@ -196,25 +196,39 @@ fn extract_code_from_url(url_str: &str) -> Result<String, String> {
     }
 
     // Extract the code parameter
-    url.query_pairs()
+    let code = url
+        .query_pairs()
         .find(|(key, _)| key == "code")
         .map(|(_, value)| value.to_string())
-        .ok_or_else(|| "Missing 'code' parameter in callback URL".to_string())
+        .ok_or_else(|| "Missing 'code' parameter in callback URL".to_string())?;
+    let state = url
+        .query_pairs()
+        .find(|(key, _)| key == "state")
+        .map(|(_, value)| value.to_string());
+
+    Ok((code, state))
 }
 
 /// Call the Express API to exchange the OAuth code for a JWT token.
 /// The Express endpoint redirects with the token in the URL, so we intercept
 /// the redirect and extract the token from the Location header.
-async fn exchange_code_for_token(code: &str) -> Result<String, String> {
+async fn exchange_code_for_token(code: &str, state: Option<&str>) -> Result<String, String> {
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    let callback_url = format!("{}/api/auth/github/callback?code={}", API_BASE_URL, code);
+    let api_base_url = std::env::var("OPENLINEAR_API_URL")
+        .unwrap_or_else(|_| DEFAULT_API_BASE_URL.to_string());
+    let mut callback_url = Url::parse(&format!("{}/api/auth/github/callback", api_base_url))
+        .map_err(|e| format!("Failed to build auth callback URL: {}", e))?;
+    callback_url.query_pairs_mut().append_pair("code", code);
+    if let Some(state) = state {
+        callback_url.query_pairs_mut().append_pair("state", state);
+    }
 
     let response = client
-        .get(&callback_url)
+        .get(callback_url)
         .send()
         .await
         .map_err(|e| format!("Failed to call auth API: {}", e))?;
@@ -263,14 +277,15 @@ mod tests {
     #[test]
     fn test_extract_code_from_url_success() {
         let url = "openlinear://callback?code=abc123&state=xyz";
-        let code = extract_code_from_url(url).unwrap();
+        let (code, state) = extract_code_and_state_from_url(url).unwrap();
         assert_eq!(code, "abc123");
+        assert_eq!(state.as_deref(), Some("xyz"));
     }
 
     #[test]
     fn test_extract_code_from_url_missing_code() {
         let url = "openlinear://callback?state=xyz";
-        let result = extract_code_from_url(url);
+        let result = extract_code_and_state_from_url(url);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Missing 'code' parameter"));
     }
@@ -278,7 +293,7 @@ mod tests {
     #[test]
     fn test_extract_code_from_url_with_error() {
         let url = "openlinear://callback?error=access_denied&error_description=User+denied+access";
-        let result = extract_code_from_url(url);
+        let result = extract_code_and_state_from_url(url);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("User denied access"));
     }

@@ -5,10 +5,23 @@ const path = require('node:path');
 
 const platform = process.platform;
 const arch = process.arch;
+const isGlobalInstall = process.env.npm_config_global === 'true' || process.env.npm_config_location === 'global';
+const releasesUrl = 'https://github.com/kaizen403/openlinear/releases/latest';
+
+function failInstall(message) {
+  console.error(`\n\x1b[31m✗\x1b[0m ${message}`);
+
+  if (isGlobalInstall) {
+    console.error(`\x1b[33m!\x1b[0m Use the AUR package (\`openlinear-bin\`) or download from ${releasesUrl}.`);
+    process.exit(1);
+  }
+
+  console.warn('\x1b[33m!\x1b[0m Continuing because the package may be installed as a library dependency.');
+  process.exit(0);
+}
 
 if (platform !== 'linux' || arch !== 'x64') {
-  console.log('OpenLinear installer currently supports Linux x64 only.');
-  process.exit(0);
+  failInstall('OpenLinear desktop launcher currently supports Linux x64 only.');
 }
 
 const installDir = path.join(os.homedir(), '.openlinear');
@@ -97,8 +110,7 @@ async function main() {
 
     const appImageAsset = release.assets.find((a) => a.name.endsWith('-x86_64.AppImage'));
     if (!appImageAsset) {
-      console.error('\x1b[31m✗\x1b[0m No AppImage found in latest release.');
-      process.exit(0);
+      failInstall('No Linux AppImage found in the latest release.');
     }
 
     console.log(`\x1b[36m==>\x1b[0m Found ${appImageAsset.name} (${release.tag_name})`);
@@ -116,7 +128,7 @@ async function main() {
     console.log(`\x1b[32m✓\x1b[0m OpenLinear ${release.tag_name} installed to ${targetPath}`);
     console.log(`\x1b[32m✓\x1b[0m You can now run \x1b[1mopenlinear\x1b[0m in your terminal.`);
   } catch (error) {
-    console.error(`\n\x1b[31m✗\x1b[0m Failed to install OpenLinear: ${error.message}`);
+    failInstall(`Failed to install OpenLinear: ${error.message}`);
   }
 }
 

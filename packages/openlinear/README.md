@@ -12,7 +12,7 @@ Describe what you want built. Click execute. Get a pull request.
 [![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)](https://www.typescriptlang.org/)
 
-[GitHub](https://github.com/kaizen403/openlinear) · [Documentation](https://github.com/kaizen403/openlinear/tree/main/docs/features) · [Architecture](https://github.com/kaizen403/openlinear/blob/main/docs/ARCHITECTURE.md) · [Releases](https://github.com/kaizen403/openlinear/releases)
+[GitHub](https://github.com/kaizen403/openlinear) · [Documentation](https://github.com/kaizen403/openlinear/tree/main/docs) · [Architecture](https://github.com/kaizen403/openlinear/blob/main/docs/ARCHITECTURE.md) · [Releases](https://github.com/kaizen403/openlinear/releases)
 
 </div>
 
@@ -31,7 +31,7 @@ OpenLinear is a project management tool that turns your backlog into pull reques
 
 ## Installation
 
-### Global — CLI launcher
+### Global — CLI launcher (Linux x64)
 
 ```bash
 npm install -g openlinear
@@ -39,13 +39,54 @@ npm install -g openlinear
 pnpm add -g openlinear
 # or
 yarn global add openlinear
+# or
+curl -fsSL https://openlinear.vercel.app/api/install | bash
+# or
+paru -S openlinear-bin
 ```
 
-After installation, the `postinstall` script downloads the pre-compiled desktop app (Linux AppImage) from GitHub Releases into `~/.openlinear/`. Once complete, run:
+The global launcher currently supports Linux x64. The npm installer and the `curl` installer both place the AppImage in `~/.openlinear/`. Once complete, run:
 
 ```bash
 openlinear
 ```
+
+## Local GitHub auth
+
+OpenLinear now prefers a browser-based local callback flow instead of a hosted callback on `rixie.in`.
+
+If GitHub CLI is already authenticated on your machine, `openlinear github login` reuses that local token first.
+
+If no local GitHub CLI token is available and `OPENLINEAR_GITHUB_CLIENT_SECRET` is set, `openlinear github login` starts a temporary callback server on `http://localhost:<port>/callback`, opens GitHub in your browser, and stores the resulting token locally.
+
+If you do not want the browser flow, or you have not configured a client secret, the CLI falls back to GitHub device flow. You can also force either mode explicitly.
+
+```bash
+openlinear github login
+openlinear github login --browser
+openlinear github login --device
+openlinear github status
+openlinear github whoami
+openlinear github logout
+```
+
+Browser mode requires a GitHub OAuth app client secret:
+
+```bash
+export OPENLINEAR_GITHUB_CLIENT_SECRET=your-client-secret
+```
+
+The GitHub OAuth app tied to your `client_id` also needs a loopback callback configured in GitHub, such as `http://localhost/callback`.
+
+Optional callback overrides:
+
+```bash
+export OPENLINEAR_GITHUB_CALLBACK_HOST=localhost
+export OPENLINEAR_GITHUB_CALLBACK_PORT=0
+export OPENLINEAR_GITHUB_CALLBACK_PATH=/callback
+```
+
+No hosted callback route is involved. The token is stored locally in `~/.config/openlinear/github-auth.json`.
 
 ### Local — Library API
 
@@ -68,12 +109,11 @@ If the binary is not found, it prints installation instructions and exits:
 ```
 OpenLinear desktop app not found.
 
-Please install it:
-  curl -fsSL https://rixie.in/api/install | bash
+Install it from npm:
+  npm install -g openlinear
 
-Or build from source:
-  git clone https://github.com/kaizen403/openlinear.git
-  cd openlinear && pnpm install && pnpm --filter @openlinear/desktop build
+Or download the latest desktop release:
+  https://github.com/kaizen403/openlinear/releases/latest
 ```
 
 ---
@@ -344,15 +384,9 @@ Any payload passing through `sanitizePayload` or `safeValidateExecutionMetadataS
 
 ---
 
-## How OpenLinear Works
+## Repository status
 
-1. **You create tasks** on the kanban board with descriptions of what you want built.
-2. **You click execute** — the desktop app picks it up, clones your repo, and creates a branch.
-3. **The agent writes code** locally using your API keys, in its own git worktree.
-4. **You watch it work** — real-time SSE streams every tool call, file edit, and decision live.
-5. **You get a PR** — changes are committed, pushed, and a pull request is opened automatically.
-
-> For the full architecture deep dive, see [docs/ARCHITECTURE.md](https://github.com/kaizen403/openlinear/blob/main/docs/ARCHITECTURE.md).
+The hosted OpenLinear product has been reduced to a static Vercel landing site plus installer surface. This npm package remains available for launcher and utility use.
 
 ---
 
@@ -366,11 +400,8 @@ pnpm install
 # Build the npm package
 pnpm --filter openlinear build
 
-# Start the full stack
-docker compose up -d    # PostgreSQL only
-pnpm db:push
-pnpm --filter @openlinear/api dev
-pnpm --filter @openlinear/desktop dev
+# Run the landing site from the repo root
+pnpm --filter @openlinear/landing dev
 ```
 
 ---
@@ -379,9 +410,6 @@ pnpm --filter @openlinear/desktop dev
 
 | Format | Platform | Install |
 |---|---|---|
-| AppImage | Linux | [GitHub Releases](https://github.com/kaizen403/openlinear/releases) |
-| .deb | Debian/Ubuntu | [GitHub Releases](https://github.com/kaizen403/openlinear/releases) |
-| AUR | Arch Linux | `yay -S openlinear-bin` |
 | npm | Any (launcher) | `npm install -g openlinear` |
 
 ---
@@ -394,8 +422,7 @@ The npm package lives at `packages/openlinear` in the monorepo.
 
 ```bash
 cd packages/openlinear
-pnpm build    # compile with tsup
-pnpm test     # run tests
+pnpm build
 ```
 
 ---

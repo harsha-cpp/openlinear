@@ -202,10 +202,11 @@ export function TaskCard({ task, onExecute, onCancel, onDelete, onMoveToInProgre
             </div>
             {prLink && (
               <button
+                type="button"
                 className="flex items-center gap-1 mt-2 text-xs text-linear-accent hover:underline"
                 onClick={(e) => { e.stopPropagation(); openExternal(prLink) }}
               >
-                <ExternalLink className="w-3 h-3" />
+                <GitPullRequest className="w-3 h-3" />
                 View PR
               </button>
             )}

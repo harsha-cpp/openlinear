@@ -322,13 +322,12 @@ export function useKanbanBoard({
 
   const selectedProject = projects.find((p) => p.id === projectId);
   const desktopRuntime = isDesktopRuntime();
-  const canExecute = desktopRuntime
-    ? !!selectedProject?.localPath
-    : !!(
-        selectedProject?.repositoryId ||
-        selectedProject?.localPath ||
-        activeRepository
-      );
+  const canExecute = !!(
+    selectedProject?.repositoryId ||
+    selectedProject?.repoUrl ||
+    selectedProject?.localPath ||
+    activeRepository
+  );
 
   const handleAddTask = (status: Task["status"]) => {
     setDefaultStatus(status);
@@ -835,7 +834,6 @@ export function useKanbanBoard({
     }
 
     try {
-      // Check if a provider is configured before executing
       if (!desktopRuntime) {
         const status = await getSetupStatus().catch(() => null);
         if (status && !status.ready && !hasConfiguredProviders()) {
@@ -845,40 +843,11 @@ export function useKanbanBoard({
         }
       }
 
-      if (desktopRuntime) {
-        const localPath = selectedProject?.localPath;
-        if (!localPath) {
-          throw new Error(
-            "Local project path is required for desktop execution",
-          );
-        }
-
-        const token = localStorage.getItem("token");
-        const headers: HeadersInit = {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        };
-
-        const response = await fetch(
-          `${SIDECAR_URL}/api/tasks/${taskId}/execute`,
-          {
-            method: "POST",
-            headers,
-          },
-        );
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(
-            error.error || `Failed to execute task: ${response.statusText}`,
-          );
-        }
-
-        return;
-      }
-
       const token = localStorage.getItem("token");
-      const headers: HeadersInit = token
-        ? { Authorization: `Bearer ${token}` }
-        : {};
+      const headers: HeadersInit = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+
       const response = await fetch(
         `${SIDECAR_URL}/api/tasks/${taskId}/execute`,
         {

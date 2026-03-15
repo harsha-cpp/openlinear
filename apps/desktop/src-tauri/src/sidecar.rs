@@ -1,11 +1,16 @@
 use serde::Serialize;
+use serde_json::Value;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::Emitter;
+use tauri::Manager;
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 
 static API_SERVER_PROCESS: Mutex<Option<CommandChild>> = Mutex::new(None);
+const DEFAULT_DATABASE_URL: &str = "postgresql://openlinear:openlinear@localhost:5432/openlinear";
 
 #[derive(Clone, Serialize)]
 pub struct SidecarOutput {
@@ -21,6 +26,15 @@ pub struct SidecarExit {
 
 #[tauri::command]
 pub async fn start_api_server(app: tauri::AppHandle, database_url: String) -> Result<(), String> {
+    start_api_server_inner(app, database_url).await
+}
+
+pub async fn start_api_server_with_saved_database_url(app: tauri::AppHandle) -> Result<(), String> {
+    let database_url = load_saved_database_url(&app).unwrap_or_else(|| DEFAULT_DATABASE_URL.to_string());
+    start_api_server_inner(app, database_url).await
+}
+
+async fn start_api_server_inner(app: tauri::AppHandle, database_url: String) -> Result<(), String> {
     {
         let guard = API_SERVER_PROCESS.lock().map_err(|e| e.to_string())?;
         if guard.is_some() {
@@ -49,6 +63,7 @@ pub async fn start_api_server(app: tauri::AppHandle, database_url: String) -> Re
             match event {
                 CommandEvent::Stdout(line) => {
                     let data = String::from_utf8_lossy(&line).to_string();
+                    println!("[Sidecar] {}", data.trim_end());
                     let _ = app_handle.emit(
                         "sidecar:output",
                         SidecarOutput {
@@ -59,6 +74,7 @@ pub async fn start_api_server(app: tauri::AppHandle, database_url: String) -> Re
                 }
                 CommandEvent::Stderr(line) => {
                     let data = String::from_utf8_lossy(&line).to_string();
+                    eprintln!("[Sidecar] {}", data.trim_end());
                     let _ = app_handle.emit(
                         "sidecar:output",
                         SidecarOutput {
@@ -68,6 +84,10 @@ pub async fn start_api_server(app: tauri::AppHandle, database_url: String) -> Re
                     );
                 }
                 CommandEvent::Terminated(payload) => {
+                    eprintln!(
+                        "[Sidecar] exited with code {:?} signal {:?}",
+                        payload.code, payload.signal
+                    );
                     let _ = app_handle.emit(
                         "sidecar:exit",
                         SidecarExit {
@@ -97,8 +117,28 @@ pub async fn start_api_server(app: tauri::AppHandle, database_url: String) -> Re
     Ok(())
 }
 
+fn load_saved_database_url(app: &tauri::AppHandle) -> Option<String> {
+    let settings_path = app
+        .path()
+        .app_data_dir()
+        .ok()
+        .map(|dir| dir.join("settings.json"))?;
+
+    read_database_url(settings_path)
+}
+
+fn read_database_url(path: PathBuf) -> Option<String> {
+    let contents = fs::read_to_string(path).ok()?;
+    let json: Value = serde_json::from_str(&contents).ok()?;
+    json.get("database_url")?.as_str().map(str::to_string)
+}
+
 #[tauri::command]
 pub async fn stop_api_server() -> Result<(), String> {
+    stop_api_server_sync()
+}
+
+pub fn stop_api_server_sync() -> Result<(), String> {
     let mut guard = API_SERVER_PROCESS.lock().map_err(|e| e.to_string())?;
 
     match guard.take() {
