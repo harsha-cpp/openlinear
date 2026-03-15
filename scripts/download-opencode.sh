@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # Download opencode binary for the current platform
 # Used by build-sidecar.sh when no opencode binary is present
@@ -58,8 +58,17 @@ fi
 
 # Download from GitHub releases
 echo "Downloading opencode binary..."
-RELEASE_URL="https://github.com/sst/opencode/releases/latest"
-LATEST_TAG=$(curl -sI "$RELEASE_URL" | grep -i "^location:" | sed 's/.*tag\///' | tr -d '\r\n')
+OPENCODE_REPO="anomalyco/opencode"
+RELEASE_URL="https://github.com/$OPENCODE_REPO/releases/latest"
+RELEASE_API_URL="https://api.github.com/repos/$OPENCODE_REPO/releases/latest"
+LATEST_TAG=$(
+  curl -fsSL \
+    -H "Accept: application/vnd.github+json" \
+    -H "User-Agent: openlinear-build" \
+    "$RELEASE_API_URL" |
+    sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' |
+    head -n 1
+)
 
 if [ -z "$LATEST_TAG" ]; then
   echo "Failed to determine latest opencode version"
@@ -71,17 +80,42 @@ echo "Latest version: $LATEST_TAG"
 
 # opencode releases use format: opencode-linux-x64, opencode-darwin-arm64, etc.
 case "$OS-$ARCH" in
-  Linux-x86_64) ASSET="opencode-linux-x64" ;;
-  Darwin-arm64) ASSET="opencode-darwin-arm64" ;;
-  Darwin-x86_64) ASSET="opencode-darwin-x64" ;;
+  Linux-x86_64) ASSET="opencode-linux-x64.tar.gz" ;;
+  Darwin-arm64) ASSET="opencode-darwin-arm64.zip" ;;
+  Darwin-x86_64) ASSET="opencode-darwin-x64.zip" ;;
   *) echo "No pre-built binary for $OS-$ARCH"; exit 1 ;;
 esac
 
-DOWNLOAD_URL="https://github.com/sst/opencode/releases/download/$LATEST_TAG/$ASSET"
+DOWNLOAD_URL="https://github.com/$OPENCODE_REPO/releases/download/$LATEST_TAG/$ASSET"
 echo "Downloading $DOWNLOAD_URL ..."
 
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+ARCHIVE_PATH="$TMP_DIR/$ASSET"
+
 mkdir -p "$BINARIES_DIR"
-curl -L --fail -o "$TARGET" "$DOWNLOAD_URL"
-chmod +x "$TARGET"
+curl -L --fail -o "$ARCHIVE_PATH" "$DOWNLOAD_URL"
+
+case "$ASSET" in
+  *.tar.gz)
+    tar -xzf "$ARCHIVE_PATH" -C "$TMP_DIR"
+    ;;
+  *.zip)
+    if ! command -v unzip >/dev/null 2>&1; then
+      echo "unzip is required to extract $ASSET"
+      exit 1
+    fi
+    unzip -q "$ARCHIVE_PATH" -d "$TMP_DIR"
+    ;;
+esac
+
+BINARY_PATH=$(find "$TMP_DIR" -maxdepth 2 -type f -name 'opencode*' ! -name '*.sig' | head -n 1)
+
+if [ -z "$BINARY_PATH" ] || [ ! -f "$BINARY_PATH" ]; then
+  echo "Failed to extract opencode binary from $ASSET"
+  exit 1
+fi
+
+install -m 755 "$BINARY_PATH" "$TARGET"
 
 echo "Done: $TARGET ($($TARGET --version 2>/dev/null || echo 'version unknown'))"

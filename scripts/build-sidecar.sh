@@ -99,7 +99,7 @@ elif [ -f "$SCRIPT_DIR/download-opencode.sh" ]; then
   "$SCRIPT_DIR/download-opencode.sh"
 else
   echo "  ! opencode binary not found at $OPENCODE_BIN"
-  echo "    Get it from: https://github.com/sst/opencode/releases"
+  echo "    Get it from: https://github.com/anomalyco/opencode/releases"
 fi
 
 echo "==> Build complete!"
