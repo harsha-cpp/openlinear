@@ -82,14 +82,6 @@ async function main() {
     });
   });
 
-  await page.route('**/api/brainstorm/availability', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ available: true })
-    });
-  });
-
   await page.route('**/api/events', async (route) => {
     await route.fulfill({
       status: 200,
