@@ -20,7 +20,7 @@ git tag vX.Y.Z -> GitHub Actions -> build desktop artifacts -> GitHub Release ->
 
 - verifies the tag matches `packages/openlinear/package.json` and `apps/desktop/src-tauri/tauri.conf.json`
 - regenerates `packaging/aur/openlinear-bin/.SRCINFO`
-- builds Linux release artifacts for GitHub Releases
+- builds macOS and Linux release artifacts for GitHub Releases
 - publishes the `openlinear` package to npm
 - publishes `openlinear-bin` metadata to Arch/AUR
 

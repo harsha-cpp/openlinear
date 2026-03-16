@@ -7,6 +7,7 @@ OpenLinear now ships as a local-first desktop release with optional landing/docs
 ```text
 GitHub repository
   -> GitHub Releases
+    -> macOS DMG / app bundle
     -> Linux AppImage / .deb
   -> raw install.sh
     -> curl installer
@@ -36,7 +37,7 @@ openlinear/
 
 ## Release channels
 
-- GitHub Releases publish the desktop AppImage and `.deb`.
+- GitHub Releases publish macOS `.dmg` / `.app.tar.gz` assets plus Linux AppImage / `.deb`.
 - npm publishes the `openlinear` launcher package.
 - AUR publishes `openlinear-bin` metadata that points at the GitHub release artifacts.
 - `install.sh` in the repository is the canonical shell installer used by the `curl` command.
@@ -54,6 +55,7 @@ openlinear/
 
 - Canonical installer: `install.sh`
 - Canonical command: `curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash`
+- Supported platforms: macOS (Apple Silicon / Intel) and Linux x64
 - `apps/landing/app/api/install/route.ts` mirrors that installer when the landing app is deployed.
 
 ## Hosted surface

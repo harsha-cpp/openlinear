@@ -18,8 +18,24 @@ env:
 jobs:
   build-release:
     name: Build Release Artifacts
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: linux-x64
+            runner: ubuntu-22.04
+            artifact_name: release-linux-x64
+            asset_prefix: x86_64
+          - id: macos-x64
+            runner: macos-13
+            artifact_name: release-macos-x64
+            asset_prefix: x86_64
+          - id: macos-arm64
+            runner: macos-14
+            artifact_name: release-macos-arm64
+            asset_prefix: aarch64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,6 +58,7 @@ jobs:
           workspaces: apps/desktop/src-tauri -> target
 
       - name: Install Linux dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -65,6 +82,7 @@ jobs:
         run: pnpm build:desktop
 
       - name: Strip bundled Wayland libs from AppImage
+        if: runner.os == 'Linux'
         run: |
           set -euo pipefail
           APPIMAGE=$(ls apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage | head -n 1)
@@ -83,12 +101,36 @@ jobs:
         run: |
           set -euo pipefail
           VERSION=${GITHUB_REF_NAME#v}
-          APPIMAGE=$(ls apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage | head -n 1)
-          DEB=$(ls apps/desktop/src-tauri/target/release/bundle/deb/*.deb | head -n 1)
-
           mkdir -p dist/release
-          cp "$APPIMAGE" "dist/release/openlinear-${VERSION}-x86_64.AppImage"
-          cp "$DEB" "dist/release/openlinear-${VERSION}-x86_64.deb"
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            APPIMAGE=$(ls apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage | head -n 1)
+            DEB=$(ls apps/desktop/src-tauri/target/release/bundle/deb/*.deb | head -n 1)
+            cp "$APPIMAGE" "dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}.AppImage"
+            cp "$DEB" "dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}.deb"
+          else
+            DMG=$(ls apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg | head -n 1)
+            APP_TARBALL=$(ls apps/desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz | head -n 1)
+            cp "$DMG" "dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}.dmg"
+            cp "$APP_TARBALL" "dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}.app.tar.gz"
+          fi
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/release/*
+
+  create-release:
+    name: Create GitHub release
+    needs: build-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/release
+          merge-multiple: true
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
@@ -98,7 +140,7 @@ jobs:
 
   publish-npm:
     name: Publish npm package
-    needs: build-release
+    needs: create-release
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -147,7 +189,7 @@ jobs:
 
   publish-aur:
     name: Publish Arch package metadata
-    needs: build-release
+    needs: create-release
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

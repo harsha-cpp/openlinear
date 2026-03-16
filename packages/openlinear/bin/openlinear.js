@@ -23,6 +23,7 @@ async function main() {
   const binaryPaths = [
     path.join(os.homedir(), '.openlinear', 'openlinear'),
     path.join(os.homedir(), '.openlinear', 'openlinear.AppImage'),
+    path.join(os.homedir(), '.openlinear', 'OpenLinear.app', 'Contents', 'MacOS', 'OpenLinear'),
   ];
 
   const binaryPath = binaryPaths.find((p) => fs.existsSync(p));
@@ -38,30 +39,31 @@ async function main() {
     process.exit(1);
   }
 
-  const isWayland =
-    (process.env.XDG_SESSION_TYPE || '').toLowerCase() === 'wayland' ||
-    !!process.env.WAYLAND_DISPLAY;
+  const env = { ...process.env };
 
-  const env = {
-    ...process.env,
-    WEBKIT_DISABLE_DMABUF_RENDERER: '1',
-  };
+  if (process.platform === 'linux') {
+    const isWayland =
+      (process.env.XDG_SESSION_TYPE || '').toLowerCase() === 'wayland' ||
+      !!process.env.WAYLAND_DISPLAY;
 
-  if (isWayland && !process.env.LD_PRELOAD) {
-    const waylandLibPaths = [
-      '/usr/lib/libwayland-client.so',
-      '/usr/lib64/libwayland-client.so',
-      '/usr/lib/x86_64-linux-gnu/libwayland-client.so',
-    ];
-    const found = waylandLibPaths.find((p) => fs.existsSync(p));
-    if (found) {
-      env.LD_PRELOAD = found;
-    } else {
-      env.GDK_BACKEND = 'x11';
+    env.WEBKIT_DISABLE_DMABUF_RENDERER = '1';
+
+    if (isWayland && !process.env.LD_PRELOAD) {
+      const waylandLibPaths = [
+        '/usr/lib/libwayland-client.so',
+        '/usr/lib64/libwayland-client.so',
+        '/usr/lib/x86_64-linux-gnu/libwayland-client.so',
+      ];
+      const found = waylandLibPaths.find((p) => fs.existsSync(p));
+      if (found) {
+        env.LD_PRELOAD = found;
+      } else {
+        env.GDK_BACKEND = 'x11';
+        env.WEBKIT_DISABLE_COMPOSITING_MODE = '1';
+      }
+    } else if (!isWayland) {
       env.WEBKIT_DISABLE_COMPOSITING_MODE = '1';
     }
-  } else if (!isWayland) {
-    env.WEBKIT_DISABLE_COMPOSITING_MODE = '1';
   }
 
   if (binaryPath.endsWith('.AppImage')) {

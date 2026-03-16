@@ -11,11 +11,13 @@ BLUE='\\033[0;34m'
 YELLOW='\\033[1;33m'
 NC='\\033[0m'
 
-REPO="kaizen403/openlinear"
+REPO='kaizen403/openlinear'
 API_URL="https://api.github.com/repos/\${REPO}/releases/latest"
 RELEASES_URL="https://github.com/\${REPO}/releases/latest"
 INSTALL_DIR="\${HOME}/.openlinear"
 APPIMAGE_PATH="\${INSTALL_DIR}/openlinear.AppImage"
+MACOS_APP_PATH="\${INSTALL_DIR}/OpenLinear.app"
+MACOS_BINARY_PATH="\${MACOS_APP_PATH}/Contents/MacOS/OpenLinear"
 BIN_DIR="\${HOME}/.local/bin"
 BIN_PATH="\${BIN_DIR}/openlinear"
 
@@ -26,20 +28,46 @@ echo ""
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
 
-if [ "$OS" != "linux" ] || [ "$ARCH" != "x86_64" ]; then
-    echo -e "\${RED}This installer currently supports Linux x86_64 only.\${NC}"
-    echo "Use one of these instead:"
-    echo "  npm install -g openlinear"
-    echo "  paru -S openlinear-bin"
-    echo "  \${RELEASES_URL}"
-    exit 1
-fi
+INSTALL_MODE=""
+ASSET_PATTERN=""
+ASSET_LABEL=""
+
+case "$OS/$ARCH" in
+    linux/x86_64)
+        INSTALL_MODE="linux-appimage"
+        ASSET_PATTERN='-x86_64\\.AppImage$'
+        ASSET_LABEL='Linux AppImage'
+        ;;
+    darwin/x86_64)
+        INSTALL_MODE="macos-app"
+        ASSET_PATTERN='-x86_64\\.app\\.tar\\.gz$'
+        ASSET_LABEL='macOS app bundle'
+        ;;
+    darwin/arm64)
+        INSTALL_MODE="macos-app"
+        ASSET_PATTERN='-aarch64\\.app\\.tar\\.gz$'
+        ASSET_LABEL='macOS app bundle'
+        ;;
+    *)
+        echo -e "\${RED}This installer currently supports macOS (Apple Silicon / Intel) and Linux x86_64 only.\${NC}"
+        echo "Use one of these instead:"
+        echo "  npm install -g openlinear"
+        echo "  paru -S openlinear-bin"
+        echo "  \${RELEASES_URL}"
+        exit 1
+        ;;
+esac
 
 echo -e "Detected: \${YELLOW}$OS / $ARCH\${NC}"
 echo ""
 
-if ! command -v curl \u0026> /dev/null; then
+if ! command -v curl >/dev/null 2>&1; then
     echo -e "\${RED}Error: curl is required\${NC}"
+    exit 1
+fi
+
+if [ "$INSTALL_MODE" = "macos-app" ] && ! command -v tar >/dev/null 2>&1; then
+    echo -e "\${RED}Error: tar is required on macOS installs\${NC}"
     exit 1
 fi
 
@@ -52,7 +80,7 @@ if [ -z "$RELEASE_DATA" ] || echo "$RELEASE_DATA" | grep -q "Not Found"; then
 fi
 
 VERSION=$(echo "$RELEASE_DATA" | grep -o '"tag_name":[[:space:]]*"[^"]*"' | cut -d'"' -f4)
-ASSET_URL=$(echo "$RELEASE_DATA" | grep -o '"browser_download_url":[[:space:]]*"[^"]*' | cut -d'"' -f4 | grep -- '-x86_64.AppImage$' | head -1)
+ASSET_URL=$(echo "$RELEASE_DATA" | grep -o '"browser_download_url":[[:space:]]*"[^"]*' | cut -d'"' -f4 | grep -E -- "$ASSET_PATTERN" | head -1)
 
 if [ -z "$VERSION" ]; then
     echo -e "\${RED}Error: Failed to parse version\${NC}"
@@ -63,25 +91,25 @@ echo -e "Latest version: \${GREEN}$VERSION\${NC}"
 echo ""
 
 if [ -z "$ASSET_URL" ]; then
-    echo -e "\${RED}No Linux AppImage found in the latest release.\${NC}"
+    echo -e "\${RED}No \${ASSET_LABEL} found in the latest release.\${NC}"
     echo "Open \${RELEASES_URL} and download it manually."
     exit 1
 fi
 
-echo -e "\${BLUE}Downloading...\${NC}"
+echo -e "\${BLUE}Downloading \${ASSET_LABEL}...\${NC}"
 
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-DOWNLOAD_FILE="$TMP_DIR/openlinear.AppImage"
-
-curl -fL "$ASSET_URL" -o "$DOWNLOAD_FILE" --progress-bar
-
-echo ""
 mkdir -p "$INSTALL_DIR" "$BIN_DIR"
-install -m 755 "$DOWNLOAD_FILE" "$APPIMAGE_PATH"
 
-cat > "$BIN_PATH" <<'EOF'
+if [ "$INSTALL_MODE" = "linux-appimage" ]; then
+    DOWNLOAD_FILE="$TMP_DIR/openlinear.AppImage"
+    curl -fL "$ASSET_URL" -o "$DOWNLOAD_FILE" --progress-bar
+    echo ""
+    install -m 755 "$DOWNLOAD_FILE" "$APPIMAGE_PATH"
+
+    cat > "$BIN_PATH" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -122,6 +150,41 @@ fi
 export APPIMAGE_EXTRACT_AND_RUN=1
 exec "$APPIMAGE_PATH" "$@"
 EOF
+else
+    DOWNLOAD_FILE="$TMP_DIR/OpenLinear.app.tar.gz"
+    EXTRACT_DIR="$TMP_DIR/extracted"
+
+    curl -fL "$ASSET_URL" -o "$DOWNLOAD_FILE" --progress-bar
+    echo ""
+
+    mkdir -p "$EXTRACT_DIR"
+    tar -xzf "$DOWNLOAD_FILE" -C "$EXTRACT_DIR"
+
+    APP_BUNDLE=$(find "$EXTRACT_DIR" -maxdepth 1 -type d -name '*.app' | head -n 1)
+    if [ -z "$APP_BUNDLE" ]; then
+        echo -e "\${RED}Failed to extract OpenLinear.app from the downloaded archive.\${NC}"
+        exit 1
+    fi
+
+    rm -rf "$MACOS_APP_PATH"
+    mv "$APP_BUNDLE" "$MACOS_APP_PATH"
+    chmod +x "$MACOS_BINARY_PATH"
+
+    cat > "$BIN_PATH" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_PATH="\${HOME}/.openlinear/OpenLinear.app/Contents/MacOS/OpenLinear"
+
+if [ ! -x "$APP_PATH" ]; then
+  echo "OpenLinear macOS app not found at $APP_PATH" >&2
+  echo "Reinstall with: curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash" >&2
+  exit 1
+fi
+
+exec "$APP_PATH" "$@"
+EOF
+fi
 
 chmod +x "$BIN_PATH"
 
@@ -131,14 +194,18 @@ if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
     echo ""
     echo "Add the following to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
     echo ""
-    echo "    export PATH=\"\\$HOME/.local/bin:\\$PATH\""
+    echo '    export PATH="$HOME/.local/bin:$PATH"'
     echo ""
 fi
 
 echo ""
 echo -e "\${GREEN}✓ OpenLinear $VERSION installed successfully!\${NC}"
 echo ""
-echo "AppImage: $APPIMAGE_PATH"
+if [ "$INSTALL_MODE" = "linux-appimage" ]; then
+    echo "AppImage: $APPIMAGE_PATH"
+else
+    echo "App bundle: $MACOS_APP_PATH"
+fi
 echo "Launcher: $BIN_PATH"
 echo ""
 echo "Run 'openlinear'"

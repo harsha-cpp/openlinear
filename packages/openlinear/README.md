@@ -24,14 +24,14 @@ OpenLinear is a project management tool that turns your backlog into pull reques
 
 **This package** is the official launcher and utility library. It does two things:
 
-1. **CLI** — `openlinear` command that launches the pre-built desktop app on Linux.
+1. **CLI** — `openlinear` command that launches the pre-built desktop app on macOS or Linux.
 2. **Library** — TypeScript utilities for execution metadata validation, payload sanitization, and feature flag management used internally by the OpenLinear platform.
 
 ---
 
 ## Installation
 
-### Global — CLI launcher (Linux x64)
+### Global — CLI launcher (macOS / Linux x64)
 
 ```bash
 npm install -g openlinear
@@ -45,7 +45,7 @@ curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.s
 paru -S openlinear-bin
 ```
 
-The global launcher currently supports Linux x64. The npm installer and the `curl` installer both place the AppImage in `~/.openlinear/`. Once complete, run:
+The global launcher currently supports macOS (Apple Silicon / Intel) and Linux x64. The npm installer and the `curl` installer place the desktop app in `~/.openlinear/`. Once complete, run:
 
 ```bash
 openlinear
@@ -102,7 +102,7 @@ npm install openlinear
 openlinear [args...]
 ```
 
-The CLI launcher resolves the desktop binary from `~/.openlinear/openlinear` or `~/.openlinear/openlinear.AppImage`, applies the correct environment flags for X11/Wayland, and passes all arguments through to the app.
+The CLI launcher resolves the desktop binary from `~/.openlinear/OpenLinear.app/Contents/MacOS/OpenLinear`, `~/.openlinear/openlinear`, or `~/.openlinear/openlinear.AppImage`, applies Linux-specific environment flags for X11/Wayland when needed, and passes all arguments through to the app.
 
 If the binary is not found, it prints installation instructions and exits:
 
@@ -410,7 +410,9 @@ pnpm --filter @openlinear/landing dev
 
 | Format | Platform | Install |
 |---|---|---|
-| npm | Any (launcher) | `npm install -g openlinear` |
+| npm | macOS, Linux x64 | `npm install -g openlinear` |
+| curl | macOS, Linux x64 | `curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash` |
+| GitHub Releases | macOS, Linux x64 | `https://github.com/kaizen403/openlinear/releases/latest` |
 
 ---
 

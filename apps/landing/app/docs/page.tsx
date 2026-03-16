@@ -76,7 +76,7 @@ pnpm --filter @openlinear/landing dev`}</CodeBlock>
           <CodeBlock>{`curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash
 npm install -g openlinear
 paru -S openlinear-bin`}</CodeBlock>
-          <p>The `curl` installer and npm launcher currently target Linux x64. Arch users should prefer `openlinear-bin`.</p>
+          <p>The `curl` installer and npm launcher now support macOS (Apple Silicon / Intel) and Linux x64. Arch users should prefer `openlinear-bin`.</p>
         </Section>
       </div>
 
