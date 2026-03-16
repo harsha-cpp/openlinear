@@ -80,7 +80,13 @@ jobs:
         run: bash ./scripts/build-sidecar.sh
 
       - name: Build desktop
-        run: pnpm build:desktop
+        run: |
+          set -euo pipefail
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            pnpm --filter @openlinear/desktop tauri build --ci --config '{"bundle":{"targets":["appimage","deb"]}}'
+          else
+            pnpm --filter @openlinear/desktop tauri build --ci --config '{"bundle":{"targets":["app"]}}'
+          fi
 
       - name: Strip bundled Wayland libs from AppImage
         if: runner.os == 'Linux'
@@ -109,10 +115,16 @@ jobs:
             cp "$APPIMAGE" "dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}.AppImage"
             cp "$DEB" "dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}.deb"
           else
-            DMG=$(find apps/desktop/src-tauri/target/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg' | head -n 1)
             APP_DIR=$(find apps/desktop/src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' | head -n 1)
             APP_TARBALL="dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}.app.tar.gz"
-            cp "$DMG" "dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}.dmg"
+            DMG="dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}.dmg"
+
+            DMG_STAGING_DIR=$(mktemp -d)
+            cp -R "$APP_DIR" "$DMG_STAGING_DIR/$(basename "$APP_DIR")"
+            ln -s /Applications "$DMG_STAGING_DIR/Applications"
+            hdiutil create -volname "OpenLinear" -srcfolder "$DMG_STAGING_DIR" -ov -format UDZO "$DMG"
+            rm -rf "$DMG_STAGING_DIR"
+
             tar -C "$(dirname "$APP_DIR")" -czf "$APP_TARBALL" "$(basename "$APP_DIR")"
           fi
 
