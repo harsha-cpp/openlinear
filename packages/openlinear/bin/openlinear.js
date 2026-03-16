@@ -54,6 +54,7 @@ async function main() {
   }
 
   const binaryPaths = [
+    path.join(os.homedir(), '.openlinear', 'openlinear-linux-x64', 'openlinear-desktop'),
     path.join(os.homedir(), '.openlinear', 'openlinear'),
     path.join(os.homedir(), '.openlinear', 'openlinear.AppImage'),
     findMacosBundleBinary(),

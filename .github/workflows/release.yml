@@ -86,7 +86,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${{ runner.os }}" = "Linux" ]; then
-            pnpm --filter @openlinear/desktop tauri build --ci --config '{"bundle":{"targets":["appimage","deb"]}}'
+            pnpm --filter @openlinear/desktop tauri build --ci --config '{"bundle":{"targets":["deb"]}}'
           else
             pnpm --filter @openlinear/desktop tauri build --ci --config '{"bundle":{"targets":["app"]}}'
           fi
@@ -95,16 +95,14 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           set -euo pipefail
-          APPIMAGE=$(ls apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage | head -n 1)
           TMP_DIR=$(mktemp -d)
           trap 'rm -rf "$TMP_DIR"' EXIT
-          cp "$APPIMAGE" "$TMP_DIR/OpenLinear.AppImage"
-          cd "$TMP_DIR"
-          chmod +x OpenLinear.AppImage
-          ./OpenLinear.AppImage --appimage-extract >/dev/null 2>&1
-          timeout 15s squashfs-root/usr/bin/openlinear-sidecar > sidecar.log 2>&1 || true
-          cat sidecar.log
-          grep -q "Server running on http://localhost:3001" sidecar.log
+          PORTABLE_TARBALL="$TMP_DIR/openlinear-linux-x64.tar.gz"
+          bash ./scripts/package-linux-portable.sh "${GITHUB_REF_NAME#v}" "$PORTABLE_TARBALL"
+          tar -xzf "$PORTABLE_TARBALL" -C "$TMP_DIR"
+          timeout 15s "$TMP_DIR/openlinear-linux-x64/openlinear-sidecar" > "$TMP_DIR/sidecar.log" 2>&1 || true
+          cat "$TMP_DIR/sidecar.log"
+          grep -q "Server running on http://localhost:3001" "$TMP_DIR/sidecar.log"
 
       - name: Prepare release artifacts
         run: |
@@ -112,10 +110,9 @@ jobs:
           VERSION=${GITHUB_REF_NAME#v}
           mkdir -p dist/release
           if [ "${{ runner.os }}" = "Linux" ]; then
-            APPIMAGE=$(ls apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage | head -n 1)
             DEB=$(ls apps/desktop/src-tauri/target/release/bundle/deb/*.deb | head -n 1)
-            cp "$APPIMAGE" "dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}.AppImage"
             cp "$DEB" "dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}.deb"
+            bash ./scripts/package-linux-portable.sh "$VERSION" "dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}-linux.tar.gz"
           else
             APP_DIR=$(find apps/desktop/src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' | head -n 1)
             APP_TARBALL="dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}.app.tar.gz"

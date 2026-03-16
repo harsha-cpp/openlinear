@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-import { spawn } from "node:child_process";
-import { constants as fsConstants } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { constants as fsConstants, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { access } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -45,68 +46,47 @@ function resolveBinaryPath() {
   throw new Error(`Unsupported smoke test platform: ${process.platform}/${process.arch}`);
 }
 
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function shellQuote(value) {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 async function main() {
   const binaryPath = resolveBinaryPath();
   await access(binaryPath, fsConstants.X_OK);
 
-  const child = spawn(binaryPath, [], {
-    cwd: ROOT_DIR,
-    env: { ...process.env },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const tmpDir = mkdtempSync(path.join(os.tmpdir(), "openlinear-sidecar-smoke-"));
+  const logPath = path.join(tmpDir, "sidecar.log");
 
-  let output = "";
-  let ready = false;
-  let exitCode = null;
-  let spawnError = null;
+  try {
+    const command = [
+      `timeout 15s ${shellQuote(binaryPath)} > ${shellQuote(logPath)} 2>&1 || true`,
+      `cat ${shellQuote(logPath)}`,
+      `rg -q 'Server running on http://localhost:3001' ${shellQuote(logPath)}`,
+    ].join("; ");
 
-  const appendOutput = (chunk) => {
-    const text = chunk.toString();
-    output += text;
-    process.stdout.write(text);
+    const result = spawnSync("bash", ["-lc", command], {
+      cwd: ROOT_DIR,
+      env: { ...process.env },
+      encoding: "utf8",
+    });
 
-    if (output.includes("Server running on http://localhost:3001")) {
-      ready = true;
+    if (result.stdout) {
+      process.stdout.write(result.stdout);
     }
-  };
 
-  child.stdout.on("data", appendOutput);
-  child.stderr.on("data", appendOutput);
+    if (result.stderr) {
+      process.stderr.write(result.stderr);
+    }
 
-  child.on("exit", (code) => {
-    exitCode = code;
-  });
-
-  child.on("error", (error) => {
-    spawnError = error;
-  });
-
-  const deadline = Date.now() + 15000;
-  while (!ready && exitCode === null && !spawnError && Date.now() < deadline) {
-    await wait(200);
+    if (result.status !== 0) {
+      const logOutput = readFileSync(logPath, "utf8");
+      throw new Error(
+        `Sidecar smoke test failed before readiness. Exit code: ${result.status}\n${logOutput}`,
+      );
+    }
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
   }
-
-  if (!ready) {
-    if (exitCode === null) {
-      child.kill("SIGTERM");
-      await wait(500);
-    }
-
-    if (spawnError) {
-      throw spawnError;
-    }
-
-    throw new Error(
-      `Sidecar smoke test failed before readiness. Exit code: ${exitCode ?? "still running"}\n${output}`,
-    );
-  }
-
-  child.kill("SIGTERM");
-  await wait(1000);
 }
 
 main().catch((error) => {

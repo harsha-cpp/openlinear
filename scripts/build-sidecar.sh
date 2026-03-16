@@ -52,17 +52,17 @@ case "$OS" in
   Darwin)
     echo "==> Building macOS binary with pkg..."
     if [ "$ARCH" = "arm64" ]; then
-      npx @yao-pkg/pkg dist/bundle.cjs --target node18-macos-arm64 --output dist/sidecar-macos-arm64
+      npx @yao-pkg/pkg dist/bundle.cjs --target node18-macos-arm64 --public --no-bytecode --output dist/sidecar-macos-arm64
     else
-      npx @yao-pkg/pkg dist/bundle.cjs --target node18-macos-x64 --output dist/sidecar-macos-x64
+      npx @yao-pkg/pkg dist/bundle.cjs --target node18-macos-x64 --public --no-bytecode --output dist/sidecar-macos-x64
     fi
     ;;
   Linux)
     echo "==> Building Linux binary with pkg..."
     if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-      npx @yao-pkg/pkg dist/bundle.cjs --target node18-linux-arm64 --output dist/sidecar-linux-arm64
+      npx @yao-pkg/pkg dist/bundle.cjs --target node18-linux-arm64 --public --no-bytecode --output dist/sidecar-linux-arm64
     elif [ "$ARCH" = "x86_64" ]; then
-      npx @yao-pkg/pkg dist/bundle.cjs --target node18-linux-x64 --output dist/sidecar-linux-x64
+      npx @yao-pkg/pkg dist/bundle.cjs --target node18-linux-x64 --public --no-bytecode --output dist/sidecar-linux-x64
     else
       echo "==> Unsupported Linux architecture: $ARCH"
       exit 1

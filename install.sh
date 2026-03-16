@@ -16,7 +16,9 @@ INSTALL_COMMAND="curl -fsSL ${INSTALLER_URL} | bash"
 API_URL="https://api.github.com/repos/${REPO}/releases/latest"
 RELEASES_URL="https://github.com/${REPO}/releases/latest"
 INSTALL_DIR="${HOME}/.openlinear"
-APPIMAGE_PATH="${INSTALL_DIR}/openlinear.AppImage"
+LINUX_BUNDLE_DIR="${INSTALL_DIR}/openlinear-linux-x64"
+LINUX_BINARY_PATH="${LINUX_BUNDLE_DIR}/openlinear-desktop"
+LEGACY_LINUX_APPIMAGE_PATH="${INSTALL_DIR}/openlinear.AppImage"
 BIN_DIR="${HOME}/.local/bin"
 BIN_PATH="${BIN_DIR}/openlinear"
 DATA_DIR="${XDG_DATA_HOME:-${HOME}/.local/share}"
@@ -41,9 +43,9 @@ ASSET_LABEL=""
 
 case "$OS/$ARCH" in
     linux/x86_64)
-        INSTALL_MODE="linux-appimage"
-        ASSET_PATTERN='-x86_64\.AppImage$'
-        ASSET_LABEL='Linux AppImage'
+        INSTALL_MODE="linux-portable"
+        ASSET_PATTERN='-x86_64-linux\.tar\.gz$'
+        ASSET_LABEL='Linux desktop bundle'
         ;;
     darwin/x86_64)
         INSTALL_MODE="macos-app"
@@ -100,11 +102,11 @@ write_linux_launcher() {
 #!/usr/bin/env bash
 set -euo pipefail
 
-APPIMAGE_PATH="${HOME}/.openlinear/openlinear.AppImage"
+OPENLINEAR_BIN="${HOME}/.openlinear/openlinear-linux-x64/openlinear-desktop"
 
-if [ ! -x "$APPIMAGE_PATH" ]; then
-  echo "OpenLinear AppImage not found at $APPIMAGE_PATH" >&2
-  echo "Reinstall with: ${INSTALL_COMMAND}" >&2
+if [ ! -x "$OPENLINEAR_BIN" ]; then
+  echo "OpenLinear desktop binary not found at $OPENLINEAR_BIN" >&2
+  echo "Reinstall with: curl -fsSL https://rixie.in/api/install | bash" >&2
   exit 1
 fi
 
@@ -134,8 +136,8 @@ else
   export WEBKIT_DISABLE_COMPOSITING_MODE=1
 fi
 
-export APPIMAGE_EXTRACT_AND_RUN=1
-exec "$APPIMAGE_PATH" "$@"
+nohup "$OPENLINEAR_BIN" "$@" > /dev/null 2>&1 &
+disown
 EOF
 }
 
@@ -188,7 +190,7 @@ done
 
 if [ -z "$APP_BUNDLE" ]; then
   echo "OpenLinear macOS app not found in ~/Applications, ~/.openlinear, or /Applications" >&2
-  echo "Reinstall with: ${INSTALL_COMMAND}" >&2
+  echo "Reinstall with: curl -fsSL https://rixie.in/api/install | bash" >&2
   exit 1
 fi
 
@@ -238,11 +240,28 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 mkdir -p "$INSTALL_DIR" "$BIN_DIR"
 
-if [ "$INSTALL_MODE" = "linux-appimage" ]; then
-    DOWNLOAD_FILE="$TMP_DIR/openlinear.AppImage"
+if [ "$INSTALL_MODE" = "linux-portable" ]; then
+    DOWNLOAD_FILE="$TMP_DIR/openlinear-linux-x64.tar.gz"
+    EXTRACT_DIR="$TMP_DIR/extracted"
+
     curl -fL "$ASSET_URL" -o "$DOWNLOAD_FILE" --progress-bar
     echo ""
-    install -m 755 "$DOWNLOAD_FILE" "$APPIMAGE_PATH"
+
+    mkdir -p "$EXTRACT_DIR"
+    tar -xzf "$DOWNLOAD_FILE" -C "$EXTRACT_DIR"
+
+    EXTRACTED_BUNDLE=$(find "$EXTRACT_DIR" -maxdepth 1 -type d -name 'openlinear-linux-x64' | head -n 1)
+    if [ -z "$EXTRACTED_BUNDLE" ]; then
+        echo -e "${RED}Failed to extract the Linux OpenLinear bundle.${NC}"
+        exit 1
+    fi
+
+    rm -rf "$LINUX_BUNDLE_DIR" "$LEGACY_LINUX_APPIMAGE_PATH"
+    mv "$EXTRACTED_BUNDLE" "$LINUX_BUNDLE_DIR"
+    chmod +x "$LINUX_BINARY_PATH" "$LINUX_BUNDLE_DIR/openlinear-sidecar"
+    if [ -f "$LINUX_BUNDLE_DIR/opencode-x86_64-unknown-linux-gnu" ]; then
+        chmod +x "$LINUX_BUNDLE_DIR/opencode-x86_64-unknown-linux-gnu"
+    fi
     write_linux_launcher
     write_linux_desktop_entry "$VERSION"
 else
@@ -291,8 +310,8 @@ fi
 echo ""
 echo -e "${GREEN}✓ OpenLinear ${VERSION} installed successfully!${NC}"
 echo ""
-if [ "$INSTALL_MODE" = "linux-appimage" ]; then
-    echo "AppImage: $APPIMAGE_PATH"
+if [ "$INSTALL_MODE" = "linux-portable" ]; then
+    echo "Bundle: $LINUX_BUNDLE_DIR"
 else
     echo "App bundle: $MACOS_APP_PATH"
 fi

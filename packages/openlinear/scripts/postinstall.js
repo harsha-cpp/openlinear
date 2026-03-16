@@ -23,7 +23,8 @@ function failInstall(message) {
 }
 
 const installDir = path.join(os.homedir(), '.openlinear');
-const appImagePath = path.join(installDir, 'openlinear.AppImage');
+const linuxBundleDir = path.join(installDir, 'openlinear-linux-x64');
+const linuxBinaryPath = path.join(linuxBundleDir, 'openlinear-desktop');
 const dataDir = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
 const localBinDir = path.join(os.homedir(), '.local', 'bin');
 const localLauncherPath = path.join(localBinDir, 'openlinear');
@@ -90,10 +91,10 @@ function writeLinuxLauncherScript() {
   writeExecutableFile(localLauncherPath, `#!/usr/bin/env bash
 set -euo pipefail
 
-APPIMAGE_PATH="\${HOME}/.openlinear/openlinear.AppImage"
+OPENLINEAR_BIN="\${HOME}/.openlinear/openlinear-linux-x64/openlinear-desktop"
 
-if [ ! -x "$APPIMAGE_PATH" ]; then
-  echo "OpenLinear AppImage not found at $APPIMAGE_PATH" >&2
+if [ ! -x "$OPENLINEAR_BIN" ]; then
+  echo "OpenLinear desktop binary not found at $OPENLINEAR_BIN" >&2
   echo "Reinstall with: curl -fsSL https://rixie.in/api/install | bash" >&2
   exit 1
 fi
@@ -124,8 +125,8 @@ else
   export WEBKIT_DISABLE_COMPOSITING_MODE=1
 fi
 
-export APPIMAGE_EXTRACT_AND_RUN=1
-exec "$APPIMAGE_PATH" "$@"
+nohup "$OPENLINEAR_BIN" "$@" > /dev/null 2>&1 &
+disown
 `);
 }
 
@@ -225,19 +226,43 @@ function registerMacosApp() {
 function getPlatformTarget() {
   if (platform === 'linux' && arch === 'x64') {
     return {
-      assetName: 'Linux AppImage',
-      assetMatcher: (asset) => asset.name.endsWith('-x86_64.AppImage'),
+      assetName: 'Linux desktop bundle',
+      assetMatcher: (asset) => asset.name.endsWith('-x86_64-linux.tar.gz'),
       install: async (downloadPath, release) => {
-        if (fs.existsSync(appImagePath)) {
-          console.log('\x1b[36m==>\x1b[0m Removing old AppImage...');
-          fs.unlinkSync(appImagePath);
+        const extractDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openlinear-linux-'));
+        const untar = spawnSync('tar', ['-xzf', downloadPath, '-C', extractDir], {
+          encoding: 'utf8',
+        });
+
+        if (untar.status !== 0) {
+          const message = untar.stderr?.trim() || untar.stdout?.trim() || 'tar failed';
+          failInstall(`Failed to extract the Linux OpenLinear bundle: ${message}`);
         }
 
-        fs.copyFileSync(downloadPath, appImagePath);
-        fs.chmodSync(appImagePath, 0o755);
-        await installLinuxDesktopIntegration(release);
+        const extractedBundleDir = path.join(extractDir, 'openlinear-linux-x64');
+        if (!fs.existsSync(extractedBundleDir)) {
+          failInstall('Failed to locate the extracted Linux OpenLinear bundle.');
+        }
 
-        console.log(`\x1b[32m✓\x1b[0m OpenLinear ${release.tag_name} installed to ${appImagePath}`);
+        fs.rmSync(linuxBundleDir, { recursive: true, force: true });
+        fs.rmSync(path.join(installDir, 'openlinear.AppImage'), { force: true });
+        fs.cpSync(extractedBundleDir, linuxBundleDir, { recursive: true });
+        fs.chmodSync(linuxBinaryPath, 0o755);
+
+        const sidecarPath = path.join(linuxBundleDir, 'openlinear-sidecar');
+        if (fs.existsSync(sidecarPath)) {
+          fs.chmodSync(sidecarPath, 0o755);
+        }
+
+        const opencodePath = path.join(linuxBundleDir, 'opencode-x86_64-unknown-linux-gnu');
+        if (fs.existsSync(opencodePath)) {
+          fs.chmodSync(opencodePath, 0o755);
+        }
+
+        await installLinuxDesktopIntegration(release);
+        fs.rmSync(extractDir, { recursive: true, force: true });
+
+        console.log(`\x1b[32m✓\x1b[0m OpenLinear ${release.tag_name} installed to ${linuxBundleDir}`);
       },
     };
   }
