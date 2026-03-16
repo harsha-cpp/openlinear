@@ -16,7 +16,6 @@ RELEASES_URL="https://github.com/${REPO}/releases/latest"
 INSTALL_DIR="${HOME}/.openlinear"
 APPIMAGE_PATH="${INSTALL_DIR}/openlinear.AppImage"
 MACOS_APP_PATH="${INSTALL_DIR}/OpenLinear.app"
-MACOS_BINARY_PATH="${MACOS_APP_PATH}/Contents/MacOS/OpenLinear"
 BIN_DIR="${HOME}/.local/bin"
 BIN_PATH="${BIN_DIR}/openlinear"
 
@@ -69,6 +68,23 @@ if [ "$INSTALL_MODE" = "macos-app" ] && ! command -v tar >/dev/null 2>&1; then
     echo -e "${RED}Error: tar is required on macOS installs${NC}"
     exit 1
 fi
+
+find_macos_binary_path() {
+    local macos_dir="${MACOS_APP_PATH}/Contents/MacOS"
+
+    if [ ! -d "$macos_dir" ]; then
+        return 0
+    fi
+
+    for candidate in "OpenLinear" "openlinear-desktop"; do
+        if [ -f "${macos_dir}/${candidate}" ]; then
+            printf '%s\n' "${macos_dir}/${candidate}"
+            return 0
+        fi
+    done
+
+    find "$macos_dir" -maxdepth 1 -type f ! -name '*sidecar*' | head -n 1
+}
 
 echo -e "${BLUE}Fetching latest release metadata...${NC}"
 RELEASE_DATA=$(curl -fsSL -H "Accept: application/vnd.github+json" -H "User-Agent: openlinear-installer" "$API_URL")
@@ -159,7 +175,7 @@ else
     mkdir -p "$EXTRACT_DIR"
     tar -xzf "$DOWNLOAD_FILE" -C "$EXTRACT_DIR"
 
-    APP_BUNDLE=$(find "$EXTRACT_DIR" -maxdepth 1 -type d -name '*.app' | head -n 1)
+    APP_BUNDLE=$(find "$EXTRACT_DIR" -type d -name '*.app' | head -n 1)
     if [ -z "$APP_BUNDLE" ]; then
         echo -e "${RED}Failed to extract OpenLinear.app from the downloaded archive.${NC}"
         exit 1
@@ -167,16 +183,40 @@ else
 
     rm -rf "$MACOS_APP_PATH"
     mv "$APP_BUNDLE" "$MACOS_APP_PATH"
+    MACOS_BINARY_PATH=$(find_macos_binary_path)
+    if [ -z "$MACOS_BINARY_PATH" ]; then
+        echo -e "${RED}Failed to locate the OpenLinear macOS executable inside the app bundle.${NC}"
+        exit 1
+    fi
+
     chmod +x "$MACOS_BINARY_PATH"
 
     cat > "$BIN_PATH" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_PATH="${HOME}/.openlinear/OpenLinear.app/Contents/MacOS/OpenLinear"
+APP_DIR="${HOME}/.openlinear/OpenLinear.app/Contents/MacOS"
 
-if [ ! -x "$APP_PATH" ]; then
-  echo "OpenLinear macOS app not found at $APP_PATH" >&2
+if [ ! -d "$APP_DIR" ]; then
+  echo "OpenLinear macOS app not found at $APP_DIR" >&2
+  echo "Reinstall with: curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash" >&2
+  exit 1
+fi
+
+APP_PATH=""
+for candidate in "OpenLinear" "openlinear-desktop"; do
+  if [ -x "${APP_DIR}/${candidate}" ]; then
+    APP_PATH="${APP_DIR}/${candidate}"
+    break
+  fi
+done
+
+if [ -z "$APP_PATH" ]; then
+  APP_PATH=$(find "$APP_DIR" -maxdepth 1 -type f ! -name '*sidecar*' | head -n 1)
+fi
+
+if [ -z "$APP_PATH" ] || [ ! -x "$APP_PATH" ]; then
+  echo "OpenLinear macOS executable not found inside $APP_DIR" >&2
   echo "Reinstall with: curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash" >&2
   exit 1
 fi

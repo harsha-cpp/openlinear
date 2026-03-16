@@ -26,6 +26,51 @@ const installDir = path.join(os.homedir(), '.openlinear');
 const appImagePath = path.join(installDir, 'openlinear.AppImage');
 const macosAppPath = path.join(installDir, 'OpenLinear.app');
 
+function findAppBundle(rootDir) {
+  const entries = fs.readdirSync(rootDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const entryPath = path.join(rootDir, entry.name);
+    if (entry.isDirectory() && entry.name.endsWith('.app')) {
+      return entryPath;
+    }
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const nestedBundlePath = findAppBundle(path.join(rootDir, entry.name));
+    if (nestedBundlePath) {
+      return nestedBundlePath;
+    }
+  }
+
+  return null;
+}
+
+function findMacosExecutable(appBundlePath) {
+  const macosDir = path.join(appBundlePath, 'Contents', 'MacOS');
+  if (!fs.existsSync(macosDir)) {
+    return null;
+  }
+
+  const entries = fs.readdirSync(macosDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile());
+
+  const preferredEntries = ['OpenLinear', 'openlinear-desktop'];
+  for (const entryName of preferredEntries) {
+    const match = entries.find((entry) => entry.name === entryName);
+    if (match) {
+      return path.join(macosDir, match.name);
+    }
+  }
+
+  const primaryEntry = entries.find((entry) => !entry.name.includes('sidecar'));
+  return primaryEntry ? path.join(macosDir, primaryEntry.name) : null;
+}
+
 function getPlatformTarget() {
   if (platform === 'linux' && arch === 'x64') {
     return {
@@ -62,17 +107,21 @@ function getPlatformTarget() {
           failInstall(`Failed to extract OpenLinear.app: ${message}`);
         }
 
-        const appBundleName = fs.readdirSync(extractDir).find((entry) => entry.endsWith('.app'));
-        if (!appBundleName) {
+        const appBundlePath = findAppBundle(extractDir);
+        if (!appBundlePath) {
           failInstall('Failed to locate OpenLinear.app in the downloaded archive.');
         }
 
         fs.rmSync(macosAppPath, { recursive: true, force: true });
-        fs.cpSync(path.join(extractDir, appBundleName), macosAppPath, { recursive: true });
-        fs.rmSync(extractDir, { recursive: true, force: true });
+        fs.cpSync(appBundlePath, macosAppPath, { recursive: true });
 
-        const executablePath = path.join(macosAppPath, 'Contents', 'MacOS', 'OpenLinear');
+        const executablePath = findMacosExecutable(macosAppPath);
+        if (!executablePath) {
+          failInstall('Failed to locate the OpenLinear macOS executable inside the app bundle.');
+        }
+
         fs.chmodSync(executablePath, 0o755);
+        fs.rmSync(extractDir, { recursive: true, force: true });
 
         console.log(`\x1b[32m✓\x1b[0m OpenLinear ${release.tag_name} installed to ${macosAppPath}`);
       },
