@@ -12,6 +12,24 @@ PACKAGE_VERSION="$(node -p "require('./packages/openlinear/package.json').versio
 TAURI_VERSION="$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")"
 VERSION="${1:-$PACKAGE_VERSION}"
 
+replace_line() {
+  local file="$1"
+  local pattern="$2"
+  local replacement="$3"
+  local tmp
+  tmp="$(mktemp)"
+
+  awk -v pattern="$pattern" -v replacement="$replacement" '
+    $0 ~ pattern {
+      print replacement
+      next
+    }
+    { print }
+  ' "$file" > "$tmp"
+
+  mv "$tmp" "$file"
+}
+
 if [ "$PACKAGE_VERSION" != "$VERSION" ]; then
   echo "packages/openlinear/package.json version ($PACKAGE_VERSION) does not match requested version ($VERSION)." >&2
   exit 1
@@ -22,8 +40,8 @@ if [ "$TAURI_VERSION" != "$VERSION" ]; then
   exit 1
 fi
 
-sed -i "s/^pkgver=.*/pkgver=${VERSION}/" "$PKGBUILD"
-sed -i "s/^pkgrel=.*/pkgrel=1/" "$PKGBUILD"
+replace_line "$PKGBUILD" "^pkgver=" "pkgver=${VERSION}"
+replace_line "$PKGBUILD" "^pkgrel=" "pkgrel=1"
 
 cat > "$SRCINFO" <<EOF
 pkgbase = openlinear-bin
