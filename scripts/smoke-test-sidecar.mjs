@@ -61,7 +61,7 @@ async function main() {
     const command = [
       `timeout 15s ${shellQuote(binaryPath)} > ${shellQuote(logPath)} 2>&1 || true`,
       `cat ${shellQuote(logPath)}`,
-      `rg -q 'Server running on http://localhost:3001' ${shellQuote(logPath)}`,
+      `grep -q 'Server running on http://localhost:3001' ${shellQuote(logPath)}`,
     ].join("; ");
 
     const result = spawnSync("bash", ["-lc", command], {
