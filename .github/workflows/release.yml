@@ -109,10 +109,11 @@ jobs:
             cp "$APPIMAGE" "dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}.AppImage"
             cp "$DEB" "dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}.deb"
           else
-            DMG=$(ls apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg | head -n 1)
-            APP_TARBALL=$(ls apps/desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz | head -n 1)
+            DMG=$(find apps/desktop/src-tauri/target/release/bundle/dmg -maxdepth 1 -type f -name '*.dmg' | head -n 1)
+            APP_DIR=$(find apps/desktop/src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' | head -n 1)
+            APP_TARBALL="dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}.app.tar.gz"
             cp "$DMG" "dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}.dmg"
-            cp "$APP_TARBALL" "dist/release/openlinear-${VERSION}-${{ matrix.asset_prefix }}.app.tar.gz"
+            tar -C "$(dirname "$APP_DIR")" -czf "$APP_TARBALL" "$(basename "$APP_DIR")"
           fi
 
       - name: Upload release artifacts
