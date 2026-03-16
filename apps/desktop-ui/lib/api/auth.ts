@@ -1,4 +1,11 @@
-import { API_URL, getAuthHeader, isDesktopRuntime } from './client';
+import {
+  API_URL,
+  getAuthHeader,
+  getApiUnavailableMessage,
+  isDesktopRuntime,
+  toApiConnectionError,
+  waitForApiReady,
+} from './client';
 import type { User } from './types';
 
 // Helper to get client header for desktop detection
@@ -42,16 +49,21 @@ export async function fetchCurrentUser(): Promise<User | null> {
   const token = localStorage.getItem('token');
   if (!token) return null;
 
-  const res = await fetch(`${API_URL}/api/auth/me`, {
-    headers: getAuthHeader(),
-  });
+  try {
+    await waitForApiReady();
+    const res = await fetch(`${API_URL}/api/auth/me`, {
+      headers: getAuthHeader(),
+    });
 
-  if (!res.ok) {
-    localStorage.removeItem('token');
-    return null;
+    if (!res.ok) {
+      localStorage.removeItem('token');
+      return null;
+    }
+
+    return res.json();
+  } catch (error) {
+    throw toApiConnectionError(error);
   }
-
-  return res.json();
 }
 
 export function getLoginUrl(): string {
@@ -59,50 +71,60 @@ export function getLoginUrl(): string {
 }
 
 export async function startGitHubDeviceLogin(): Promise<GitHubDeviceStartResponse> {
-  const res = await fetch(`${API_URL}/api/auth/github/device/start`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getClientHeader(),
-    },
-  });
+  try {
+    await waitForApiReady();
+    const res = await fetch(`${API_URL}/api/auth/github/device/start`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getClientHeader(),
+      },
+    });
 
-  if (!res.ok) {
-    let errorMessage = 'Failed to start GitHub device login';
-    try {
-      const errorData = await res.json();
-      errorMessage = errorData.error || errorData.message || errorMessage;
-    } catch {}
-    throw new Error(errorMessage);
+    if (!res.ok) {
+      let errorMessage = 'Failed to start GitHub device login';
+      try {
+        const errorData = await res.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch {}
+      throw new Error(errorMessage);
+    }
+
+    return res.json();
+  } catch (error) {
+    throw toApiConnectionError(error);
   }
-
-  return res.json();
 }
 
 export async function pollGitHubDeviceLogin(deviceCode: string): Promise<GitHubDevicePollResponse> {
-  const res = await fetch(`${API_URL}/api/auth/github/device/poll`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getClientHeader(),
-    },
-    body: JSON.stringify({ deviceCode }),
-  });
+  try {
+    await waitForApiReady();
+    const res = await fetch(`${API_URL}/api/auth/github/device/poll`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getClientHeader(),
+      },
+      body: JSON.stringify({ deviceCode }),
+    });
 
-  if (res.status === 202) {
+    if (res.status === 202) {
+      return res.json();
+    }
+
+    if (!res.ok) {
+      let errorMessage = 'GitHub device login failed';
+      try {
+        const errorData = await res.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch {}
+      throw new Error(errorMessage);
+    }
+
     return res.json();
+  } catch (error) {
+    throw toApiConnectionError(error);
   }
-
-  if (!res.ok) {
-    let errorMessage = 'GitHub device login failed';
-    try {
-      const errorData = await res.json();
-      errorMessage = errorData.error || errorData.message || errorMessage;
-    } catch {}
-    throw new Error(errorMessage);
-  }
-
-  return res.json();
 }
 
 export interface DesktopGitHubCheckResponse {
@@ -112,6 +134,7 @@ export interface DesktopGitHubCheckResponse {
 
 export async function checkDesktopGitHubAuth(): Promise<DesktopGitHubCheckResponse> {
   try {
+    await waitForApiReady();
     const res = await fetch(`${API_URL}/api/auth/github/desktop/check`, {
       headers: { ...getClientHeader() },
     });
@@ -127,27 +150,59 @@ export async function checkDesktopGitHubAuth(): Promise<DesktopGitHubCheckRespon
 }
 
 export async function loginWithDesktopGitHubAuth(): Promise<DesktopGitHubLoginResponse> {
-  const res = await fetch(`${API_URL}/api/auth/github/desktop/login`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getClientHeader(),
-    },
-  });
+  try {
+    await waitForApiReady();
+    const res = await fetch(`${API_URL}/api/auth/github/desktop/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getClientHeader(),
+      },
+    });
 
-  if (!res.ok) {
-    let errorMessage = 'Desktop GitHub login failed';
-    try {
-      const errorData = await res.json();
-      errorMessage = errorData.error || errorData.message || errorMessage;
-    } catch {}
-    throw new Error(errorMessage);
+    if (!res.ok) {
+      let errorMessage = 'Desktop GitHub login failed';
+      try {
+        const errorData = await res.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch {}
+      throw new Error(errorMessage);
+    }
+
+    return res.json();
+  } catch (error) {
+    throw toApiConnectionError(error);
   }
+}
 
-  return res.json();
+export async function createLocalSession(): Promise<{ token: string; user: User }> {
+  try {
+    await waitForApiReady();
+    const res = await fetch(`${API_URL}/api/auth/local/session`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getClientHeader(),
+      },
+    });
+
+    if (!res.ok) {
+      let errorMessage = 'Failed to create a local session';
+      try {
+        const errorData = await res.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch {}
+      throw new Error(errorMessage);
+    }
+
+    return res.json();
+  } catch (error) {
+    throw toApiConnectionError(error, getApiUnavailableMessage());
+  }
 }
 
 export async function getGitHubConnectUrl(): Promise<string> {
+  await waitForApiReady();
   const res = await fetch(`${API_URL}/api/auth/github/connect`, {
     headers: getAuthHeader(),
   });
@@ -158,25 +213,30 @@ export async function getGitHubConnectUrl(): Promise<string> {
 }
 
 export async function confirmGitHubConnect(githubConnectToken: string): Promise<{ token: string; githubAccessToken?: string }> {
-  const res = await fetch(`${API_URL}/api/auth/github/connect/confirm`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader(),
-      ...getClientHeader(),
-    },
-    body: JSON.stringify({ github_connect_token: githubConnectToken }),
-  });
+  try {
+    await waitForApiReady();
+    const res = await fetch(`${API_URL}/api/auth/github/connect/confirm`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+        ...getClientHeader(),
+      },
+      body: JSON.stringify({ github_connect_token: githubConnectToken }),
+    });
 
-  if (!res.ok) {
-    let errorMessage = 'Failed to confirm GitHub connection';
-    try {
-      const errorData = await res.json();
-      errorMessage = errorData.error || errorData.message || errorMessage;
-    } catch {}
-    throw new Error(errorMessage);
+    if (!res.ok) {
+      let errorMessage = 'Failed to confirm GitHub connection';
+      try {
+        const errorData = await res.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch {}
+      throw new Error(errorMessage);
+    }
+    return res.json();
+  } catch (error) {
+    throw toApiConnectionError(error);
   }
-  return res.json();
 }
 
 export function logout(): void {
@@ -186,6 +246,7 @@ export function logout(): void {
 
 export async function loginUser(username: string, password: string): Promise<{ token: string; user: { id: string; username: string } }> {
   try {
+    await waitForApiReady();
     const res = await fetch(`${API_URL}/api/auth/login`, {
       method: 'POST',
       headers: { 
@@ -208,10 +269,7 @@ export async function loginUser(username: string, password: string): Promise<{ t
     return res.json();
   } catch (err) {
     if (err instanceof Error) {
-      if (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('Failed to fetch')) {
-        throw new Error('Cannot connect to server. Please check your internet connection and try again.');
-      }
-      throw err;
+      throw toApiConnectionError(err);
     }
     throw new Error('Login failed. Please try again.');
   }
@@ -219,6 +277,7 @@ export async function loginUser(username: string, password: string): Promise<{ t
 
 export async function registerUser(username: string, password: string, email?: string): Promise<{ token: string; user: { id: string; username: string } }> {
   try {
+    await waitForApiReady();
     const res = await fetch(`${API_URL}/api/auth/register`, {
       method: 'POST',
       headers: { 
@@ -241,10 +300,7 @@ export async function registerUser(username: string, password: string, email?: s
     return res.json();
   } catch (err) {
     if (err instanceof Error) {
-      if (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('Failed to fetch')) {
-        throw new Error('Cannot connect to server. Please check your internet connection and try again.');
-      }
-      throw err;
+      throw toApiConnectionError(err);
     }
     throw new Error('Registration failed. Please try again.');
   }

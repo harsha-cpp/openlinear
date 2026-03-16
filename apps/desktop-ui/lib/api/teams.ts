@@ -1,10 +1,15 @@
-import { API_URL, getAuthHeader } from './client';
+import { API_URL, getAuthHeader, toApiConnectionError, waitForApiReady } from './client';
 import type { Team, TeamMember } from './types';
 
 export async function fetchTeams(): Promise<Team[]> {
-  const res = await fetch(`${API_URL}/api/teams`, { headers: getAuthHeader() })
-  if (!res.ok) throw new Error('Failed to fetch teams')
-  return res.json()
+  try {
+    await waitForApiReady()
+    const res = await fetch(`${API_URL}/api/teams`, { headers: getAuthHeader() })
+    if (!res.ok) throw new Error('Failed to fetch teams')
+    return res.json()
+  } catch (error) {
+    throw toApiConnectionError(error)
+  }
 }
 
 export async function fetchTeam(id: string): Promise<Team> {
@@ -14,13 +19,18 @@ export async function fetchTeam(id: string): Promise<Team> {
 }
 
 export async function createTeam(data: { name: string; key: string; description?: string; color?: string; icon?: string; private?: boolean }): Promise<Team> {
-  const res = await fetch(`${API_URL}/api/teams`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-    body: JSON.stringify(data),
-  })
-  if (!res.ok) throw new Error('Failed to create team')
-  return res.json()
+  try {
+    await waitForApiReady()
+    const res = await fetch(`${API_URL}/api/teams`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    })
+    if (!res.ok) throw new Error('Failed to create team')
+    return res.json()
+  } catch (error) {
+    throw toApiConnectionError(error)
+  }
 }
 
 export async function updateTeam(id: string, data: Partial<{ name: string; description: string | null; color: string; icon: string | null; private: boolean }>): Promise<Team> {

@@ -32,6 +32,8 @@ function HomeContent() {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(true);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     null,
   );
@@ -56,14 +58,45 @@ function HomeContent() {
     import("@/lib/api").Repository | null
   >(null);
 
+  const loadWorkspace = useCallback(async () => {
+    if (!isAuthenticated) {
+      setProjects([]);
+      setTeams([]);
+      setWorkspaceError(null);
+      setIsWorkspaceLoading(false);
+      return;
+    }
+
+    setIsWorkspaceLoading(true);
+    setWorkspaceError(null);
+
+    try {
+      const [nextProjects, nextTeams] = await Promise.all([
+        fetchProjects(),
+        fetchTeams(),
+      ]);
+      setProjects(nextProjects);
+      setTeams(nextTeams);
+    } catch (error) {
+      setProjects([]);
+      setTeams([]);
+      setWorkspaceError(
+        error instanceof Error
+          ? error.message
+          : "Failed to load your workspace.",
+      );
+    } finally {
+      setIsWorkspaceLoading(false);
+    }
+  }, [isAuthenticated]);
+
   useEffect(() => {
-    fetchProjects()
-      .then(setProjects)
-      .catch(() => setProjects([]));
-    fetchTeams()
-      .then(setTeams)
-      .catch(() => setTeams([]));
-  }, []);
+    if (isLoading) {
+      return;
+    }
+
+    void loadWorkspace();
+  }, [isLoading, loadWorkspace]);
 
   useEffect(() => {
     if (urlProjectId) {
@@ -97,8 +130,47 @@ function HomeContent() {
         : "Dashboard";
   const headerLabel = rawHeaderLabel.replace(/openlinear/gi, "Dashboard");
 
-  if (isLoading || !isAuthenticated) {
+  if (isLoading || !isAuthenticated || isWorkspaceLoading) {
     return null;
+  }
+
+  if (workspaceError) {
+    return (
+      <AppShell>
+        <header
+          className="min-h-14 border-b border-linear-border flex items-center pl-[72px] pr-4 sm:pr-6 lg:px-6 py-2 sm:py-0 bg-linear-bg gap-2 sm:gap-4"
+          data-tauri-drag-region
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <img
+              src="/logo.png"
+              alt="OpenLinear"
+              className="h-[15px] flex-shrink-0"
+            />
+            <h1 className="text-lg font-semibold truncate">Dashboard</h1>
+          </div>
+          <div className="flex-1 h-full" data-tauri-drag-region />
+        </header>
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="w-full max-w-md rounded-xl border border-linear-border bg-linear-bg-secondary p-6 text-center">
+            <FolderKanban className="mx-auto mb-4 h-8 w-8 text-linear-text-tertiary" />
+            <h2 className="text-lg font-semibold text-linear-text">
+              Workspace not ready
+            </h2>
+            <p className="mt-2 text-sm text-linear-text-secondary">
+              {workspaceError}
+            </p>
+            <button
+              type="button"
+              onClick={() => void loadWorkspace()}
+              className="mt-5 inline-flex h-10 items-center justify-center rounded-md bg-linear-accent px-4 text-sm font-medium text-white transition-colors hover:bg-linear-accent-hover"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </AppShell>
+    );
   }
 
   if (!selectedProjectId && !urlProjectId && !urlTeamId) {

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '@openlinear/db';
 import { z } from 'zod';
-import { requireAuth, optionalAuth, AuthRequest } from '../middleware/auth';
+import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getLegacyTokenForOperation } from '../services/auth-migration';
 import {
   getGitHubRepos,
@@ -12,6 +12,7 @@ import {
   GitHubRepo,
   addRepositoryByUrl,
   getDesktopGitHubAuthSource,
+  getUserById,
 } from '../services/github';
 
 const router: Router = Router();
@@ -101,7 +102,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.get('/github', optionalAuth, async (req: AuthRequest, res: Response) => {
+router.get('/github', requireAuth, async (req: AuthRequest, res: Response) => {
   console.log('[Repos] GET /github — userId=%s hasGithubHeader=%s hasAuth=%s client=%s',
     req.userId ?? 'none',
     !!req.headers['x-github-token'],
@@ -109,6 +110,12 @@ router.get('/github', optionalAuth, async (req: AuthRequest, res: Response) => {
     req.headers['x-openlinear-client'] ?? 'none');
 
   try {
+    const user = await getUserById(req.userId!);
+    if (!user?.githubId) {
+      res.status(403).json({ error: 'GitHub is not connected for this workspace yet.' });
+      return;
+    }
+
     const headerToken = req.headers['x-github-token'];
     let accessToken = typeof headerToken === 'string' && headerToken.trim().length > 0
       ? headerToken
@@ -118,7 +125,7 @@ router.get('/github', optionalAuth, async (req: AuthRequest, res: Response) => {
 
     let source = accessToken ? (headerToken ? 'header' : 'legacy-db') : 'none';
 
-    if (!accessToken) {
+    if (!accessToken && user.githubId) {
       const authSource = getDesktopGitHubAuthSource();
       accessToken = authSource?.accessToken ?? null;
       if (accessToken) source = `local-${authSource!.source}`;

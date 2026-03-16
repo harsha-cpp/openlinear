@@ -1,5 +1,31 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
+
+const prismaMock = vi.hoisted(() => {
+  const localUser = {
+    id: 'local-user-id',
+    username: 'local-test-user',
+    email: null,
+    avatarUrl: null,
+    githubId: null,
+    passwordHash: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  return {
+    user: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      findUnique: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue(localUser),
+    },
+  };
+});
+
+vi.mock('@openlinear/db', () => ({
+  prisma: prismaMock,
+}));
+
 import { createApp } from '../app';
 
 describe('Auth API', () => {
@@ -103,6 +129,26 @@ describe('Auth API', () => {
       const res = await request(app).post('/api/auth/logout');
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
+    });
+  });
+
+  describe('POST /api/auth/local/session', () => {
+    it('rejects non-desktop clients', async () => {
+      const res = await request(app).post('/api/auth/local/session');
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('desktop clients');
+    });
+
+    it('creates a desktop local session', async () => {
+      const res = await request(app)
+        .post('/api/auth/local/session')
+        .set('x-openlinear-client', 'desktop');
+
+      expect(res.status).toBe(201);
+      expect(typeof res.body.token).toBe('string');
+      expect(typeof res.body.user?.id).toBe('string');
+      expect(typeof res.body.user?.username).toBe('string');
+      expect(res.body.user?.githubId).toBeNull();
     });
   });
 });

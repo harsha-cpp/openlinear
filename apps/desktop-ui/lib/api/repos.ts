@@ -1,4 +1,4 @@
-import { API_URL, getAuthHeader } from './client';
+import { API_URL, getAuthHeader, toApiConnectionError, waitForApiReady } from './client';
 import type { GitHubRepo, PublicRepository, Repository } from './types';
 
 async function getDesktopGitHubToken(): Promise<string | null> {
@@ -16,83 +16,113 @@ async function getDesktopGitHubToken(): Promise<string | null> {
 }
 
 export async function fetchUserRepositories(): Promise<Repository[]> {
-  const res = await fetch(`${API_URL}/api/repos`, {
-    headers: getAuthHeader(),
-  });
+  try {
+    await waitForApiReady();
+    const res = await fetch(`${API_URL}/api/repos`, {
+      headers: getAuthHeader(),
+    });
 
-  if (!res.ok) throw new Error('Failed to fetch projects');
-  return res.json();
+    if (!res.ok) throw new Error('Failed to fetch projects');
+    return res.json();
+  } catch (error) {
+    throw toApiConnectionError(error);
+  }
 }
 
 export async function fetchGitHubRepos(): Promise<GitHubRepo[]> {
-  const githubToken = await getDesktopGitHubToken();
-  const res = await fetch(`${API_URL}/api/repos/github`, {
-    headers: {
-      ...getAuthHeader(),
-      ...(githubToken ? { 'x-github-token': githubToken } : {}),
-    },
-  });
+  try {
+    await waitForApiReady();
+    const githubToken = await getDesktopGitHubToken();
+    const res = await fetch(`${API_URL}/api/repos/github`, {
+      headers: {
+        ...getAuthHeader(),
+        ...(githubToken ? { 'x-github-token': githubToken } : {}),
+      },
+    });
 
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Failed to fetch GitHub repos');
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to fetch GitHub repos');
+    }
+
+    return res.json();
+  } catch (error) {
+    throw toApiConnectionError(error);
   }
-
-  return res.json();
 }
 
 export async function importRepo(repo: GitHubRepo): Promise<Repository> {
-  const res = await fetch(`${API_URL}/api/repos/import`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader(),
-    },
-    body: JSON.stringify({ repo }),
-  });
+  try {
+    await waitForApiReady();
+    const res = await fetch(`${API_URL}/api/repos/import`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({ repo }),
+    });
 
-  if (!res.ok) throw new Error('Failed to import repository');
-  return res.json();
+    if (!res.ok) throw new Error('Failed to import repository');
+    return res.json();
+  } catch (error) {
+    throw toApiConnectionError(error);
+  }
 }
 
 export async function activateRepository(projectId: string): Promise<Repository> {
-  const res = await fetch(`${API_URL}/api/repos/${projectId}/activate`, {
-    method: 'POST',
-    headers: getAuthHeader(),
-  });
+  try {
+    await waitForApiReady();
+    const res = await fetch(`${API_URL}/api/repos/${projectId}/activate`, {
+      method: 'POST',
+      headers: getAuthHeader(),
+    });
 
-  if (!res.ok) throw new Error('Failed to activate project');
-  return res.json();
+    if (!res.ok) throw new Error('Failed to activate project');
+    return res.json();
+  } catch (error) {
+    throw toApiConnectionError(error);
+  }
 }
 
 export async function getActiveRepository(): Promise<Repository | null> {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   if (!token) return null;
-  
-  const res = await fetch(`${API_URL}/api/repos/active`, {
-    headers: getAuthHeader(),
-  });
 
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    await waitForApiReady();
+    const res = await fetch(`${API_URL}/api/repos/active`, {
+      headers: getAuthHeader(),
+    });
+
+    if (!res.ok) return null;
+    return res.json();
+  } catch (error) {
+    throw toApiConnectionError(error);
+  }
 }
 
 export async function setActiveRepositoryBaseBranch(baseBranch: string): Promise<Repository> {
-  const res = await fetch(`${API_URL}/api/repos/active/base-branch`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader(),
-    },
-    body: JSON.stringify({ baseBranch }),
-  });
+  try {
+    await waitForApiReady();
+    const res = await fetch(`${API_URL}/api/repos/active/base-branch`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({ baseBranch }),
+    });
 
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Failed to update base branch');
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to update base branch');
+    }
+
+    return res.json();
+  } catch (error) {
+    throw toApiConnectionError(error);
   }
-
-  return res.json();
 }
 
 // Public repo functions (no auth required)

@@ -4,6 +4,7 @@ export type { User, Repository, GitHubRepo, PublicRepository, Team, TeamMember, 
 // Auth
 export {
   fetchCurrentUser,
+  createLocalSession,
   loginUser,
   registerUser,
   getLoginUrl,

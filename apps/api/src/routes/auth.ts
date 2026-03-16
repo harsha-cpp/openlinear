@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import os from 'node:os';
 import { prisma } from '@openlinear/db';
 import {
   getAuthorizationUrl,
@@ -23,6 +24,7 @@ const DESKTOP_CALLBACK_URL = 'openlinear://callback';
 const WEB_CALLBACK_BRIDGE_URL = process.env.WEB_CALLBACK_BRIDGE_URL || 'http://localhost:3000/auth/callback';
 const DESKTOP_STATE_PREFIX = 'desktop:';
 const DESKTOP_CONNECT_STATE_PREFIX = 'desktop_connect:';
+const LOCAL_USERNAME_PREFIX = 'local-';
 
 function getJwtSecret() {
   const secret = process.env.JWT_SECRET;
@@ -105,6 +107,50 @@ function buildAuthUserPayload(user: {
     avatarUrl: user.avatarUrl,
     githubId: user.githubId,
   };
+}
+
+function sanitizeLocalUsernamePart(value: string) {
+  const sanitized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32);
+
+  return sanitized || 'user';
+}
+
+async function getOrCreateLocalDesktopUser() {
+  const existingLocalUser = await prisma.user.findFirst({
+    where: {
+      githubId: null,
+      passwordHash: null,
+      username: {
+        startsWith: LOCAL_USERNAME_PREFIX,
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  if (existingLocalUser) {
+    return existingLocalUser;
+  }
+
+  const osUsername = sanitizeLocalUsernamePart(os.userInfo().username);
+  const baseUsername = `${LOCAL_USERNAME_PREFIX}${osUsername}`.slice(0, 50);
+  let candidate = baseUsername;
+  let suffix = 1;
+
+  while (await prisma.user.findUnique({ where: { username: candidate } })) {
+    const suffixPart = `-${suffix}`;
+    candidate = `${baseUsername.slice(0, Math.max(1, 50 - suffixPart.length))}${suffixPart}`;
+    suffix += 1;
+  }
+
+  return prisma.user.create({
+    data: {
+      username: candidate,
+    },
+  });
 }
 
 async function completeGitHubLogin(accessToken: string) {
@@ -224,6 +270,26 @@ router.post('/login', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('[Auth] Login error:', error);
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+router.post('/local/session', async (req: Request, res: Response) => {
+  if (req.headers['x-openlinear-client'] !== 'desktop') {
+    res.status(400).json({ error: 'Local session is only available for desktop clients.' });
+    return;
+  }
+
+  try {
+    const user = await getOrCreateLocalDesktopUser();
+    const token = buildSessionToken(user);
+
+    res.status(201).json({
+      token,
+      user: buildAuthUserPayload(user),
+    });
+  } catch (error) {
+    console.error('[Auth] Local session error:', error);
+    res.status(500).json({ error: 'Failed to create local session' });
   }
 });
 

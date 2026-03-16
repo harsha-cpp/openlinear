@@ -7,12 +7,11 @@ import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/use-auth"
 import {
   checkDesktopGitHubAuth,
+  createLocalSession,
   getLoginUrl,
   isDesktopRuntime,
-  loginUser,
   loginWithDesktopGitHubAuth,
   pollGitHubDeviceLogin,
-  registerUser,
   startGitHubDeviceLogin,
   type GitHubDeviceStartResponse,
 } from "@/lib/api"
@@ -39,11 +38,7 @@ export default function LoginPage() {
   const [localAuthSource, setLocalAuthSource] = useState<string | null>(null)
   const [deviceLogin, setDeviceLogin] = useState<GitHubDeviceStartResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [showCredentials, setShowCredentials] = useState(false)
-  const [isRegister, setIsRegister] = useState(false)
-  const [username, setUsername] = useState("")
-  const [password, setPassword] = useState("")
+  const [activeAction, setActiveAction] = useState<"github" | "local" | null>(null)
 
   const finishLogin = async (token: string, accessToken?: string) => {
     await storeGitHubAccessToken(accessToken)
@@ -78,47 +73,58 @@ export default function LoginPage() {
   }
 
   const handleGitHubLogin = async () => {
-    setIsLoading(true)
+    setActiveAction("github")
     setError(null)
     setDeviceLogin(null)
 
+    if (!isDesktopRuntime()) {
+      window.location.assign(getLoginUrl())
+      return
+    }
+
     try {
-      if (isDesktopRuntime()) {
+      const shouldTryLocalAuth = localAuthAvailable !== false
+
+      if (shouldTryLocalAuth) {
+        const result = await loginWithDesktopGitHubAuth()
+        await finishLogin(result.token, result.githubAccessToken)
+        return
+      }
+
+      await startDesktopDeviceFlow()
+      return
+    } catch (loginError) {
+      const message = loginError instanceof Error ? loginError.message : "Failed to start GitHub login"
+
+      if (
+        message.includes("No local GitHub auth found")
+      ) {
         try {
-          const result = await loginWithDesktopGitHubAuth()
-          await finishLogin(result.token, result.githubAccessToken)
-          return
-        } catch {
           await startDesktopDeviceFlow()
+          return
+        } catch (deviceError) {
+          setError(deviceError instanceof Error ? deviceError.message : "Failed to start GitHub login")
           return
         }
       }
 
-      window.location.assign(getLoginUrl())
-    } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : "Failed to start GitHub login")
+      setError(message)
     } finally {
-      setIsLoading(false)
+      setActiveAction(null)
     }
   }
 
-  const handleCredentialSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!username.trim() || !password.trim()) return
-
-    setIsLoading(true)
+  const handleLocalContinue = async () => {
+    setActiveAction("local")
     setError(null)
 
     try {
-      const result = isRegister
-        ? await registerUser(username.trim(), password)
-        : await loginUser(username.trim(), password)
-      localStorage.setItem("token", result.token)
-      window.location.assign("/")
+      const result = await createLocalSession()
+      await finishLogin(result.token)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Authentication failed")
+      setError(err instanceof Error ? err.message : "Failed to continue without GitHub")
     } finally {
-      setIsLoading(false)
+      setActiveAction(null)
     }
   }
 
@@ -192,10 +198,10 @@ export default function LoginPage() {
 
             <Button
               onClick={handleGitHubLogin}
-              disabled={isLoading && !showCredentials}
+              disabled={activeAction !== null}
               className="w-full bg-[#24292e] hover:bg-[#1b1f23] text-white disabled:opacity-70"
             >
-              {isLoading && !showCredentials ? (
+              {activeAction === "github" ? (
                 <>
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                   {deviceLogin
@@ -214,73 +220,28 @@ export default function LoginPage() {
               )}
             </Button>
 
-            {showCredentials ? (
-              <>
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-linear-border" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-linear-bg-secondary px-2 text-linear-text-tertiary">
-                      {isRegister ? "create account" : "or sign in with credentials"}
-                    </span>
-                  </div>
-                </div>
+            {desktopRuntime && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleLocalContinue}
+                disabled={activeAction !== null}
+                className="w-full"
+              >
+                {activeAction === "local" ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Starting local workspace...
+                  </>
+                ) : (
+                  "Continue without GitHub"
+                )}
+              </Button>
+            )}
 
-                <form onSubmit={handleCredentialSubmit} className="space-y-3">
-                  <input
-                    type="text"
-                    placeholder="Username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="w-full rounded-md border border-linear-border bg-linear-bg px-3 py-2 text-sm text-linear-text-primary placeholder:text-linear-text-tertiary focus:outline-none focus:ring-1 focus:ring-linear-accent"
-                    autoComplete="username"
-                  />
-                  <input
-                    type="password"
-                    placeholder="Password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-md border border-linear-border bg-linear-bg px-3 py-2 text-sm text-linear-text-primary placeholder:text-linear-text-tertiary focus:outline-none focus:ring-1 focus:ring-linear-accent"
-                    autoComplete={isRegister ? "new-password" : "current-password"}
-                  />
-                  <Button
-                    type="submit"
-                    disabled={isLoading || !username.trim() || !password.trim()}
-                    className="w-full"
-                  >
-                    {isLoading ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : null}
-                    {isRegister ? "Create account" : "Sign in"}
-                  </Button>
-                </form>
-
-                <p className="text-center text-xs text-linear-text-tertiary">
-                  {isRegister ? (
-                    <>Already have an account?{" "}
-                      <button type="button" onClick={() => { setIsRegister(false); setError(null) }} className="text-linear-text-secondary hover:text-linear-text-primary underline">
-                        Sign in
-                      </button>
-                    </>
-                  ) : (
-                    <>No account?{" "}
-                      <button type="button" onClick={() => { setIsRegister(true); setError(null) }} className="text-linear-text-secondary hover:text-linear-text-primary underline">
-                        Create one
-                      </button>
-                    </>
-                  )}
-                </p>
-              </>
-            ) : (
+            {desktopRuntime && (
               <p className="text-center text-xs text-linear-text-tertiary">
-                <button
-                  type="button"
-                  onClick={() => setShowCredentials(true)}
-                  className="text-linear-text-secondary hover:text-linear-text-primary underline"
-                >
-                  Sign in without GitHub
-                </button>
+                You can connect GitHub later to import private repositories.
               </p>
             )}
           </div>

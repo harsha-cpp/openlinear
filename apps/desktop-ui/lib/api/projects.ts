@@ -1,23 +1,33 @@
-import { API_URL, getAuthHeader } from './client';
+import { API_URL, getAuthHeader, toApiConnectionError, waitForApiReady } from './client';
 import type { Project } from './types';
 
 export async function fetchProjects(teamId?: string): Promise<Project[]> {
-  const params = new URLSearchParams()
-  if (teamId) params.set('teamId', teamId)
-  const qs = params.toString()
-  const res = await fetch(`${API_URL}/api/projects${qs ? `?${qs}` : ''}`, { headers: getAuthHeader() })
-  if (!res.ok) throw new Error('Failed to fetch projects')
-  return res.json()
+  try {
+    await waitForApiReady();
+    const params = new URLSearchParams()
+    if (teamId) params.set('teamId', teamId)
+    const qs = params.toString()
+    const res = await fetch(`${API_URL}/api/projects${qs ? `?${qs}` : ''}`, { headers: getAuthHeader() })
+    if (!res.ok) throw new Error('Failed to fetch projects')
+    return res.json()
+  } catch (error) {
+    throw toApiConnectionError(error)
+  }
 }
 
 export async function createProject(data: { name: string; description?: string; status?: string; color?: string; icon?: string; teamIds?: string[]; startDate?: string; targetDate?: string; leadId?: string; repoUrl?: string; localPath?: string }): Promise<Project> {
-  const res = await fetch(`${API_URL}/api/projects`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-    body: JSON.stringify(data),
-  })
-  if (!res.ok) throw new Error('Failed to create project')
-  return res.json()
+  try {
+    await waitForApiReady();
+    const res = await fetch(`${API_URL}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(data),
+    })
+    if (!res.ok) throw new Error('Failed to create project')
+    return res.json()
+  } catch (error) {
+    throw toApiConnectionError(error)
+  }
 }
 
 export async function updateProject(id: string, data: Partial<{ name: string; description: string | null; status: string; color: string; icon: string | null; teamIds: string[]; startDate: string | null; targetDate: string | null; leadId: string | null; repoUrl: string | null; localPath: string | null }>): Promise<Project> {

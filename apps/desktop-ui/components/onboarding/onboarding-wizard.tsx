@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
   Rocket,
   FolderKanban,
+  FolderOpen,
   Users2,
   Github,
   ArrowRight,
@@ -21,6 +22,7 @@ import {
   createProject,
   fetchGitHubRepos,
   getGitHubConnectUrl,
+  isDesktopRuntime,
   type Team,
   type GitHubRepo,
 } from "@/lib/api"
@@ -78,7 +80,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
   )
 }
 
-type ProjectTab = "github" | "link"
+type ProjectTab = "github" | "link" | "local"
 
 function RepoItem({
   repo,
@@ -293,6 +295,67 @@ function LinkTab({
   )
 }
 
+function LocalFolderTab({
+  isDesktopApp,
+  localPath,
+  isPicking,
+  onLocalPathChange,
+  onPickFolder,
+}: {
+  isDesktopApp: boolean
+  localPath: string
+  isPicking: boolean
+  onLocalPathChange: (path: string) => void
+  onPickFolder: () => void
+}) {
+  if (!isDesktopApp) {
+    return (
+      <div className="rounded-lg border border-linear-border bg-linear-bg-tertiary px-4 py-5 text-center">
+        <p className="text-sm text-linear-text-secondary">
+          Local folders are available in the desktop app.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4 py-2">
+      <div className="space-y-1.5">
+        <label htmlFor="onboarding-local-path" className="text-xs font-medium text-linear-text-secondary">
+          Local project folder
+        </label>
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <FolderOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-linear-text-tertiary" />
+            <Input
+              id="onboarding-local-path"
+              value={localPath}
+              onChange={(e) => onLocalPathChange(e.target.value)}
+              placeholder="/Users/you/project"
+              className="bg-linear-bg-tertiary border-linear-border text-linear-text placeholder:text-linear-text-tertiary focus:border-linear-border-hover h-10 pl-10"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={onPickFolder}
+            disabled={isPicking}
+            className="shrink-0 rounded-md border border-linear-border bg-linear-bg-tertiary px-3 text-sm text-linear-text transition-colors hover:border-linear-border-hover disabled:opacity-50"
+          >
+            {isPicking ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              "Browse"
+            )}
+          </button>
+        </div>
+        <p className="text-xs text-linear-text-tertiary">
+          Choose a folder on this machine and OpenLinear will work locally without GitHub.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function ProjectStep({
   teamId,
   onComplete,
@@ -300,11 +363,29 @@ function ProjectStep({
   teamId: string
   onComplete: (result: { teamId: string; projectId: string }) => void
 }) {
-  const [activeTab, setActiveTab] = useState<ProjectTab>("github")
+  const { user } = useAuth()
+  const [isDesktopApp, setIsDesktopApp] = useState(false)
+  const [activeTab, setActiveTab] = useState<ProjectTab>("link")
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null)
   const [repoUrl, setRepoUrl] = useState("")
+  const [localPath, setLocalPath] = useState("")
   const [projectName, setProjectName] = useState("")
   const [isCreating, setIsCreating] = useState(false)
+  const [isPickingLocalPath, setIsPickingLocalPath] = useState(false)
+  const hasGitHub = !!user?.githubId
+
+  useEffect(() => {
+    setIsDesktopApp(isDesktopRuntime())
+  }, [])
+
+  useEffect(() => {
+    if (hasGitHub) {
+      setActiveTab("github")
+      return
+    }
+
+    setActiveTab(isDesktopApp ? "local" : "link")
+  }, [hasGitHub, isDesktopApp])
 
   useEffect(() => {
     if (selectedRepo) {
@@ -321,6 +402,35 @@ function ProjectStep({
     }
   }, [repoUrl, activeTab, projectName])
 
+  useEffect(() => {
+    if (activeTab === "local" && localPath && !projectName) {
+      const parts = localPath.split(/[/\\]/).filter(Boolean)
+      const folderName = parts.at(-1)
+      if (folderName) {
+        setProjectName(folderName)
+      }
+    }
+  }, [localPath, activeTab, projectName])
+
+  const pickLocalFolder = useCallback(async () => {
+    if (!isDesktopApp) {
+      return
+    }
+
+    setIsPickingLocalPath(true)
+    try {
+      const { invoke } = await import("@tauri-apps/api/core")
+      const selectedPath = await invoke<string | null>("pick_local_folder")
+      if (selectedPath) {
+        setLocalPath(selectedPath)
+      }
+    } catch {
+      toast.error("Failed to choose local folder")
+    } finally {
+      setIsPickingLocalPath(false)
+    }
+  }, [isDesktopApp])
+
   const resolvedRepoUrl = useMemo(() => {
     if (activeTab === "github" && selectedRepo) {
       return `https://github.com/${selectedRepo.full_name}`
@@ -331,7 +441,8 @@ function ProjectStep({
     return undefined
   }, [activeTab, selectedRepo, repoUrl])
 
-  const canCreate = projectName.trim().length > 0
+  const resolvedLocalPath = activeTab === "local" ? localPath.trim() || undefined : undefined
+  const canCreate = projectName.trim().length > 0 && (activeTab !== "local" || !!resolvedLocalPath)
 
   const handleCreate = useCallback(async () => {
     if (!canCreate) return
@@ -342,19 +453,37 @@ function ProjectStep({
         name: projectName.trim(),
         teamIds: [teamId],
         repoUrl: resolvedRepoUrl,
+        localPath: resolvedLocalPath,
       })
       onComplete({ teamId, projectId: project.id })
-    } catch {
-      toast.error("Failed to create project. Please try again.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to create project. Please try again.")
     } finally {
       setIsCreating(false)
     }
-  }, [canCreate, projectName, teamId, resolvedRepoUrl, onComplete])
+  }, [canCreate, projectName, teamId, resolvedRepoUrl, resolvedLocalPath, onComplete])
 
-  const tabs: { id: ProjectTab; label: string; icon: typeof Github }[] = [
-    { id: "github", label: "GitHub Repos", icon: Github },
-    { id: "link", label: "Enter Link", icon: ExternalLink },
-  ]
+  const tabs = useMemo(() => {
+    const nextTabs: { id: ProjectTab; label: string; icon: typeof Github }[] = []
+
+    if (hasGitHub) {
+      nextTabs.push({ id: "github", label: "GitHub Repos", icon: Github })
+    }
+
+    if (isDesktopApp) {
+      nextTabs.push({ id: "local", label: "Local Folder", icon: FolderOpen })
+    }
+
+    nextTabs.push({ id: "link", label: "Enter Link", icon: ExternalLink })
+
+    return nextTabs
+  }, [hasGitHub, isDesktopApp])
+
+  const projectSourceDescription = hasGitHub
+    ? "Choose a GitHub repository, paste a link, or point OpenLinear at a local folder."
+    : isDesktopApp
+      ? "Start from a local folder now, or paste a GitHub link later."
+      : "Paste a GitHub repository link to start creating issues."
 
   return (
     <div className="space-y-5">
@@ -366,7 +495,7 @@ function ProjectStep({
           Create Your First Project
         </h2>
         <p className="text-sm text-linear-text-secondary">
-          Connect a GitHub repository to start creating issues.
+          {projectSourceDescription}
         </p>
       </div>
 
@@ -380,8 +509,18 @@ function ProjectStep({
               key={tab.id}
               onClick={() => {
                 setActiveTab(tab.id)
-                if (tab.id === "github") setRepoUrl("")
-                if (tab.id === "link") setSelectedRepo(null)
+                if (tab.id === "github") {
+                  setRepoUrl("")
+                  setLocalPath("")
+                }
+                if (tab.id === "link") {
+                  setSelectedRepo(null)
+                  setLocalPath("")
+                }
+                if (tab.id === "local") {
+                  setSelectedRepo(null)
+                  setRepoUrl("")
+                }
               }}
               className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-md text-xs font-medium transition-all ${
                 isActive
@@ -408,6 +547,14 @@ function ProjectStep({
             <GitHubRepoTab
               selectedRepo={selectedRepo}
               onSelectRepo={setSelectedRepo}
+            />
+          ) : activeTab === "local" ? (
+            <LocalFolderTab
+              isDesktopApp={isDesktopApp}
+              localPath={localPath}
+              isPicking={isPickingLocalPath}
+              onLocalPathChange={setLocalPath}
+              onPickFolder={() => void pickLocalFolder()}
             />
           ) : (
             <LinkTab repoUrl={repoUrl} onUrlChange={setRepoUrl} />
@@ -469,13 +616,24 @@ function TeamStep({
   onTeamReady: (team: Team) => void
 }) {
   const { user } = useAuth()
+  const githubTeamName = user?.username ? `${user.username}'s Team` : null
+  const defaultTeamName = user?.username?.startsWith("local-")
+    ? "My Team"
+    : githubTeamName || "My Team"
   const [name, setName] = useState(() => {
-    const base = user?.username ? `${user.username}'s Team` : "My Team"
-    return base
+    return defaultTeamName
   })
   const [key, setKey] = useState(() => deriveTeamKey(name))
   const [keyDirty, setKeyDirty] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
+
+  useEffect(() => {
+    if (name !== "My Team" && name !== githubTeamName) {
+      return
+    }
+
+    setName(defaultTeamName)
+  }, [defaultTeamName, githubTeamName, name])
 
   useEffect(() => {
     if (team) {
