@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # OpenLinear Installer Script
-# Usage: curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash
+# Usage: curl -fsSL https://rixie.in/api/install | bash
 
 set -euo pipefail
 
@@ -11,6 +11,8 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 REPO='kaizen403/openlinear'
+INSTALLER_URL='https://rixie.in/api/install'
+INSTALL_COMMAND="curl -fsSL ${INSTALLER_URL} | bash"
 API_URL="https://api.github.com/repos/${REPO}/releases/latest"
 RELEASES_URL="https://github.com/${REPO}/releases/latest"
 INSTALL_DIR="${HOME}/.openlinear"
@@ -102,7 +104,7 @@ APPIMAGE_PATH="${HOME}/.openlinear/openlinear.AppImage"
 
 if [ ! -x "$APPIMAGE_PATH" ]; then
   echo "OpenLinear AppImage not found at $APPIMAGE_PATH" >&2
-  echo "Reinstall with: curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash" >&2
+  echo "Reinstall with: ${INSTALL_COMMAND}" >&2
   exit 1
 fi
 
@@ -186,7 +188,7 @@ done
 
 if [ -z "$APP_BUNDLE" ]; then
   echo "OpenLinear macOS app not found in ~/Applications, ~/.openlinear, or /Applications" >&2
-  echo "Reinstall with: curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash" >&2
+  echo "Reinstall with: ${INSTALL_COMMAND}" >&2
   exit 1
 fi
 

@@ -57,4 +57,4 @@ git push origin main --follow-tags
 
 - The desktop sidecar still exposes a local API inside the app, but CI/CD does not deploy it as a hosted service.
 - The Arch package path in this repo is the existing `PKGBUILD`/AUR flow under `packaging/aur/openlinear-bin`.
-- The canonical `curl` installer is `https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh`, so it does not depend on a Vercel deployment.
+- The canonical `curl` installer is `https://rixie.in/api/install`, served by the landing app from the checked-in `install.sh`.

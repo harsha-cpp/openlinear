@@ -8,7 +8,7 @@ const platform = process.platform;
 const arch = process.arch;
 const isGlobalInstall = process.env.npm_config_global === 'true' || process.env.npm_config_location === 'global';
 const releasesUrl = 'https://github.com/kaizen403/openlinear/releases/latest';
-const curlInstallCommand = 'curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash';
+const curlInstallCommand = 'curl -fsSL https://rixie.in/api/install | bash';
 
 function failInstall(message) {
   console.error(`\n\x1b[31m✗\x1b[0m ${message}`);
@@ -94,7 +94,7 @@ APPIMAGE_PATH="\${HOME}/.openlinear/openlinear.AppImage"
 
 if [ ! -x "$APPIMAGE_PATH" ]; then
   echo "OpenLinear AppImage not found at $APPIMAGE_PATH" >&2
-  echo "Reinstall with: curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash" >&2
+  echo "Reinstall with: curl -fsSL https://rixie.in/api/install | bash" >&2
   exit 1
 fi
 
@@ -146,7 +146,7 @@ done
 
 if [ -z "$APP_BUNDLE" ]; then
   echo "OpenLinear macOS app not found in ~/Applications, ~/.openlinear, or /Applications" >&2
-  echo "Reinstall with: curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash" >&2
+  echo "Reinstall with: curl -fsSL https://rixie.in/api/install | bash" >&2
   exit 1
 fi
 

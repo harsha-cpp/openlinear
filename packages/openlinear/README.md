@@ -40,12 +40,12 @@ pnpm add -g openlinear
 # or
 yarn global add openlinear
 # or
-curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash
+curl -fsSL https://rixie.in/api/install | bash
 # or
 paru -S openlinear-bin
 ```
 
-The global launcher currently supports macOS (Apple Silicon / Intel) and Linux x64. The npm installer and the `curl` installer place the desktop app in `~/.openlinear/`. Once complete, run:
+The global launcher currently supports macOS (Apple Silicon / Intel) and Linux x64. Linux installs use `~/.openlinear`, while macOS installs place `OpenLinear.app` in `~/Applications`. Once complete, run:
 
 ```bash
 openlinear
@@ -411,7 +411,7 @@ pnpm --filter @openlinear/landing dev
 | Format | Platform | Install |
 |---|---|---|
 | npm | macOS, Linux x64 | `npm install -g openlinear` |
-| curl | macOS, Linux x64 | `curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash` |
+| curl | macOS, Linux x64 | `curl -fsSL https://rixie.in/api/install | bash` |
 | GitHub Releases | macOS, Linux x64 | `https://github.com/kaizen403/openlinear/releases/latest` |
 
 ---

@@ -73,7 +73,7 @@ pnpm --filter @openlinear/landing dev`}</CodeBlock>
 
         <Section title="Install the CLI">
           <p>Choose the release channel that matches your machine.</p>
-          <CodeBlock>{`curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash
+          <CodeBlock>{`curl -fsSL https://rixie.in/api/install | bash
 npm install -g openlinear
 paru -S openlinear-bin`}</CodeBlock>
           <p>The `curl` installer and npm launcher now support macOS (Apple Silicon / Intel) and Linux x64. Arch users should prefer `openlinear-bin`.</p>

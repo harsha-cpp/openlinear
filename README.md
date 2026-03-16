@@ -58,7 +58,7 @@ pnpm --filter @openlinear/landing dev
 
 ## Releases
 
-- curl installer: `curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash`
+- curl installer: `curl -fsSL https://rixie.in/api/install | bash`
 - GitHub Releases: macOS `.dmg` / `.app.tar.gz`, Linux AppImage / `.deb`
 - npm package: `npm install -g openlinear`
 - Arch/AUR package: `openlinear-bin`

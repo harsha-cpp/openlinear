@@ -49,14 +49,14 @@ openlinear/
 - Deploy target: Vercel
 - Effective project root: `apps/landing`
 - Static routes: `/`, `/product`, `/pricing`, `/enterprise`, `/contact`, `/docs`
-- Optional mirror route: `/api/install`
+- Installer route: `/api/install`
 
 ## Install script
 
 - Canonical installer: `install.sh`
-- Canonical command: `curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash`
+- Canonical command: `curl -fsSL https://rixie.in/api/install | bash`
 - Supported platforms: macOS (Apple Silicon / Intel) and Linux x64
-- `apps/landing/app/api/install/route.ts` mirrors that installer when the landing app is deployed.
+- `apps/landing/app/api/install/route.ts` serves that installer from the landing deployment.
 
 ## Hosted surface
 
