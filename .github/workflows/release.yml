@@ -14,6 +14,7 @@ concurrency:
 
 env:
   TURBO_TELEMETRY_DISABLED: 1
+  OPENLINEAR_SKIP_OPENCODE_DOWNLOAD: 1
 
 jobs:
   build-release:
@@ -29,7 +30,7 @@ jobs:
             artifact_name: release-linux-x64
             asset_prefix: x86_64
           - id: macos-x64
-            runner: macos-13
+            runner: macos-15-intel
             artifact_name: release-macos-x64
             asset_prefix: x86_64
           - id: macos-arm64

@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 SIDECAR_DIR="$ROOT_DIR/apps/sidecar"
 BINARIES_DIR="$ROOT_DIR/apps/desktop/src-tauri/binaries"
+SKIP_OPENCODE_DOWNLOAD="${OPENLINEAR_SKIP_OPENCODE_DOWNLOAD:-0}"
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
@@ -94,9 +95,15 @@ esac
 
 if [ -f "$OPENCODE_BIN" ]; then
   echo "  - opencode binary already present, skipping download"
+elif [ "$SKIP_OPENCODE_DOWNLOAD" = "1" ]; then
+  echo "  - skipping opencode download (OPENLINEAR_SKIP_OPENCODE_DOWNLOAD=1)"
 elif [ -f "$SCRIPT_DIR/download-opencode.sh" ]; then
   echo "==> Downloading opencode binary..."
-  "$SCRIPT_DIR/download-opencode.sh"
+  if "$SCRIPT_DIR/download-opencode.sh"; then
+    echo "  - opencode binary downloaded"
+  else
+    echo "  ! failed to download opencode binary, continuing without a bundled copy"
+  fi
 else
   echo "  ! opencode binary not found at $OPENCODE_BIN"
   echo "    Get it from: https://github.com/anomalyco/opencode/releases"

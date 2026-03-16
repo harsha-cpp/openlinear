@@ -11,6 +11,7 @@ permissions:
 
 env:
   TURBO_TELEMETRY_DISABLED: 1
+  OPENLINEAR_SKIP_OPENCODE_DOWNLOAD: 1
 
 jobs:
   release-readiness:
