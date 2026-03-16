@@ -15,9 +15,16 @@ API_URL="https://api.github.com/repos/${REPO}/releases/latest"
 RELEASES_URL="https://github.com/${REPO}/releases/latest"
 INSTALL_DIR="${HOME}/.openlinear"
 APPIMAGE_PATH="${INSTALL_DIR}/openlinear.AppImage"
-MACOS_APP_PATH="${INSTALL_DIR}/OpenLinear.app"
 BIN_DIR="${HOME}/.local/bin"
 BIN_PATH="${BIN_DIR}/openlinear"
+DATA_DIR="${XDG_DATA_HOME:-${HOME}/.local/share}"
+DESKTOP_DIR="${DATA_DIR}/applications"
+ICON_DIR="${DATA_DIR}/icons/hicolor/256x256/apps"
+ICON_PATH="${ICON_DIR}/openlinear.png"
+LINUX_DESKTOP_PATH="${DESKTOP_DIR}/openlinear.desktop"
+MACOS_APPLICATIONS_DIR="${HOME}/Applications"
+MACOS_APP_PATH="${MACOS_APPLICATIONS_DIR}/OpenLinear.app"
+LEGACY_MACOS_APP_PATH="${INSTALL_DIR}/OpenLinear.app"
 
 echo -e "${BLUE}OpenLinear Installer${NC}"
 echo "===================="
@@ -86,44 +93,7 @@ find_macos_binary_path() {
     find "$macos_dir" -maxdepth 1 -type f ! -name '*sidecar*' | head -n 1
 }
 
-echo -e "${BLUE}Fetching latest release metadata...${NC}"
-RELEASE_DATA=$(curl -fsSL -H "Accept: application/vnd.github+json" -H "User-Agent: openlinear-installer" "$API_URL")
-
-if [ -z "$RELEASE_DATA" ] || echo "$RELEASE_DATA" | grep -q "Not Found"; then
-    echo -e "${RED}Error: Failed to fetch release information${NC}"
-    exit 1
-fi
-
-VERSION=$(echo "$RELEASE_DATA" | grep -o '"tag_name":[[:space:]]*"[^"]*"' | cut -d'"' -f4)
-ASSET_URL=$(echo "$RELEASE_DATA" | grep -o '"browser_download_url":[[:space:]]*"[^"]*' | cut -d'"' -f4 | grep -E -- "$ASSET_PATTERN" | head -1)
-
-if [ -z "$VERSION" ]; then
-    echo -e "${RED}Error: Failed to parse version${NC}"
-    exit 1
-fi
-
-echo -e "Latest version: ${GREEN}${VERSION}${NC}"
-echo ""
-
-if [ -z "$ASSET_URL" ]; then
-    echo -e "${RED}No ${ASSET_LABEL} found in the latest release.${NC}"
-    echo "Open ${RELEASES_URL} and download it manually."
-    exit 1
-fi
-
-echo -e "${BLUE}Downloading ${ASSET_LABEL}...${NC}"
-
-TMP_DIR=$(mktemp -d)
-trap 'rm -rf "$TMP_DIR"' EXIT
-
-mkdir -p "$INSTALL_DIR" "$BIN_DIR"
-
-if [ "$INSTALL_MODE" = "linux-appimage" ]; then
-    DOWNLOAD_FILE="$TMP_DIR/openlinear.AppImage"
-    curl -fL "$ASSET_URL" -o "$DOWNLOAD_FILE" --progress-bar
-    echo ""
-    install -m 755 "$DOWNLOAD_FILE" "$APPIMAGE_PATH"
-
+write_linux_launcher() {
     cat > "$BIN_PATH" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -165,6 +135,114 @@ fi
 export APPIMAGE_EXTRACT_AND_RUN=1
 exec "$APPIMAGE_PATH" "$@"
 EOF
+}
+
+write_linux_desktop_entry() {
+    local version_tag="$1"
+    local icon_url="https://raw.githubusercontent.com/${REPO}/${version_tag}/apps/desktop/src-tauri/icons/icon.png"
+    local desktop_icon="$ICON_PATH"
+
+    mkdir -p "$DESKTOP_DIR" "$ICON_DIR"
+    if ! curl -fsSL "$icon_url" -o "$ICON_PATH"; then
+        desktop_icon="openlinear"
+        echo -e "${YELLOW}Warning: failed to download the OpenLinear icon. The app entry will use a generic icon until you reinstall.${NC}"
+    fi
+
+    cat > "$LINUX_DESKTOP_PATH" <<EOF
+[Desktop Entry]
+Version=1.0
+Name=OpenLinear
+Comment=AI-powered project management that actually writes the code
+Exec=${BIN_PATH} %U
+Icon=${desktop_icon}
+Type=Application
+Categories=Development;ProjectManagement;
+MimeType=x-scheme-handler/openlinear;
+StartupNotify=true
+StartupWMClass=OpenLinear
+Terminal=false
+EOF
+
+    if command -v update-desktop-database >/dev/null 2>&1; then
+        update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
+    fi
+}
+
+write_macos_launcher() {
+    cat > "$BIN_PATH" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_BUNDLE=""
+for candidate in \
+  "${HOME}/Applications/OpenLinear.app" \
+  "${HOME}/.openlinear/OpenLinear.app" \
+  "/Applications/OpenLinear.app"; do
+  if [ -d "$candidate" ]; then
+    APP_BUNDLE="$candidate"
+    break
+  fi
+done
+
+if [ -z "$APP_BUNDLE" ]; then
+  echo "OpenLinear macOS app not found in ~/Applications, ~/.openlinear, or /Applications" >&2
+  echo "Reinstall with: curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash" >&2
+  exit 1
+fi
+
+exec open -a "$APP_BUNDLE" --args "$@"
+EOF
+}
+
+register_macos_app() {
+    local lsregister="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+    if [ -x "$lsregister" ]; then
+        "$lsregister" -f "$MACOS_APP_PATH" >/dev/null 2>&1 || true
+    fi
+
+    touch "$MACOS_APPLICATIONS_DIR" "$MACOS_APP_PATH" >/dev/null 2>&1 || true
+}
+
+echo -e "${BLUE}Fetching latest release metadata...${NC}"
+RELEASE_DATA=$(curl -fsSL -H "Accept: application/vnd.github+json" -H "User-Agent: openlinear-installer" "$API_URL")
+
+if [ -z "$RELEASE_DATA" ] || echo "$RELEASE_DATA" | grep -q "Not Found"; then
+    echo -e "${RED}Error: Failed to fetch release information${NC}"
+    exit 1
+fi
+
+VERSION=$(echo "$RELEASE_DATA" | grep -o '"tag_name":[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+ASSET_URL=$(echo "$RELEASE_DATA" | grep -o '"browser_download_url":[[:space:]]*"[^"]*' | cut -d'"' -f4 | grep -E -- "$ASSET_PATTERN" | head -1)
+
+if [ -z "$VERSION" ]; then
+    echo -e "${RED}Error: Failed to parse version${NC}"
+    exit 1
+fi
+
+echo -e "Latest version: ${GREEN}${VERSION}${NC}"
+echo ""
+
+if [ -z "$ASSET_URL" ]; then
+    echo -e "${RED}No ${ASSET_LABEL} found in the latest release.${NC}"
+    echo "Open ${RELEASES_URL} and download it manually."
+    exit 1
+fi
+
+echo -e "${BLUE}Downloading ${ASSET_LABEL}...${NC}"
+
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+mkdir -p "$INSTALL_DIR" "$BIN_DIR"
+
+if [ "$INSTALL_MODE" = "linux-appimage" ]; then
+    DOWNLOAD_FILE="$TMP_DIR/openlinear.AppImage"
+    curl -fL "$ASSET_URL" -o "$DOWNLOAD_FILE" --progress-bar
+    echo ""
+    install -m 755 "$DOWNLOAD_FILE" "$APPIMAGE_PATH"
+    write_linux_launcher
+    write_linux_desktop_entry "$VERSION"
 else
     DOWNLOAD_FILE="$TMP_DIR/OpenLinear.app.tar.gz"
     EXTRACT_DIR="$TMP_DIR/extracted"
@@ -181,8 +259,10 @@ else
         exit 1
     fi
 
-    rm -rf "$MACOS_APP_PATH"
+    mkdir -p "$MACOS_APPLICATIONS_DIR"
+    rm -rf "$MACOS_APP_PATH" "$LEGACY_MACOS_APP_PATH"
     mv "$APP_BUNDLE" "$MACOS_APP_PATH"
+    ln -s "$MACOS_APP_PATH" "$LEGACY_MACOS_APP_PATH"
     MACOS_BINARY_PATH=$(find_macos_binary_path)
     if [ -z "$MACOS_BINARY_PATH" ]; then
         echo -e "${RED}Failed to locate the OpenLinear macOS executable inside the app bundle.${NC}"
@@ -190,39 +270,8 @@ else
     fi
 
     chmod +x "$MACOS_BINARY_PATH"
-
-    cat > "$BIN_PATH" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-
-APP_DIR="${HOME}/.openlinear/OpenLinear.app/Contents/MacOS"
-
-if [ ! -d "$APP_DIR" ]; then
-  echo "OpenLinear macOS app not found at $APP_DIR" >&2
-  echo "Reinstall with: curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash" >&2
-  exit 1
-fi
-
-APP_PATH=""
-for candidate in "OpenLinear" "openlinear-desktop"; do
-  if [ -x "${APP_DIR}/${candidate}" ]; then
-    APP_PATH="${APP_DIR}/${candidate}"
-    break
-  fi
-done
-
-if [ -z "$APP_PATH" ]; then
-  APP_PATH=$(find "$APP_DIR" -maxdepth 1 -type f ! -name '*sidecar*' | head -n 1)
-fi
-
-if [ -z "$APP_PATH" ] || [ ! -x "$APP_PATH" ]; then
-  echo "OpenLinear macOS executable not found inside $APP_DIR" >&2
-  echo "Reinstall with: curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash" >&2
-  exit 1
-fi
-
-exec "$APP_PATH" "$@"
-EOF
+    write_macos_launcher
+    register_macos_app
 fi
 
 chmod +x "$BIN_PATH"

@@ -24,7 +24,16 @@ function failInstall(message) {
 
 const installDir = path.join(os.homedir(), '.openlinear');
 const appImagePath = path.join(installDir, 'openlinear.AppImage');
-const macosAppPath = path.join(installDir, 'OpenLinear.app');
+const dataDir = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
+const localBinDir = path.join(os.homedir(), '.local', 'bin');
+const localLauncherPath = path.join(localBinDir, 'openlinear');
+const linuxDesktopDir = path.join(dataDir, 'applications');
+const linuxDesktopPath = path.join(linuxDesktopDir, 'openlinear.desktop');
+const linuxIconDir = path.join(dataDir, 'icons', 'hicolor', '256x256', 'apps');
+const linuxIconPath = path.join(linuxIconDir, 'openlinear.png');
+const macosApplicationsDir = path.join(os.homedir(), 'Applications');
+const macosAppPath = path.join(macosApplicationsDir, 'OpenLinear.app');
+const legacyMacosAppPath = path.join(installDir, 'OpenLinear.app');
 
 function findAppBundle(rootDir) {
   const entries = fs.readdirSync(rootDir, { withFileTypes: true });
@@ -71,12 +80,154 @@ function findMacosExecutable(appBundlePath) {
   return primaryEntry ? path.join(macosDir, primaryEntry.name) : null;
 }
 
+function writeExecutableFile(filePath, contents) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, contents);
+  fs.chmodSync(filePath, 0o755);
+}
+
+function writeLinuxLauncherScript() {
+  writeExecutableFile(localLauncherPath, `#!/usr/bin/env bash
+set -euo pipefail
+
+APPIMAGE_PATH="\${HOME}/.openlinear/openlinear.AppImage"
+
+if [ ! -x "$APPIMAGE_PATH" ]; then
+  echo "OpenLinear AppImage not found at $APPIMAGE_PATH" >&2
+  echo "Reinstall with: curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash" >&2
+  exit 1
+fi
+
+IS_WAYLAND=false
+if [ "\${XDG_SESSION_TYPE:-}" = "wayland" ] || [ -n "\${WAYLAND_DISPLAY:-}" ]; then
+  IS_WAYLAND=true
+fi
+
+export WEBKIT_DISABLE_DMABUF_RENDERER=1
+
+if [ "$IS_WAYLAND" = true ] && [ -z "\${LD_PRELOAD:-}" ]; then
+  for lib in \\
+    /usr/lib/libwayland-client.so \\
+    /usr/lib64/libwayland-client.so \\
+    /usr/lib/x86_64-linux-gnu/libwayland-client.so; do
+    if [ -f "$lib" ]; then
+      export LD_PRELOAD="$lib"
+      break
+    fi
+  done
+
+  if [ -z "\${LD_PRELOAD:-}" ]; then
+    export GDK_BACKEND=x11
+    export WEBKIT_DISABLE_COMPOSITING_MODE=1
+  fi
+else
+  export WEBKIT_DISABLE_COMPOSITING_MODE=1
+fi
+
+export APPIMAGE_EXTRACT_AND_RUN=1
+exec "$APPIMAGE_PATH" "$@"
+`);
+}
+
+function writeMacosLauncherScript() {
+  writeExecutableFile(localLauncherPath, `#!/usr/bin/env bash
+set -euo pipefail
+
+APP_BUNDLE=""
+for candidate in \\
+  "\${HOME}/Applications/OpenLinear.app" \\
+  "\${HOME}/.openlinear/OpenLinear.app" \\
+  "/Applications/OpenLinear.app"; do
+  if [ -d "$candidate" ]; then
+    APP_BUNDLE="$candidate"
+    break
+  fi
+done
+
+if [ -z "$APP_BUNDLE" ]; then
+  echo "OpenLinear macOS app not found in ~/Applications, ~/.openlinear, or /Applications" >&2
+  echo "Reinstall with: curl -fsSL https://raw.githubusercontent.com/kaizen403/openlinear/main/install.sh | bash" >&2
+  exit 1
+fi
+
+exec open -a "$APP_BUNDLE" --args "$@"
+`);
+}
+
+function downloadToFile(url, destination) {
+  return new Promise((resolve, reject) => {
+    httpsGet(url).then((response) => {
+      const fileStream = fs.createWriteStream(destination);
+      response.pipe(fileStream);
+      fileStream.on('finish', () => fileStream.close(resolve));
+      fileStream.on('error', (err) => {
+        fileStream.close();
+        reject(err);
+      });
+    }).catch(reject);
+  });
+}
+
+async function installLinuxDesktopIntegration(release) {
+  const iconUrl = `https://raw.githubusercontent.com/kaizen403/openlinear/${release.tag_name}/apps/desktop/src-tauri/icons/icon.png`;
+  let desktopIconValue = linuxIconPath;
+
+  writeLinuxLauncherScript();
+  fs.mkdirSync(linuxDesktopDir, { recursive: true });
+  fs.mkdirSync(linuxIconDir, { recursive: true });
+
+  try {
+    await downloadToFile(iconUrl, linuxIconPath);
+  } catch (error) {
+    desktopIconValue = 'openlinear';
+    console.warn(`\\x1b[33m!\\x1b[0m Failed to download desktop icon: ${error.message}`);
+  }
+
+  fs.writeFileSync(linuxDesktopPath, `[Desktop Entry]
+Version=1.0
+Name=OpenLinear
+Comment=AI-powered project management that actually writes the code
+Exec=${localLauncherPath} %U
+Icon=${desktopIconValue}
+Type=Application
+Categories=Development;ProjectManagement;
+MimeType=x-scheme-handler/openlinear;
+StartupNotify=true
+StartupWMClass=OpenLinear
+Terminal=false
+`);
+
+  const refreshDesktopDatabase = spawnSync('update-desktop-database', [linuxDesktopDir], {
+    stdio: 'ignore',
+  });
+
+  if (refreshDesktopDatabase.error && refreshDesktopDatabase.error.code !== 'ENOENT') {
+    console.warn(`\\x1b[33m!\\x1b[0m Failed to refresh desktop database: ${refreshDesktopDatabase.error.message}`);
+  }
+}
+
+function registerMacosApp() {
+  const lsregisterPath = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister';
+
+  if (fs.existsSync(lsregisterPath)) {
+    spawnSync(lsregisterPath, ['-f', macosAppPath], { stdio: 'ignore' });
+  }
+
+  try {
+    fs.utimesSync(macosApplicationsDir, new Date(), new Date());
+  } catch {}
+
+  try {
+    fs.utimesSync(macosAppPath, new Date(), new Date());
+  } catch {}
+}
+
 function getPlatformTarget() {
   if (platform === 'linux' && arch === 'x64') {
     return {
       assetName: 'Linux AppImage',
       assetMatcher: (asset) => asset.name.endsWith('-x86_64.AppImage'),
-      install: (downloadPath, release) => {
+      install: async (downloadPath, release) => {
         if (fs.existsSync(appImagePath)) {
           console.log('\x1b[36m==>\x1b[0m Removing old AppImage...');
           fs.unlinkSync(appImagePath);
@@ -84,6 +235,7 @@ function getPlatformTarget() {
 
         fs.copyFileSync(downloadPath, appImagePath);
         fs.chmodSync(appImagePath, 0o755);
+        await installLinuxDesktopIntegration(release);
 
         console.log(`\x1b[32m✓\x1b[0m OpenLinear ${release.tag_name} installed to ${appImagePath}`);
       },
@@ -112,7 +264,9 @@ function getPlatformTarget() {
           failInstall('Failed to locate OpenLinear.app in the downloaded archive.');
         }
 
+        fs.mkdirSync(macosApplicationsDir, { recursive: true });
         fs.rmSync(macosAppPath, { recursive: true, force: true });
+        fs.rmSync(legacyMacosAppPath, { recursive: true, force: true });
         fs.cpSync(appBundlePath, macosAppPath, { recursive: true });
 
         const executablePath = findMacosExecutable(macosAppPath);
@@ -121,6 +275,11 @@ function getPlatformTarget() {
         }
 
         fs.chmodSync(executablePath, 0o755);
+        try {
+          fs.symlinkSync(macosAppPath, legacyMacosAppPath, 'dir');
+        } catch {}
+        writeMacosLauncherScript();
+        registerMacosApp();
         fs.rmSync(extractDir, { recursive: true, force: true });
 
         console.log(`\x1b[32m✓\x1b[0m OpenLinear ${release.tag_name} installed to ${macosAppPath}`);
@@ -227,7 +386,7 @@ async function main() {
     const downloadPath = path.join(tempDir, asset.name);
 
     await downloadFile(asset.browser_download_url, downloadPath, asset.size);
-    platformTarget.install(downloadPath, release);
+    await platformTarget.install(downloadPath, release);
     fs.rmSync(tempDir, { recursive: true, force: true });
 
     console.log(`\x1b[32m✓\x1b[0m You can now run \x1b[1mopenlinear\x1b[0m in your terminal.`);

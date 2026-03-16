@@ -6,24 +6,36 @@ const path = require('node:path');
 const { runGitHubAuthCommand } = require('./github-auth');
 
 function findMacosBundleBinary() {
-  const macosDir = path.join(os.homedir(), '.openlinear', 'OpenLinear.app', 'Contents', 'MacOS');
-  if (!fs.existsSync(macosDir)) {
-    return null;
-  }
+  const bundlePaths = [
+    path.join(os.homedir(), 'Applications', 'OpenLinear.app'),
+    '/Applications/OpenLinear.app',
+    path.join(os.homedir(), '.openlinear', 'OpenLinear.app'),
+  ];
 
-  const entries = fs.readdirSync(macosDir, { withFileTypes: true })
-    .filter((entry) => entry.isFile());
+  for (const bundlePath of bundlePaths) {
+    const macosDir = path.join(bundlePath, 'Contents', 'MacOS');
+    if (!fs.existsSync(macosDir)) {
+      continue;
+    }
 
-  const preferredEntries = ['OpenLinear', 'openlinear-desktop'];
-  for (const entryName of preferredEntries) {
-    const match = entries.find((entry) => entry.name === entryName);
-    if (match) {
-      return path.join(macosDir, match.name);
+    const entries = fs.readdirSync(macosDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile());
+
+    const preferredEntries = ['OpenLinear', 'openlinear-desktop'];
+    for (const entryName of preferredEntries) {
+      const match = entries.find((entry) => entry.name === entryName);
+      if (match) {
+        return path.join(macosDir, match.name);
+      }
+    }
+
+    const primaryEntry = entries.find((entry) => !entry.name.includes('sidecar'));
+    if (primaryEntry) {
+      return path.join(macosDir, primaryEntry.name);
     }
   }
 
-  const primaryEntry = entries.find((entry) => !entry.name.includes('sidecar'));
-  return primaryEntry ? path.join(macosDir, primaryEntry.name) : null;
+  return null;
 }
 
 async function main() {

@@ -102,7 +102,7 @@ npm install openlinear
 openlinear [args...]
 ```
 
-The CLI launcher resolves the desktop binary from `~/.openlinear/OpenLinear.app/Contents/MacOS/openlinear-desktop` (or the primary non-sidecar macOS binary), `~/.openlinear/openlinear`, or `~/.openlinear/openlinear.AppImage`, applies Linux-specific environment flags for X11/Wayland when needed, and passes all arguments through to the app.
+Global installs place the macOS app in `~/Applications/OpenLinear.app`, keep the Linux AppImage in `~/.openlinear/openlinear.AppImage`, and register a Linux desktop entry in `~/.local/share/applications/openlinear.desktop` so the app appears in desktop launchers. The CLI launcher resolves the desktop binary from `~/Applications/OpenLinear.app`, `~/.openlinear/OpenLinear.app`, `~/.openlinear/openlinear`, or `~/.openlinear/openlinear.AppImage`, applies Linux-specific environment flags for X11/Wayland when needed, and passes all arguments through to the app.
 
 If the binary is not found, it prints installation instructions and exits:
 
