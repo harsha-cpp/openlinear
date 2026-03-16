@@ -79,6 +79,9 @@ jobs:
       - name: Build sidecar artifacts
         run: bash ./scripts/build-sidecar.sh
 
+      - name: Smoke test sidecar
+        run: node ./scripts/smoke-test-sidecar.mjs
+
       - name: Build desktop
         run: |
           set -euo pipefail

@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 SIDECAR_DIR="$ROOT_DIR/apps/sidecar"
 BINARIES_DIR="$ROOT_DIR/apps/desktop/src-tauri/binaries"
+PRISMA_CLIENT="$ROOT_DIR/packages/db/generated/prisma/client"
 SKIP_OPENCODE_DOWNLOAD="${OPENLINEAR_SKIP_OPENCODE_DOWNLOAD:-0}"
 
 OS="$(uname -s)"
@@ -18,31 +19,50 @@ pnpm --filter @openlinear/db db:generate
 echo "==> Building TypeScript..."
 pnpm --filter @openlinear/sidecar build
 
-echo "==> Bundling with esbuild (ESM -> CJS)..."
+echo "==> Bundling sidecar entrypoint..."
 cd "$SIDECAR_DIR"
 npx esbuild src/index.ts \
   --bundle \
   --platform=node \
   --target=node18 \
-  --outfile=dist/sidecar-entry.cjs \
+  --outfile=dist/bundle.cjs \
   --format=cjs \
   '--define:import.meta.dirname=""'
+
+echo "==> Copying Prisma runtime assets..."
+if [ -f "$PRISMA_CLIENT/schema.prisma" ]; then
+  cp "$PRISMA_CLIENT/schema.prisma" dist/
+  echo "  - schema.prisma"
+fi
+
+for f in \
+  "query_compiler_fast_bg.wasm" \
+  "query_compiler_fast_bg.wasm-base64.js" \
+  "index.js" \
+  "runtime/client.js"; do
+  src="$PRISMA_CLIENT/$f"
+  if [ -f "$src" ]; then
+    mkdir -p "dist/$(dirname "$f")"
+    cp "$src" "dist/$f"
+    echo "  - $f"
+  fi
+done
 
 case "$OS" in
   Darwin)
     echo "==> Building macOS binary with pkg..."
     if [ "$ARCH" = "arm64" ]; then
-      npx @yao-pkg/pkg dist/sidecar-entry.cjs --target node18-macos-arm64 --output dist/sidecar-macos-arm64
+      npx @yao-pkg/pkg dist/bundle.cjs --target node18-macos-arm64 --output dist/sidecar-macos-arm64
     else
-      npx @yao-pkg/pkg dist/sidecar-entry.cjs --target node18-macos-x64 --output dist/sidecar-macos-x64
+      npx @yao-pkg/pkg dist/bundle.cjs --target node18-macos-x64 --output dist/sidecar-macos-x64
     fi
     ;;
   Linux)
     echo "==> Building Linux binary with pkg..."
     if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-      npx @yao-pkg/pkg dist/sidecar-entry.cjs --target node18-linux-arm64 --output dist/sidecar-linux-arm64
+      npx @yao-pkg/pkg dist/bundle.cjs --target node18-linux-arm64 --output dist/sidecar-linux-arm64
     elif [ "$ARCH" = "x86_64" ]; then
-      npx @yao-pkg/pkg dist/sidecar-entry.cjs --target node18-linux-x64 --output dist/sidecar-linux-x64
+      npx @yao-pkg/pkg dist/bundle.cjs --target node18-linux-x64 --output dist/sidecar-linux-x64
     else
       echo "==> Unsupported Linux architecture: $ARCH"
       exit 1
