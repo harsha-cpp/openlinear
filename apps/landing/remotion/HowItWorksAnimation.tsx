@@ -813,6 +813,21 @@ export const HowItWorksAnimation: React.FC = () => {
   const c2Y = interpolate(c2EntrySpring, [0, 1], [COL_Y, CY0 + CARD_H + 12])
   const c2Opacity = ramp(frame, 201, 213)
 
+  // Cursor 1 third time: Add task 3
+  const cursor1cOpacity = interpolate(frame, [210, 220, 228, 233], [0, 1, 1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
+
+  // Dialog 3
+  const d3Spring = spring({ frame: Math.max(0, frame - 228), fps: FPS, config: { damping: 18, stiffness: 200, mass: 0.7 }, durationInFrames: 25 })
+  const d3Scale = interpolate(d3Spring, [0, 1], [0.94, 1])
+  const d3Opacity = interpolate(frame, [228, 240, 270, 278], [0, 1, 1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
+  const d3TitleChars = Math.floor(interpolate(frame, [240, 265], [0, TASK3_TITLE.length], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }))
+  const d3ButtonPulse = interpolate(frame, [268, 274, 278, 284], [0, 1, 0.5, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })
+
+  // Card 3 entry
+  const c3EntrySpring = spring({ frame: Math.max(0, frame - 278), fps: FPS, config: { damping: 20, stiffness: 180, mass: 0.8 }, durationInFrames: 30 })
+  const c3Y = interpolate(c3EntrySpring, [0, 1], [COL_Y, CY0 + (CARD_H + 12) * 2])
+  const c3Opacity = ramp(frame, 278, 290)
+
   // Cursor 2: Select mode
   const selectBtnX = COL_0 + COL_W - 65
   const selectBtnY = COL_Y + 22
