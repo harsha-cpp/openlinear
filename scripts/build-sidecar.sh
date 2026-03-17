@@ -114,24 +114,9 @@ case "$OS" in
 esac
 
 if [ -f "$OPENCODE_BIN" ]; then
-  echo "  - opencode binary already present, skipping download"
-elif [ "$SKIP_OPENCODE_DOWNLOAD" = "1" ]; then
-  echo "  - skipping opencode download (OPENLINEAR_SKIP_OPENCODE_DOWNLOAD=1)"
-elif [ -f "$SCRIPT_DIR/download-opencode.sh" ]; then
-  echo "==> Downloading opencode binary..."
-  if "$SCRIPT_DIR/download-opencode.sh"; then
-    echo "  - opencode binary downloaded"
-  else
-    echo "  ! failed to download opencode binary, continuing without a bundled copy"
-  fi
+  echo "  - opencode binary already present"
 else
-  echo "  ! opencode binary not found at $OPENCODE_BIN"
-  echo "    Get it from: https://github.com/anomalyco/opencode/releases"
-fi
-
-if [ ! -f "$OPENCODE_BIN" ]; then
-  echo "  ! opencode binary is required for desktop packaging" >&2
-  exit 1
+  echo "  - opencode not bundled (detected via PATH at runtime)"
 fi
 
 echo "==> Build complete!"

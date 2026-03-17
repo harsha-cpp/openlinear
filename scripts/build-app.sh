@@ -46,32 +46,7 @@ cd "$ROOT_DIR"
 # ── Step 1: Check binaries directory ─────────────────────────────
 step "Checking binaries directory..."
 mkdir -p "$BINARIES_DIR"
-
-# Check opencode binary
-case "$OS" in
-  Linux)  OPENCODE_BIN="$BINARIES_DIR/opencode-x86_64-unknown-linux-gnu" ;;
-  Darwin)
-    if [ "$ARCH" = "arm64" ]; then
-      OPENCODE_BIN="$BINARIES_DIR/opencode-aarch64-apple-darwin"
-    else
-      OPENCODE_BIN="$BINARIES_DIR/opencode-x86_64-apple-darwin"
-    fi
-    ;;
-  *) fail "Unsupported OS: $OS" ;;
-esac
-
-if [ ! -f "$OPENCODE_BIN" ]; then
-  warn "opencode binary not found at $OPENCODE_BIN"
-  if [ -f "$SCRIPT_DIR/download-opencode.sh" ]; then
-    step "Downloading opencode binary..."
-    bash "$SCRIPT_DIR/download-opencode.sh"
-    ok "opencode downloaded"
-  else
-    fail "No opencode binary and no download-opencode.sh. Add opencode to $BINARIES_DIR manually."
-  fi
-else
-  ok "opencode binary present"
-fi
+ok "opencode is detected via PATH at runtime (not bundled)"
 
 # ── Step 2: Build sidecar native binary ──────────────────────────
 if [ "$SKIP_SIDECAR" = true ]; then
