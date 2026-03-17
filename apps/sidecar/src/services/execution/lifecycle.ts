@@ -11,6 +11,7 @@ import { cloneRepository, createBranch } from './git';
 import { subscribeToSessionEvents } from './events';
 import {
   activeExecutions,
+  startingExecutions,
   sessionToTask,
   broadcastProgress,
   addLogEntry,
@@ -54,17 +55,48 @@ function normalizeExecutionStartupError(error: unknown): string {
   return message;
 }
 
+function isExecutionAbortError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    error.name === 'AbortError' ||
+    message.includes('abort') ||
+    message.includes('operation was aborted')
+  );
+}
+
 export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promise<{ success: boolean; error?: string }> {
-  if (activeExecutions.has(taskId)) {
+  if (activeExecutions.has(taskId) || startingExecutions.has(taskId)) {
     return { success: false, error: 'Task is already running' };
   }
 
   const settings = await prisma.settings.findFirst({ where: { id: 'default' } });
   const parallelLimit = settings?.parallelLimit ?? 3;
 
-  if (activeExecutions.size >= parallelLimit) {
+  if (activeExecutions.size + startingExecutions.size >= parallelLimit) {
     return { success: false, error: `Parallel limit reached (${parallelLimit} tasks max)` };
   }
+
+  const branchName = `openlinear/${taskId.slice(0, 8)}`;
+  const startupAbortController = new AbortController();
+  const startupState = {
+    taskId,
+    branchName,
+    repoPath: null as string | null,
+    startedAt: new Date(),
+    cancelRequested: false,
+    abortController: startupAbortController,
+  };
+  startingExecutions.set(taskId, startupState);
+
+  const clearStartupExecution = () => {
+    if (startingExecutions.get(taskId) === startupState) {
+      startingExecutions.delete(taskId);
+    }
+  };
 
   let accessToken: string | null = null;
   let useLocalPath: string | null = null;
@@ -87,6 +119,7 @@ export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promis
   });
 
   if (!taskWithProject) {
+    clearStartupExecution();
     return { success: false, error: 'Task not found' };
   }
 
@@ -108,7 +141,6 @@ export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promis
     return { success: false, error: 'No active project selected' };
   }
 
-  const branchName = `openlinear/${taskId.slice(0, 8)}`;
   let repoPath: string;
 
   if (useLocalPath) {
@@ -116,23 +148,33 @@ export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promis
   } else if (project) {
     repoPath = join(REPOS_DIR, project.name, taskId.slice(0, 8));
   } else {
+    clearStartupExecution();
     return { success: false, error: 'No active project selected' };
   }
+
+  startupState.repoPath = repoPath;
 
   try {
     // Step 1: Clone
     if (useLocalPath) {
       broadcastProgress(taskId, 'cloning', 'Preparing local repository...');
-      await createBranch(repoPath, branchName);
+      await createBranch(repoPath, branchName, startupAbortController.signal);
     } else if (project) {
       broadcastProgress(taskId, 'cloning', 'Cloning repository...');
-      await cloneRepository(project.cloneUrl, repoPath, accessToken, project.defaultBranch);
-      await createBranch(repoPath, branchName);
+      await cloneRepository(project.cloneUrl, repoPath, accessToken, project.defaultBranch, startupAbortController.signal);
+      await createBranch(repoPath, branchName, startupAbortController.signal);
+    }
+
+    if (startupState.cancelRequested || startupAbortController.signal.aborted) {
+      clearStartupExecution();
+      console.log(`[Execution] Startup cancelled for task ${taskId.slice(0, 8)} before session creation`);
+      return { success: true };
     }
 
     broadcastProgress(taskId, 'executing', 'Starting OpenCode agent...');
 
     if (!userId) {
+      clearStartupExecution();
       return { success: false, error: 'userId is required for execution' };
     }
 
@@ -142,12 +184,25 @@ export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promis
       body: { 
         title: taskWithProject.title,
       },
+      signal: startupAbortController.signal,
     });
 
     const sessionId = sessionResponse.data?.id;
     if (!sessionId) {
       console.error(`[Execution] Failed to create session for task ${taskId.slice(0, 8)}`);
+      clearStartupExecution();
       return { success: false, error: 'Failed to create OpenCode session' };
+    }
+
+    if (startupState.cancelRequested || startupAbortController.signal.aborted) {
+      try {
+        await client.session.abort({ path: { id: sessionId } });
+      } catch (abortError) {
+        console.error(`[Execution] Failed to abort just-created session ${sessionId} for task ${taskId.slice(0, 8)}:`, abortError);
+      }
+      clearStartupExecution();
+      console.log(`[Execution] Startup cancelled for task ${taskId.slice(0, 8)} after session creation`);
+      return { success: true };
     }
 
     console.log(`[Execution] Session ${sessionId} created for task ${taskId.slice(0, 8)}`);
@@ -171,16 +226,18 @@ export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promis
       status: 'executing',
       logs: [],
       client,
-      startedAt: new Date(),
+      startedAt: startupState.startedAt,
       filesChanged: 0,
       toolsExecuted: 0,
       promptSent: false,
       cancelled: false,
+      promptAbortController: null,
       pendingPermissions: [],
     };
 
     activeExecutions.set(taskId, executionState);
     sessionToTask.set(sessionId, taskId);
+    clearStartupExecution();
     getOrCreateBuffer(taskId, (msg) => addLogEntry(taskId, 'agent', msg));
 
     // Add initial log entries
@@ -231,17 +288,31 @@ export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promis
       console.debug(`[Execution] Could not read model config for task ${taskId.slice(0, 8)}:`, err);
     }
 
+    const promptAbortController = new AbortController();
+    executionState.promptAbortController = promptAbortController;
+
     client.session.prompt({
       path: { id: sessionId },
       body: {
         parts: [{ type: 'text', text: prompt }],
         ...(modelOverride ? { model: modelOverride } : {}),
       },
+      signal: promptAbortController.signal,
     }).then(() => {
+      executionState.promptAbortController = null;
+      if (executionState.cancelled || !activeExecutions.has(taskId)) {
+        console.log(`[Execution] Prompt resolved after cancellation for task ${taskId.slice(0, 8)}, ignoring`);
+        return;
+      }
       console.log(`[Execution] Prompt sent to session ${sessionId}`);
       executionState.promptSent = true;
       addLogEntry(taskId, 'info', 'Task prompt sent to agent');
     }).catch(async (err: Error) => {
+      executionState.promptAbortController = null;
+      if (executionState.cancelled || promptAbortController.signal.aborted || err.name === 'AbortError') {
+        console.log(`[Execution] Prompt aborted for task ${taskId.slice(0, 8)}`);
+        return;
+      }
       console.error(`[Execution] Prompt error for task ${taskId}:`, err);
       const msg = err.message || 'Unknown error';
       const isAuth = msg.toLowerCase().includes('api key') || msg.toLowerCase().includes('unauthorized') || msg.toLowerCase().includes('401');
@@ -258,6 +329,11 @@ export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promis
     console.log(`[Execution] Started for task ${taskId} in ${repoPath}`);
     return { success: true };
   } catch (error) {
+    clearStartupExecution();
+    if (startupState.cancelRequested || startupAbortController.signal.aborted || isExecutionAbortError(error)) {
+      console.log(`[Execution] Startup cancelled for task ${taskId.slice(0, 8)}`);
+      return { success: true };
+    }
     const normalizedError = normalizeExecutionStartupError(error);
     console.error(`[Execution] Failed to execute task ${taskId}:`, error);
     broadcastProgress(taskId, 'error', normalizedError);
@@ -269,10 +345,40 @@ export async function cancelTask(taskId: string): Promise<{ success: boolean; er
   const execution = activeExecutions.get(taskId);
 
   if (!execution) {
-    return { success: false, error: 'Task is not running' };
+    const startupExecution = startingExecutions.get(taskId);
+
+    if (!startupExecution) {
+      return { success: false, error: 'Task is not running' };
+    }
+
+    if (startupExecution.cancelRequested) {
+      return { success: true };
+    }
+
+    startupExecution.cancelRequested = true;
+    startupExecution.abortController.abort();
+
+    const now = new Date();
+    const elapsedMs = now.getTime() - startupExecution.startedAt.getTime();
+
+    broadcastProgress(taskId, 'cancelled', 'Execution cancelled', {
+      elapsedMs,
+      estimatedProgress: 0,
+    });
+
+    await updateTaskStatus(taskId, 'cancelled', null, {
+      executionStartedAt: startupExecution.startedAt,
+      executionPausedAt: now,
+      executionElapsedMs: elapsedMs,
+      executionProgress: 0,
+    });
+
+    return { success: true };
   }
 
   execution.cancelled = true;
+  execution.promptAbortController?.abort();
+  execution.promptAbortController = null;
 
   const now = new Date();
   const elapsedMs = now.getTime() - execution.startedAt.getTime();

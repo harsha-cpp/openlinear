@@ -40,7 +40,17 @@ export interface ExecutionState {
   toolsExecuted: number;
   promptSent: boolean;
   cancelled: boolean;
+  promptAbortController: AbortController | null;
   pendingPermissions: PendingPermission[];
+}
+
+export interface StartupExecutionState {
+  taskId: string;
+  branchName: string;
+  repoPath: string | null;
+  startedAt: Date;
+  cancelRequested: boolean;
+  abortController: AbortController;
 }
 
 export interface ExecutionLogEntry {
@@ -70,14 +80,15 @@ export interface PendingPermission {
 }
 
 export const activeExecutions = new Map<string, ExecutionState>();
+export const startingExecutions = new Map<string, StartupExecutionState>();
 export const sessionToTask = new Map<string, string>();
 
 export function getRunningTaskCount(): number {
-  return activeExecutions.size;
+  return activeExecutions.size + startingExecutions.size;
 }
 
 export function isTaskRunning(taskId: string): boolean {
-  return activeExecutions.has(taskId);
+  return activeExecutions.has(taskId) || startingExecutions.has(taskId);
 }
 
 export function getExecutionStatus(taskId: string): ExecutionState | undefined {

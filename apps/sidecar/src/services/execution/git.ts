@@ -26,7 +26,8 @@ export async function cloneRepository(
   cloneUrl: string,
   repoPath: string,
   accessToken: string | null,
-  defaultBranch: string
+  defaultBranch: string,
+  signal?: AbortSignal
 ): Promise<void> {
   console.log(`[Execution] Preparing to clone into ${repoPath}`);
   
@@ -51,14 +52,14 @@ export async function cloneRepository(
     : cloneUrl;
   
   console.log(`[Execution] Cloning ${cloneUrl} (branch: ${defaultBranch})...`);
-  await execAsync(`git clone --depth 1 --branch ${defaultBranch} ${url} ${repoPath}`);
-  await execAsync(`chmod -R a+rwX ${repoPath}`);
+  await execAsync(`git clone --depth 1 --branch ${defaultBranch} ${url} ${repoPath}`, { signal });
+  await execAsync(`chmod -R a+rwX ${repoPath}`, { signal });
   console.log(`[Execution] Clone complete`);
 }
 
-export async function createBranch(repoPath: string, branchName: string): Promise<void> {
+export async function createBranch(repoPath: string, branchName: string, signal?: AbortSignal): Promise<void> {
   console.log(`[Execution] Creating branch: ${branchName}`);
-  await execAsync(`git checkout -B ${branchName}`, { cwd: repoPath });
+  await execAsync(`git checkout -B ${branchName}`, { cwd: repoPath, signal });
   console.log(`[Execution] Branch ready and checked out`);
 }
 

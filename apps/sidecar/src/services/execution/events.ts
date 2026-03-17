@@ -223,6 +223,11 @@ async function handleOpenCodeEvent(event: { type: string; properties?: Record<st
 
     case 'session.error':
       if (taskId) {
+        const execution = activeExecutions.get(taskId);
+        if (execution?.cancelled) {
+          console.log(`[Execution] Ignoring session.error for task ${taskId.slice(0, 8)} (cancelled)`);
+          break;
+        }
         const rawError = event.properties?.error;
         const { message: errorDetail, isAuthError, isRateLimit } = extractCleanError(rawError);
         const headline = isAuthError
