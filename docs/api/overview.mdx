@@ -1,0 +1,114 @@
+---
+title: "API Overview"
+description: "Base URL, authentication, request format, and error handling for the OpenLinear API."
+icon: "square-terminal"
+---
+
+# API Overview
+
+The OpenLinear API is a local REST API served by the sidecar process. It handles tasks, teams, projects, repositories, execution, and real-time events.
+
+---
+
+## Base URL
+
+```
+http://localhost:3001/api
+```
+
+The sidecar binds to port `3001` by default. All endpoints are prefixed with `/api`.
+
+---
+
+## Authentication
+
+Most endpoints require a JWT bearer token:
+
+```bash
+curl http://localhost:3001/api/tasks \
+  -H "Authorization: Bearer <token>"
+```
+
+Obtain a token via:
+- `POST /api/auth/login` (username/password)
+- `POST /api/auth/local/session` (desktop auto-login)
+- GitHub OAuth flow
+
+Tokens expire after 7 days and use HS256 signing.
+
+### Auth Levels
+
+| Level | Header | Description |
+|-------|--------|-------------|
+| `requireAuth` | `Authorization: Bearer <token>` | Endpoint fails with 401 if no valid token |
+| `optionalAuth` | Optional | Endpoint works without auth but may return limited data |
+| None | Not needed | Public endpoint |
+
+---
+
+## Request Format
+
+- **Content-Type**: `application/json`
+- **Method**: GET, POST, PATCH, DELETE
+- **Body**: JSON for POST/PATCH requests
+
+---
+
+## Response Format
+
+### Success
+
+```json
+{
+  "id": "uuid",
+  "title": "Task title",
+  "status": "todo",
+  ...
+}
+```
+
+Lists return JSON arrays. Single items return JSON objects.
+
+### Errors
+
+```json
+{
+  "error": "Human-readable error message",
+  "details": {
+    "fieldErrors": {},
+    "formErrors": []
+  }
+}
+```
+
+| Status | Meaning |
+|--------|---------|
+| 400 | Validation error or bad request |
+| 401 | Missing or invalid authentication |
+| 403 | Forbidden (e.g., desktop-only endpoint) |
+| 404 | Resource not found |
+| 409 | Conflict (duplicate name, already exists) |
+| 500 | Internal server error |
+| 502 | External API failure (e.g., GitHub API) |
+
+---
+
+## Desktop Client Header
+
+Some endpoints are restricted to the desktop app. They check for:
+
+```
+x-openlinear-client: desktop
+```
+
+---
+
+## Real-Time Events
+
+The API provides a Server-Sent Events endpoint for live updates:
+
+```
+GET /api/events
+```
+
+See [Real-Time Events](/api/realtime) for details.

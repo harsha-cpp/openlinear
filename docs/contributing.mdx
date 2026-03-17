@@ -1,0 +1,149 @@
+---
+title: "Contributing"
+description: "Development setup, project structure, CI/CD pipeline, and release process."
+icon: "code-pull-request"
+---
+
+# Contributing
+
+Contributions are welcome. Please open an issue first to discuss what you'd like to change.
+
+---
+
+## Development Setup
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/kaizen403/openlinear.git
+    cd openlinear
+    ```
+  </Step>
+  <Step title="Install dependencies">
+    ```bash
+    pnpm install
+    ```
+    Requires Node.js 22+ and pnpm 9+.
+  </Step>
+  <Step title="Start development">
+    ```bash
+    pnpm dev
+    ```
+    Runs all apps in watch mode. Or run specific apps:
+    ```bash
+    pnpm dev:web                              # Web apps only
+    pnpm --filter @openlinear/landing dev     # Landing site only (port 3002)
+    pnpm --filter @openlinear/desktop-ui dev  # Desktop UI only (port 3000)
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Run all apps in development mode |
+| `pnpm dev:web` | Run web apps only |
+| `pnpm build` | Build all apps via Turbo |
+| `pnpm lint` | Run linters across all packages |
+| `pnpm test` | Run all tests |
+| `pnpm typecheck` | TypeScript type checking |
+| `pnpm db:push` | Sync Prisma schema to database |
+| `pnpm db:seed` | Seed the database |
+| `pnpm db:studio` | Open Prisma Studio |
+| `pnpm build:sidecar` | Build the sidecar binary |
+| `pnpm build:desktop` | Build the Tauri desktop app |
+| `pnpm build:app` | Full desktop build (sidecar + app) |
+| `pnpm build:app:fast` | Desktop build without sidecar rebuild |
+
+---
+
+## Project Structure
+
+| Directory | Description |
+|-----------|-------------|
+| `apps/desktop` | Tauri desktop app (Rust shell) |
+| `apps/desktop-ui` | Next.js webview UI |
+| `apps/sidecar` | Local Express API and execution engine |
+| `apps/api` | Shared API routes and services |
+| `apps/landing` | Marketing site (Next.js, deployed on Vercel) |
+| `packages/db` | Prisma schema and database client |
+| `packages/openlinear` | npm package (CLI launcher + library) |
+| `packages/types` | Shared TypeScript type definitions |
+| `packaging/aur` | Arch/AUR package metadata |
+| `scripts/` | Build, dev, and release scripts |
+
+---
+
+## CI/CD Pipeline
+
+### Continuous Integration
+
+Every push and pull request triggers:
+
+```
+push / PR → install deps → sync AUR metadata → build sidecar
+          → typecheck desktop UI → build npm package
+```
+
+Defined in `.github/workflows/ci.yml`.
+
+### Release Pipeline
+
+Tag-based releases via `.github/workflows/release.yml`:
+
+```
+git tag vX.Y.Z → GitHub Actions → build desktop artifacts
+               → GitHub Release → npm publish → AUR publish
+```
+
+The release workflow:
+1. Verifies the tag matches versions in `packages/openlinear/package.json` and `apps/desktop/src-tauri/tauri.conf.json`
+2. Regenerates `packaging/aur/openlinear-bin/.SRCINFO`
+3. Builds macOS and Linux release artifacts
+4. Publishes to GitHub Releases, npm, and AUR
+
+### Required Secrets
+
+| Secret | Purpose |
+|--------|---------|
+| `NPM_TOKEN` | npm automation token for publishing |
+| `AUR_SSH_PRIVATE_KEY` | SSH key for AUR package updates |
+
+---
+
+## Release Checklist
+
+```bash
+# 1. Ensure versions match in:
+#    - packages/openlinear/package.json
+#    - apps/desktop/src-tauri/tauri.conf.json
+
+# 2. Sync AUR metadata
+bash ./scripts/sync-aur-metadata.sh
+
+# 3. Commit and tag
+git add packages/openlinear/package.json \
+        apps/desktop/src-tauri/tauri.conf.json \
+        packaging/aur/openlinear-bin/PKGBUILD \
+        packaging/aur/openlinear-bin/.SRCINFO
+git commit -m "chore(release): vX.Y.Z"
+git tag vX.Y.Z
+git push origin main --follow-tags
+```
+
+---
+
+## Local Verification
+
+Before pushing a release, verify locally:
+
+```bash
+pnpm install
+bash ./scripts/sync-aur-metadata.sh
+bash ./scripts/build-sidecar.sh
+pnpm --filter @openlinear/desktop-ui lint
+pnpm --filter ./packages/openlinear build
+```

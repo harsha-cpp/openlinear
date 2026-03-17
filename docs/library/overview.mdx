@@ -1,0 +1,71 @@
+---
+title: "Library Overview"
+description: "The openlinear npm package — CLI launcher and TypeScript utility library."
+icon: "npm"
+---
+
+# Library Overview
+
+The `openlinear` npm package serves two purposes: a CLI launcher for the desktop app and a TypeScript utility library for execution metadata, payload validation, and feature flags.
+
+```bash
+npm install openlinear
+```
+
+Current version: **0.1.38**
+
+---
+
+## Entry Points
+
+| Import | Contents |
+|--------|----------|
+| `openlinear` | Re-exports everything below |
+| `openlinear/types` | Zod schemas, TypeScript types, and validation functions for execution metadata |
+| `openlinear/validation` | Payload sanitization and forbidden-field enforcement |
+| `openlinear/config` | Feature flag parsing and execution mode helpers |
+
+All entry points support both ESM and CommonJS:
+
+```typescript
+// ESM
+import { validateExecutionMetadataSync } from 'openlinear/types';
+
+// CommonJS
+const { validateExecutionMetadataSync } = require('openlinear/types');
+```
+
+---
+
+## Package Exports
+
+```json
+{
+  ".": { "import": "./dist/index.js", "require": "./dist/index.cjs", "types": "./dist/index.d.ts" },
+  "./types": { "import": "./dist/types/index.js", "require": "./dist/types/index.cjs", "types": "./dist/types/index.d.ts" },
+  "./validation": { "import": "./dist/validation/index.js", "require": "./dist/validation/index.cjs", "types": "./dist/validation/index.d.ts" },
+  "./config": { "import": "./dist/config/index.js", "require": "./dist/config/index.cjs", "types": "./dist/config/index.d.ts" }
+}
+```
+
+---
+
+## Dependencies
+
+The library has a single runtime dependency: [Zod](https://zod.dev) for schema validation.
+
+---
+
+## Sections
+
+<CardGroup cols={3}>
+  <Card title="Types" icon="shapes" href="/library/types">
+    ExecutionMetadataSync schema and validation functions.
+  </Card>
+  <Card title="Validation" icon="shield" href="/library/validation">
+    Forbidden fields and payload sanitization.
+  </Card>
+  <Card title="Feature Flags" icon="flag" href="/library/feature-flags">
+    Execution mode control and rollout phases.
+  </Card>
+</CardGroup>

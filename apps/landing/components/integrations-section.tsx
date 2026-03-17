@@ -20,10 +20,8 @@ export function IntegrationsSection() {
             </svg>
 
             {/* Center Logo */}
-            <div className="h-32 w-32 text-cyan-400 z-20 drop-shadow-[0_0_30px_rgba(34,211,238,0.4)]">
-              <svg viewBox="0 0 24 24" className="w-full h-full" fill="currentColor">
-                <path d="M12 2L12 10L19 6L19 14L12 10L12 22L10 22L10 10L3 14L3 6L10 10L10 2Z" />
-              </svg>
+            <div className="h-32 w-32 z-20 drop-shadow-[0_0_30px_rgba(34,211,238,0.4)]">
+              <img src="/logo.png" alt="OpenLinear" className="w-full h-full object-contain" />
             </div>
 
             {/* Orbiting Icons */}
@@ -54,7 +52,7 @@ export function IntegrationsSection() {
             </p>
 
             <a
-              href="/docs"
+              href="https://openlinear.mintlify.app"
               className="inline-flex items-center px-6 py-3 rounded-full bg-transparent border border-white/20 text-white hover:bg-white/[0.03] hover:border-white/30 transition-all text-sm font-medium"
             >
               Read more about connectors →

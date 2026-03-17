@@ -1,0 +1,143 @@
+---
+title: "Quick Start"
+description: "Get OpenLinear running in under 5 minutes."
+icon: "rocket"
+---
+
+# Quick Start
+
+Get OpenLinear installed and running with your first task in minutes.
+
+## Prerequisites
+
+- **Node.js 22+** — [Download](https://nodejs.org)
+- **pnpm 9+** — `npm install -g pnpm`
+- **GitHub account** — For repository access and OAuth
+
+---
+
+## Install
+
+Pick the method that works for your platform:
+
+<Tabs>
+  <Tab title="npm (Recommended)">
+    ```bash
+    npm install -g openlinear
+    ```
+    Works on macOS (Apple Silicon / Intel) and Linux x64.
+  </Tab>
+  <Tab title="curl">
+    ```bash
+    curl -fsSL https://rixie.in/api/install | bash
+    ```
+    The installer detects your platform and installs the appropriate binary.
+  </Tab>
+  <Tab title="Arch Linux">
+    ```bash
+    paru -S openlinear-bin
+    ```
+    Installs via the AUR package.
+  </Tab>
+  <Tab title="GitHub Releases">
+    Download the latest release for your platform:
+    - **macOS**: `.dmg` or `.app.tar.gz`
+    - **Linux**: AppImage or `.deb`
+
+    → [Latest Release](https://github.com/kaizen403/openlinear/releases/latest)
+  </Tab>
+</Tabs>
+
+---
+
+## Launch
+
+```bash
+openlinear
+```
+
+The CLI launcher resolves the desktop binary from `~/Applications/OpenLinear.app` (macOS) or `~/.openlinear/` (Linux) and opens the app.
+
+---
+
+## Connect GitHub
+
+<Steps>
+  <Step title="Authenticate">
+    ```bash
+    openlinear github login
+    ```
+    This opens GitHub in your browser for OAuth, or falls back to device flow. Your token stays on your machine.
+  </Step>
+  <Step title="Verify">
+    ```bash
+    openlinear github whoami
+    ```
+    Confirms your GitHub identity is connected.
+  </Step>
+</Steps>
+
+---
+
+## Create Your First Task
+
+<Steps>
+  <Step title="Open the App">
+    Launch OpenLinear. You'll land on the kanban board.
+  </Step>
+  <Step title="Connect a Repository">
+    Click **Source → Edit** in the project config panel. Enter a GitHub repo URL or select from your repositories.
+  </Step>
+  <Step title="Add a Task">
+    Click **+ Add task** in the Todo column. Describe what you want:
+    ```
+    Add a health check endpoint at GET /api/health 
+    that returns { status: "ok", timestamp: Date.now() }
+    ```
+  </Step>
+  <Step title="Execute">
+    Drag the task to **In Progress**, or right-click and select **Execute**. OpenLinear will:
+    1. Clone the repository
+    2. Create a branch (`openlinear/<task-id>`)
+    3. Start the AI agent
+    4. Write code and commit changes
+    5. Give you a PR compare URL
+  </Step>
+  <Step title="Review">
+    Click the PR link in the task card to review the diff on GitHub. Merge when satisfied.
+  </Step>
+</Steps>
+
+---
+
+## Configure AI Provider
+
+OpenLinear uses [OpenCode](https://opencode.ai) as the execution engine. You need at least one AI provider configured:
+
+1. Open **Settings** in the sidebar
+2. Go to **AI Providers**
+3. Add your API key for one of: Anthropic, OpenAI, Google, GitHub Copilot, or any supported provider
+4. Select a model in the **Model Selector** dropdown on the board
+
+<Note>
+  OpenCode provides free models (Minimix, GLM5, KimiK2.5) that work without an API key.
+</Note>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Desktop App Guide" icon="monitor" href="/desktop/overview">
+    Learn all the desktop features — kanban board, batch execution, model selection.
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/overview">
+    Full command reference for the `openlinear` CLI.
+  </Card>
+  <Card title="API Reference" icon="square-terminal" href="/api/overview">
+    REST API for programmatic access to tasks, projects, and execution.
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture">
+    Understand how the desktop app, sidecar, and API work together.
+  </Card>
+</CardGroup>

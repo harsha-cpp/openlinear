@@ -1,0 +1,93 @@
+---
+title: "CLI Reference"
+description: "The openlinear command — launch the desktop app and manage GitHub authentication."
+icon: "terminal"
+---
+
+# CLI Reference
+
+The `openlinear` npm package provides a CLI launcher that resolves and starts the desktop app, plus GitHub authentication commands.
+
+```bash
+npm install -g openlinear
+```
+
+---
+
+## Launch
+
+```bash
+openlinear [args...]
+```
+
+The launcher searches for the desktop binary in the following order:
+
+| Platform | Search paths |
+|----------|-------------|
+| macOS | `~/Applications/OpenLinear.app`, `~/.openlinear/OpenLinear.app` |
+| Linux | `~/.openlinear/openlinear`, `~/.openlinear/openlinear.AppImage` |
+
+On Linux, the launcher applies environment flags for X11/Wayland compatibility and passes all arguments through to the app.
+
+If the binary is not found:
+
+```
+OpenLinear desktop app not found.
+
+Install it from npm:
+  npm install -g openlinear
+
+Or download the latest desktop release:
+  https://github.com/kaizen403/openlinear/releases/latest
+```
+
+---
+
+## GitHub Commands
+
+All GitHub auth commands use local-only flows. No hosted callback server is required.
+
+| Command | Description |
+|---------|-------------|
+| `openlinear github login` | Authenticate with GitHub (auto-selects best method) |
+| `openlinear github login --browser` | Force browser-based OAuth flow |
+| `openlinear github login --device` | Force device flow (for headless environments) |
+| `openlinear github status` | Show current auth status |
+| `openlinear github whoami` | Display authenticated GitHub username |
+| `openlinear github logout` | Remove stored credentials |
+
+See [GitHub Authentication](/cli/github-auth) for detailed flow documentation.
+
+---
+
+## Post-Install Behavior
+
+When you run `npm install -g openlinear`, the `postinstall` script runs automatically:
+
+<Steps>
+  <Step title="Platform detection">
+    Identifies macOS (Apple Silicon / Intel) or Linux x64.
+  </Step>
+  <Step title="Binary download">
+    Downloads the latest desktop release from GitHub Releases.
+  </Step>
+  <Step title="Installation">
+    - **macOS**: Places `OpenLinear.app` in `~/Applications/`
+    - **Linux**: Places the AppImage in `~/.openlinear/` and registers a `.desktop` entry at `~/.local/share/applications/openlinear.desktop`
+  </Step>
+</Steps>
+
+---
+
+## Library API
+
+The `openlinear` package also exports TypeScript utilities for programmatic use:
+
+| Entry point | Contents |
+|-------------|----------|
+| `openlinear` | Re-exports everything below |
+| `openlinear/types` | Zod schemas, validation functions for execution metadata |
+| `openlinear/validation` | Payload sanitization and forbidden-field utilities |
+| `openlinear/config` | Feature flag parsing and execution mode helpers |
+
+See [Library Overview](/library/overview) for full API documentation.

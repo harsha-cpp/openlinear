@@ -1,0 +1,168 @@
+---
+title: "Data Models"
+description: "Complete Prisma schema — all models, fields, enums, and relationships."
+icon: "database"
+---
+
+# Data Models
+
+OpenLinear uses PostgreSQL with Prisma ORM. The schema defines 8 models and 4 enums.
+
+---
+
+## Enums
+
+```typescript
+enum Priority   { low, medium, high }
+enum Status      { todo, in_progress, done, cancelled }
+enum TeamRole    { owner, admin, member }
+enum ProjectStatus { planned, in_progress, paused, completed, cancelled }
+```
+
+---
+
+## Task
+
+The core entity — items on the kanban board.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `id` | UUID | auto | Primary key |
+| `title` | string | — | Task description |
+| `description` | string? | null | Additional context |
+| `priority` | Priority | `medium` | Task priority |
+| `status` | Status | `todo` | Kanban column |
+| `number` | int? | null | Team-scoped issue number |
+| `identifier` | string? | null | Display identifier (e.g., `ENG-1`) |
+| `teamId` | UUID? | null | FK to Team |
+| `projectId` | UUID? | null | FK to Project |
+| `sessionId` | string? | null | OpenCode session ID |
+| `executionStartedAt` | DateTime? | null | Execution start time |
+| `executionPausedAt` | DateTime? | null | Pause/cancel time |
+| `executionElapsedMs` | int | `0` | Total elapsed milliseconds |
+| `executionProgress` | int? | null | 0-100 estimated progress |
+| `prUrl` | string? | null | Pull request URL |
+| `outcome` | string? | null | Execution result summary |
+| `executionLogs` | JSON? | null | Persisted log entries |
+| `batchId` | string? | null | Groups tasks in a batch |
+| `archived` | boolean | `false` | Soft delete flag |
+| `inboxRead` | boolean | `false` | Read status for inbox |
+| `dueDate` | DateTime? | null | Target date |
+
+Relations: `labels` (many-to-many via TaskLabel), `team`, `project`
+
+---
+
+## User
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `id` | UUID | auto | Primary key |
+| `githubId` | int? | null | GitHub OAuth ID (unique) |
+| `username` | string | — | Unique username |
+| `email` | string? | null | Email address |
+| `avatarUrl` | string? | null | Profile avatar URL |
+| `accessToken` | string? | null | GitHub OAuth token |
+| `passwordHash` | string? | null | bcrypt hash for local auth |
+
+Relations: `repositories`, `teamMemberships`, `ledProjects`
+
+---
+
+## Team
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `id` | UUID | auto | Primary key |
+| `name` | string | — | Team name |
+| `key` | string | — | Unique key (e.g., `ENG`) |
+| `description` | string? | null | Team description |
+| `color` | string | `#6366f1` | Display color |
+| `icon` | string? | null | Icon identifier |
+| `private` | boolean | `false` | Visibility flag |
+| `inviteCode` | string? | null | Join code (unique) |
+| `nextIssueNumber` | int | `1` | Auto-incrementing issue counter |
+
+Relations: `members`, `projectTeams`, `tasks`
+
+---
+
+## TeamMember
+
+Join table with roles.
+
+| Field | Type | Default |
+|-------|------|---------|
+| `id` | UUID | auto |
+| `teamId` | UUID | — |
+| `userId` | UUID | — |
+| `role` | TeamRole | `member` |
+| `sortOrder` | int | `0` |
+
+Composite unique: `(teamId, userId)`
+
+---
+
+## Project
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `id` | UUID | auto | Primary key |
+| `name` | string | — | Project name |
+| `description` | string? | null | Description |
+| `status` | ProjectStatus | `planned` | Current phase |
+| `color` | string | `#6366f1` | Display color |
+| `icon` | string? | null | Icon identifier |
+| `startDate` | DateTime? | null | Start date |
+| `targetDate` | DateTime? | null | Target completion |
+| `leadId` | UUID? | null | FK to User |
+| `repositoryId` | UUID? | null | FK to Repository |
+| `localPath` | string? | null | Local folder path |
+| `repoUrl` | string? | null | Original repo URL |
+
+Relations: `projectTeams`, `tasks`, `lead`, `repository`
+
+---
+
+## Repository
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `id` | UUID | auto | Primary key |
+| `githubRepoId` | int | — | GitHub repo ID |
+| `name` | string | — | Repo name |
+| `fullName` | string | — | `owner/name` |
+| `cloneUrl` | string | — | HTTPS clone URL |
+| `defaultBranch` | string | `main` | Base branch |
+| `userId` | UUID? | null | FK to User |
+| `isActive` | boolean | `false` | Currently selected |
+
+Composite unique: `(userId, githubRepoId)`
+
+---
+
+## Label
+
+| Field | Type | Default |
+|-------|------|---------|
+| `id` | UUID | auto |
+| `name` | string | — (unique) |
+| `color` | string | — |
+| `priority` | int | `0` |
+
+Relations: `tasks` (many-to-many via TaskLabel)
+
+---
+
+## Settings
+
+Single-row configuration.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `id` | string | `default` | Always `default` |
+| `parallelLimit` | int | `3` | Max concurrent executions |
+| `maxBatchSize` | int | `3` | Max tasks per batch |
+| `queueAutoApprove` | boolean | `false` | Auto-start next in queue |
+| `stopOnFailure` | boolean | `false` | Cancel batch on failure |
+| `conflictBehavior` | string | `skip` | `skip` or `fail` |

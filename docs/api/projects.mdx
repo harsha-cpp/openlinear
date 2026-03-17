@@ -1,0 +1,122 @@
+---
+title: "Projects"
+description: "Create projects, link repositories, and scope tasks."
+icon: "folder"
+---
+
+# Projects API
+
+Projects group tasks and connect them to a GitHub repository or local folder for execution.
+
+---
+
+## List Projects
+
+```
+GET /api/projects
+```
+
+Auth: `optionalAuth`. Scoped to the user's teams.
+
+| Query param | Type | Description |
+|-------------|------|-------------|
+| `teamId` | string | Filter by team |
+
+---
+
+## Create Project
+
+```
+POST /api/projects
+```
+
+Auth: `requireAuth`.
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `name` | string | Yes | — | 1-100 characters |
+| `description` | string | No | `null` | Up to 1000 characters |
+| `status` | enum | No | `planned` | `planned`, `in_progress`, `paused`, `completed`, `cancelled` |
+| `color` | string | No | `#6366f1` | Hex color code |
+| `icon` | string | No | `null` | Icon identifier |
+| `startDate` | string | No | `null` | ISO 8601 datetime |
+| `targetDate` | string | No | `null` | ISO 8601 datetime |
+| `leadId` | string | No | `null` | User UUID for project lead |
+| `teamIds` | string[] | No | `[]` | Exactly 1 team UUID |
+| `repoUrl` | string | No | `null` | GitHub repository URL |
+| `localPath` | string | No | `null` | Absolute path to local folder (desktop only) |
+
+<Note>
+  `localPath` can only be set from the desktop client (requires `x-openlinear-client: desktop` header).
+</Note>
+
+When `repoUrl` is provided, a repository record is created or matched automatically.
+
+Broadcasts: `project:created`
+
+---
+
+## Get Project
+
+```
+GET /api/projects/:id
+```
+
+Returns the project with teams, repository info, and task count.
+
+---
+
+## Update Project
+
+```
+PATCH /api/projects/:id
+```
+
+Auth: `requireAuth`. Same fields as create, all optional.
+
+Broadcasts: `project:updated`
+
+---
+
+## Delete Project
+
+```
+DELETE /api/projects/:id
+```
+
+Auth: `requireAuth`. Nullifies `projectId` on all associated tasks before deleting.
+
+Broadcasts: `project:deleted`
+
+---
+
+## Project Object
+
+```json
+{
+  "id": "uuid",
+  "name": "API Service",
+  "description": "Backend REST API",
+  "status": "in_progress",
+  "color": "#6366f1",
+  "icon": null,
+  "startDate": "2025-01-01T00:00:00.000Z",
+  "targetDate": "2025-03-01T00:00:00.000Z",
+  "leadId": "uuid",
+  "localPath": null,
+  "repoUrl": "https://github.com/org/repo",
+  "teams": [
+    {"id": "uuid", "name": "Engineering", "key": "ENG", "color": "#6366f1"}
+  ],
+  "repository": {
+    "id": "uuid",
+    "name": "repo",
+    "fullName": "org/repo",
+    "cloneUrl": "https://github.com/org/repo.git",
+    "defaultBranch": "main"
+  },
+  "_count": {"tasks": 12},
+  "createdAt": "2025-01-01T00:00:00.000Z",
+  "updatedAt": "2025-01-01T00:00:00.000Z"
+}
+```

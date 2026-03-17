@@ -1,0 +1,126 @@
+---
+title: "Task Execution"
+description: "How single-task execution works — from clone to pull request."
+icon: "play"
+---
+
+# Task Execution
+
+When you execute a task, OpenLinear clones the repository, creates a branch, runs an AI agent with your task description, and gives you a PR compare URL.
+
+---
+
+## Execution Lifecycle
+
+<Steps>
+  <Step title="Clone repository">
+    The sidecar clones the project's repository (or uses the local path if configured). For remote repos, the clone URL and access token are used.
+  </Step>
+  <Step title="Create branch">
+    A new branch is created: `openlinear/<task-id-first-8-chars>`. This isolates the agent's changes from the main branch.
+  </Step>
+  <Step title="Start OpenCode session">
+    An OpenCode session is created with the task title as the session name. The working directory is set to the cloned repo.
+  </Step>
+  <Step title="Send prompt">
+    The task prompt is constructed from:
+    - Task title
+    - Task description (if any)
+    - Label names (if any)
+
+    This is sent to the AI agent via the OpenCode SDK.
+  </Step>
+  <Step title="Agent executes">
+    The AI agent reads the codebase, writes code, and commits changes. Progress is streamed via SSE events to the desktop UI.
+  </Step>
+  <Step title="Completion">
+    When the agent finishes, the task is updated with:
+    - PR compare URL (for creating a pull request)
+    - Execution outcome summary
+    - Final execution logs
+  </Step>
+</Steps>
+
+---
+
+## Execution States
+
+| State | Description |
+|-------|-------------|
+| `cloning` | Repository is being cloned |
+| `executing` | AI agent is running |
+| `completed` | Agent finished successfully |
+| `cancelled` | User cancelled the execution |
+| `error` | Execution failed (auth issue, timeout, etc.) |
+
+---
+
+## Parallel Limit
+
+The sidecar enforces a configurable parallel execution limit (default: 3). If the limit is reached, new execution requests return an error:
+
+```
+Parallel limit reached (3 tasks max)
+```
+
+Configure the limit in **Settings** or via the API:
+
+```bash
+curl -X PATCH http://localhost:3001/api/settings \
+  -H "Content-Type: application/json" \
+  -d '{"parallelLimit": 5}'
+```
+
+---
+
+## Execution Timer
+
+Each executing task tracks:
+
+| Field | Description |
+|-------|-------------|
+| `executionStartedAt` | When execution began |
+| `executionPausedAt` | When execution was paused/cancelled |
+| `executionElapsedMs` | Total elapsed time in milliseconds |
+| `executionProgress` | Estimated progress (0-100) |
+
+The desktop UI shows a live timer and progress bar on executing task cards.
+
+---
+
+## Timeout
+
+Executions have a maximum duration. If a task exceeds this limit, it is automatically cancelled. The timeout is configured in the sidecar's execution state module.
+
+---
+
+## Execution Logs
+
+During execution, logs are streamed to the UI in real-time:
+
+| Log type | Description |
+|----------|-------------|
+| `info` | Status updates (cloned, branch created, prompt sent) |
+| `agent` | AI agent output (code changes, tool usage) |
+| `error` | Error messages |
+
+Logs are persisted to the database after execution completes, so you can review them later in the task detail view.
+
+---
+
+## Cancellation
+
+Cancel a running task by:
+- Clicking **Cancel** on the task card
+- Using the task detail view's cancel button
+- Calling `POST /api/tasks/:id/cancel`
+
+Cancellation aborts the OpenCode session, persists logs, and updates the task status to `cancelled`.
+
+---
+
+## PR Refresh
+
+After execution, the task stores a compare URL (e.g., `github.com/owner/repo/compare/main...branch`). Once a PR is created from that branch, use **Refresh PR** to update the link to the actual PR URL.
+
+This calls the GitHub API to find PRs matching the branch and updates all tasks in the same batch.

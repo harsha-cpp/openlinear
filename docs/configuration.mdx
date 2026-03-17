@@ -1,0 +1,108 @@
+---
+title: "Configuration"
+description: "Environment variables, settings, and runtime configuration reference."
+icon: "wrench"
+---
+
+# Configuration
+
+OpenLinear is configured through environment variables, the Settings model, and Tauri configuration.
+
+---
+
+## Environment Variables
+
+### API Server
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATABASE_URL` | Yes | — | PostgreSQL connection string |
+| `JWT_SECRET` | Production | `openlinear-dev-secret...` | JWT signing secret |
+| `FRONTEND_URL` | No | `http://localhost:3000` | Frontend URL for OAuth redirects |
+| `GITHUB_CLIENT_ID` | For OAuth | — | GitHub OAuth app client ID |
+| `GITHUB_CLIENT_SECRET` | For OAuth | — | GitHub OAuth app client secret |
+
+### CLI / Desktop
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `OPENLINEAR_GITHUB_CLIENT_SECRET` | For browser flow | GitHub OAuth client secret |
+| `OPENLINEAR_GITHUB_CALLBACK_HOST` | No | Callback host (default: `localhost`) |
+| `OPENLINEAR_GITHUB_CALLBACK_PORT` | No | Callback port (default: `0` = random) |
+| `OPENLINEAR_GITHUB_CALLBACK_PATH` | No | Callback path (default: `/callback`) |
+
+### Feature Flags
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `LOCAL_EXECUTION_ENABLED` | boolean | `false` | Enable local execution mode |
+| `SERVER_EXECUTION_ENABLED` | boolean | `true` | Enable server execution mode |
+| `CANARY_PERCENTAGE` | 0-100 | `0` | Percentage of users on local execution |
+| `FORCE_LOCAL_EXECUTION` | boolean | `false` | Force local for all users |
+| `KILL_SWITCH_LOCAL_EXECUTION` | boolean | `false` | Emergency disable of local execution |
+
+---
+
+## Application Settings
+
+Stored in the database (`Settings` model). Configurable via `PATCH /api/settings`.
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `parallelLimit` | int | `3` | Maximum concurrent task executions |
+| `maxBatchSize` | int | `3` | Maximum tasks in a single batch |
+| `queueAutoApprove` | boolean | `false` | Auto-approve next task in queue mode |
+| `stopOnFailure` | boolean | `false` | Stop batch execution on first failure |
+| `conflictBehavior` | string | `skip` | Git conflict handling: `skip` or `fail` |
+
+---
+
+## Tauri Configuration
+
+The desktop app window is configured in `apps/desktop/src-tauri/tauri.conf.json`:
+
+| Setting | Value |
+|---------|-------|
+| Product name | `OpenLinear` |
+| Identifier | `com.openlinear.app` |
+| Window size | 1200 x 800 |
+| Decorations | Frameless |
+| Deep link scheme | `openlinear://` |
+| Minimum macOS | 10.15 |
+| Bundle targets | DMG, App, AppImage, DEB |
+
+---
+
+## Ports
+
+| Service | Default Port |
+|---------|-------------|
+| Desktop UI (dev) | 3000 |
+| Sidecar API | 3001 |
+| Landing site (dev) | 3002 |
+
+---
+
+## Docker Compose
+
+For local PostgreSQL development:
+
+```bash
+docker compose up -d
+```
+
+This starts a PostgreSQL instance. Set `DATABASE_URL` to the connection string from `docker-compose.yml`.
+
+---
+
+## Turbo Pipeline
+
+Build tasks are orchestrated by Turbo:
+
+| Task | Dependencies | Outputs |
+|------|-------------|---------|
+| `build` | `^build` | `.next/**`, `dist/**` |
+| `dev` | none (persistent) | — |
+| `lint` | `^lint` | — |
+| `test` | `^build` | — |
+| `typecheck` | `^build` | — |

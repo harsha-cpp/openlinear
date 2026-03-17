@@ -1,0 +1,93 @@
+---
+title: "Desktop App Overview"
+description: "The Tauri desktop app — architecture, pages, and core features."
+icon: "monitor"
+---
+
+# Desktop App Overview
+
+OpenLinear's desktop app is built with Tauri 2 (Rust shell) and Next.js (webview UI). It bundles a local sidecar API that handles execution, database access, and real-time events.
+
+---
+
+## Architecture
+
+| Layer | Technology | Role |
+|-------|-----------|------|
+| Shell | Tauri 2 (Rust) | Native window, deep links, secure storage, sidecar lifecycle |
+| UI | Next.js 16 + React 19 | Kanban board, settings, all user-facing pages |
+| API | Express 5 (sidecar) | REST endpoints, execution engine, SSE broadcasting |
+| Database | PostgreSQL + Prisma | Tasks, teams, projects, users, settings |
+| AI | OpenCode SDK | Code generation and task execution |
+
+---
+
+## Pages
+
+| Page | Path | Description |
+|------|------|-------------|
+| Dashboard | `/` | Kanban board — the main workspace |
+| Inbox | `/inbox` | Tasks with unread updates |
+| My Issues | `/my-issues` | Tasks assigned to you |
+| Archived | `/archived` | Soft-deleted tasks |
+| Projects | `/projects` | Project listing and configuration |
+| Teams | `/teams` | Team management and membership |
+| Team Detail | `/teams/detail` | Individual team view |
+| Settings | `/settings` | App configuration, AI providers, database |
+| Login | `/login` | Authentication page |
+
+---
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Kanban Board" icon="columns-3" href="/desktop/kanban-board">
+    Drag-and-drop task management across 4 status columns with real-time updates.
+  </Card>
+  <Card title="Task Execution" icon="play" href="/desktop/task-execution">
+    One-click code generation — clone, branch, execute AI agent, get a PR.
+  </Card>
+  <Card title="Batch Execution" icon="layers" href="/desktop/batch-execution">
+    Execute multiple tasks in parallel or queued mode.
+  </Card>
+  <Card title="Agent Integration" icon="cpu" href="/desktop/agent-integration">
+    Configure AI providers, select models, manage permissions.
+  </Card>
+</CardGroup>
+
+---
+
+## Onboarding
+
+First-run users see an onboarding wizard that:
+
+1. Creates a local desktop user session
+2. Prompts for GitHub authentication
+3. Guides repository connection
+4. Optionally configures an AI provider
+
+---
+
+## Window Configuration
+
+The Tauri window is configured as:
+
+- **Size**: 1200 x 800 pixels
+- **Decorations**: Frameless (custom title bar in the UI)
+- **Center**: Centered on screen at launch
+- **Deep links**: Handles `openlinear://` protocol for OAuth callbacks
+
+---
+
+## Project Config Panel
+
+At the top of the kanban board, the project config panel shows:
+
+| Field | Description |
+|-------|-------------|
+| Source | Connected GitHub repo or local folder path |
+| Branch | Default branch for the repository |
+| Scope | Total issue count across all statuses |
+| Workflow | Current execution state (idle, running, batch mode) |
+| Selection | Number of selected tasks for batch operations |
+| Model | Currently selected AI model |

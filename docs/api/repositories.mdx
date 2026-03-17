@@ -1,0 +1,107 @@
+---
+title: "Repositories"
+description: "Connect GitHub repos, manage active repository, and configure base branches."
+icon: "git-branch"
+---
+
+# Repositories API
+
+Repositories are the code sources for task execution. Connect GitHub repos by URL, import from your GitHub account, or use local folders via projects.
+
+---
+
+## Add by URL
+
+```
+POST /api/repos/url
+```
+
+No auth required. Parses a GitHub URL and creates a repository record.
+
+| Field | Type | Required |
+|-------|------|----------|
+| `url` | string | Yes |
+
+Accepts formats: `https://github.com/owner/repo`, `https://github.com/owner/repo.git`
+
+---
+
+## List User Repos
+
+```
+GET /api/repos
+```
+
+Auth: `requireAuth`. Returns repositories owned by the authenticated user.
+
+---
+
+## List GitHub Repos
+
+```
+GET /api/repos/github
+```
+
+Auth: `requireAuth`. Fetches the user's GitHub repositories via the GitHub API. Requires GitHub to be connected.
+
+Uses the GitHub token from (in order): `x-github-token` header, database, or local GitHub CLI.
+
+---
+
+## Import Repository
+
+```
+POST /api/repos/import
+```
+
+Auth: `requireAuth`. Imports a GitHub repository.
+
+| Field | Type | Required |
+|-------|------|----------|
+| `repo` | object | Yes |
+| `repo.id` | number | Yes |
+| `repo.full_name` | string | Yes |
+
+---
+
+## Active Repository
+
+### Get Active
+
+```
+GET /api/repos/active
+```
+
+Auth: `requireAuth`. Returns the user's currently active repository.
+
+### Set Active
+
+```
+POST /api/repos/:id/activate
+```
+
+Auth: `requireAuth`. Deactivates all other repos and activates the specified one.
+
+### Update Base Branch
+
+```
+PATCH /api/repos/active/base-branch
+```
+
+Auth: `requireAuth`.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `baseBranch` | string | Yes | Valid git branch name |
+
+---
+
+## Public Repositories
+
+For unauthenticated usage:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/repos/public` | List public repos (no userId) |
+| `GET /api/repos/active/public` | Get active public repo |
+| `POST /api/repos/:id/activate/public` | Activate a public repo |

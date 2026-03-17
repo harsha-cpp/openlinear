@@ -1,0 +1,130 @@
+---
+title: "GitHub Authentication"
+description: "Set up GitHub authentication for repository access — browser OAuth, device flow, and local token reuse."
+icon: "key"
+---
+
+# GitHub Authentication
+
+OpenLinear authenticates with GitHub entirely on your local machine. No hosted callback server is involved — tokens are stored locally and never leave your machine.
+
+---
+
+## Authentication Methods
+
+OpenLinear tries methods in this priority order:
+
+<Steps>
+  <Step title="GitHub CLI reuse">
+    If GitHub CLI (`gh`) is already authenticated on your machine, `openlinear github login` reuses that local token automatically.
+  </Step>
+  <Step title="Browser-based OAuth">
+    If `OPENLINEAR_GITHUB_CLIENT_SECRET` is set, OpenLinear starts a temporary callback server on `http://localhost:<port>/callback`, opens GitHub in your browser, and stores the token locally.
+  </Step>
+  <Step title="Device flow fallback">
+    If no client secret is configured, OpenLinear falls back to GitHub's device flow — you visit a URL and enter a code.
+  </Step>
+</Steps>
+
+---
+
+## Commands
+
+### Login
+
+```bash
+openlinear github login
+```
+
+Auto-selects the best available method. Force a specific flow:
+
+```bash
+openlinear github login --browser   # Force browser OAuth
+openlinear github login --device    # Force device flow
+```
+
+### Status
+
+```bash
+openlinear github status
+```
+
+Shows whether GitHub is connected and which authentication source is active.
+
+### Identity
+
+```bash
+openlinear github whoami
+```
+
+Displays the authenticated GitHub username.
+
+### Logout
+
+```bash
+openlinear github logout
+```
+
+Removes stored GitHub credentials from your machine.
+
+---
+
+## Environment Variables
+
+<Note>
+  These are only needed for the browser-based OAuth flow. Device flow works without any configuration.
+</Note>
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `OPENLINEAR_GITHUB_CLIENT_SECRET` | For browser flow | GitHub OAuth app client secret |
+| `OPENLINEAR_GITHUB_CALLBACK_HOST` | No | Callback host override (default: `localhost`) |
+| `OPENLINEAR_GITHUB_CALLBACK_PORT` | No | Callback port override (default: `0` — random available port) |
+| `OPENLINEAR_GITHUB_CALLBACK_PATH` | No | Callback path override (default: `/callback`) |
+
+### Browser Flow Setup
+
+To use the browser OAuth flow, you need a GitHub OAuth app:
+
+<Steps>
+  <Step title="Create a GitHub OAuth App">
+    Go to [GitHub Developer Settings](https://github.com/settings/developers) and create a new OAuth App.
+  </Step>
+  <Step title="Configure callback URL">
+    Set the authorization callback URL to `http://localhost/callback` (loopback).
+  </Step>
+  <Step title="Set the client secret">
+    ```bash
+    export OPENLINEAR_GITHUB_CLIENT_SECRET=your-client-secret
+    ```
+  </Step>
+  <Step title="Login">
+    ```bash
+    openlinear github login --browser
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Token Storage
+
+Tokens are stored locally at:
+
+```
+~/.config/openlinear/github-auth.json
+```
+
+This file contains only the OAuth access token. No passwords or client secrets are stored.
+
+---
+
+## Desktop App Integration
+
+The desktop app also supports GitHub authentication through its UI:
+
+1. **Local GitHub CLI** — The sidecar API checks for an existing `gh` auth token
+2. **Browser OAuth** — The desktop app can initiate OAuth via the sidecar API
+3. **Device Flow** — Available as a fallback from the Settings page
+
+The desktop app stores tokens in the same location as the CLI, so authentication is shared between both.

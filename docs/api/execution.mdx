@@ -1,0 +1,101 @@
+---
+title: "Execution API"
+description: "Start, cancel, and monitor single task executions."
+icon: "play"
+---
+
+# Execution API
+
+Endpoints for controlling individual task execution — start, cancel, check status, view logs, and manage permissions.
+
+---
+
+## Start Execution
+
+```
+POST /api/tasks/:id/execute
+```
+
+Auth: `optionalAuth`. Starts the execution lifecycle for a task.
+
+Returns `{ message: "Task execution started" }` on success.
+
+Possible errors:
+- `Task is already running`
+- `Parallel limit reached (N tasks max)`
+- `No active project selected`
+- `userId is required for execution`
+
+---
+
+## Check Running Status
+
+```
+GET /api/tasks/:id/running
+```
+
+Returns: `{ running: true }` or `{ running: false }`
+
+---
+
+## Get Execution Logs
+
+```
+GET /api/tasks/:id/logs
+```
+
+Returns live logs from an active execution, or persisted logs from the database for completed tasks.
+
+```json
+{
+  "logs": [
+    {"type": "info", "message": "Repository cloned successfully", "timestamp": "..."},
+    {"type": "info", "message": "Branch created: openlinear/abc12345", "timestamp": "..."},
+    {"type": "agent", "message": "Analyzing codebase...", "timestamp": "..."}
+  ]
+}
+```
+
+---
+
+## Cancel Execution
+
+```
+POST /api/tasks/:id/cancel
+```
+
+Aborts the OpenCode session, persists logs, and updates the task status to `cancelled`.
+
+Returns `{ message: "Task cancelled" }`.
+
+---
+
+## Permissions
+
+### Get Pending Permissions
+
+```
+GET /api/tasks/:id/permissions
+```
+
+Returns permission requests from the AI agent that need user approval.
+
+```json
+{
+  "permissions": [
+    {"id": "perm-uuid", "type": "shell", "command": "npm install", "...": "..."}
+  ]
+}
+```
+
+### Respond to Permission
+
+```
+POST /api/tasks/:id/permissions/:permissionId/respond
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `response` | string | Yes | `once`, `always`, or `reject` |
+
+Broadcasts: `permission:resolved`

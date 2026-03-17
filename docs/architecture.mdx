@@ -1,0 +1,124 @@
+---
+title: "Architecture"
+description: "System design, deployment shape, and component relationships in OpenLinear."
+icon: "sitemap"
+---
+
+# Architecture
+
+OpenLinear is a local-first desktop application. Everything runs on your machine — no hosted backend, no cloud dependency for core functionality.
+
+---
+
+## Deployment Shape
+
+```
+GitHub repository
+  → GitHub Releases
+    → macOS DMG / app bundle
+    → Linux AppImage / .deb
+  → install.sh
+    → curl installer
+  → npm
+    → openlinear launcher
+  → AUR
+    → openlinear-bin metadata
+  → Vercel (optional)
+    → apps/landing (static pages)
+```
+
+---
+
+## Component Architecture
+
+The desktop app is composed of three main processes:
+
+### Tauri Shell (Rust)
+
+The outer shell that manages the native window, deep links (`openlinear://`), secure credential storage, and process lifecycle. It spawns the sidecar and renders the webview.
+
+- **Window**: 1200x800, frameless (custom title bar)
+- **Deep links**: Handles `openlinear://callback` for OAuth flows
+- **Sidecar management**: Starts/stops the local API server
+- **Secure storage**: System keychain integration for sensitive data
+
+### Desktop UI (Next.js Webview)
+
+The user interface rendered inside the Tauri webview. A full Next.js application with:
+
+- **App Router** pages: Dashboard, Inbox, My Issues, Archived, Projects, Teams, Settings
+- **Kanban board** with drag-and-drop via `@hello-pangea/dnd`
+- **Real-time updates** via SSE from the sidecar
+- **Radix UI + shadcn/ui** component library
+
+### Sidecar (Express API)
+
+A local Express server bundled as a sidecar binary. It provides:
+
+- **REST API** for tasks, teams, projects, repos, labels, settings
+- **Execution engine** — clones repos, creates branches, runs OpenCode agents
+- **Batch orchestration** — parallel and queue execution modes
+- **SSE broadcasting** — real-time events to the desktop UI
+- **Database access** — PostgreSQL via Prisma
+
+---
+
+## Repository Structure
+
+```
+openlinear/
+  apps/
+    desktop/        Tauri desktop app (Rust shell)
+    desktop-ui/     Next.js webview UI
+    sidecar/        Local Express API + execution engine
+    api/            Shared API routes and services
+    landing/        Marketing site (Next.js on Vercel)
+  packages/
+    db/             Prisma schema and client
+    openlinear/     npm launcher and library utilities
+    types/          Shared TypeScript types
+  packaging/
+    aur/            Arch/AUR package metadata
+  docs/             Architecture and CI/CD docs
+  scripts/          Build and development scripts
+```
+
+---
+
+## Data Flow
+
+<Steps>
+  <Step title="User creates a task">
+    Desktop UI sends `POST /api/tasks` to the sidecar. Sidecar writes to PostgreSQL and broadcasts `task:created` via SSE.
+  </Step>
+  <Step title="User executes a task">
+    Desktop UI sends `POST /api/tasks/:id/execute`. The sidecar clones the repository, creates a branch, and starts an OpenCode session.
+  </Step>
+  <Step title="Agent writes code">
+    OpenCode reads the task prompt, analyzes the codebase, writes code, and commits to the branch. Progress is streamed via SSE.
+  </Step>
+  <Step title="Execution completes">
+    The sidecar pushes the branch, generates a compare URL, updates the task with the PR link, and broadcasts completion via SSE.
+  </Step>
+</Steps>
+
+---
+
+## Release Channels
+
+| Channel | Format | Platform |
+|---------|--------|----------|
+| GitHub Releases | `.dmg`, `.app.tar.gz`, AppImage, `.deb` | macOS, Linux |
+| npm | `openlinear` package | macOS, Linux |
+| AUR | `openlinear-bin` | Arch Linux |
+| curl | `install.sh` | macOS, Linux |
+
+---
+
+## Security Model
+
+- **Local-first**: All code execution happens on your machine
+- **No cloud sync of sensitive data**: Tokens, API keys, logs, and diffs never leave your machine
+- **Forbidden sync fields**: The validation layer strips sensitive fields before any network transmission
+- **JWT authentication**: Session tokens with 7-day expiry, HS256 signing
+- **GitHub token storage**: Stored in `~/.config/openlinear/github-auth.json`, never transmitted to OpenLinear servers

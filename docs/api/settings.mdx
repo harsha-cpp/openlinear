@@ -1,0 +1,60 @@
+---
+title: "Settings"
+description: "Configure parallel limits, batch size, and execution behavior."
+icon: "settings"
+---
+
+# Settings API
+
+Application-wide settings that control execution behavior. There is a single settings record (id: `default`).
+
+---
+
+## Get Settings
+
+```
+GET /api/settings
+```
+
+Returns the current settings or creates the default record if it doesn't exist.
+
+---
+
+## Update Settings
+
+```
+PATCH /api/settings
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `parallelLimit` | integer | `3` | Max concurrent task executions |
+| `maxBatchSize` | integer | `3` | Max tasks per batch |
+| `queueAutoApprove` | boolean | `false` | Auto-start next task in queue mode |
+| `stopOnFailure` | boolean | `false` | Cancel remaining batch tasks on failure |
+| `conflictBehavior` | string | `skip` | `"skip"` or `"fail"` — handling for git conflicts |
+
+```bash
+curl -X PATCH http://localhost:3001/api/settings \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parallelLimit": 5,
+    "maxBatchSize": 10,
+    "queueAutoApprove": true
+  }'
+```
+
+---
+
+## Settings Object
+
+```json
+{
+  "id": "default",
+  "parallelLimit": 3,
+  "maxBatchSize": 3,
+  "queueAutoApprove": false,
+  "stopOnFailure": false,
+  "conflictBehavior": "skip"
+}
+```

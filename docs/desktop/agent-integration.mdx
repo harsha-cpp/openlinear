@@ -1,0 +1,158 @@
+---
+title: "Agent Integration"
+description: "Configure AI providers, select models, and manage agent permissions."
+icon: "cpu"
+---
+
+# Agent Integration
+
+OpenLinear uses [OpenCode](https://opencode.ai) as the execution engine. OpenCode supports multiple AI providers — bring your own API key or use the free models.
+
+---
+
+## Supported Providers
+
+| Provider | Auth method | Notes |
+|----------|-------------|-------|
+| Anthropic | API key | Claude models |
+| OpenAI | API key | GPT models |
+| Google | API key / OAuth | Gemini models |
+| GitHub Copilot | OAuth | Requires GitHub Copilot subscription |
+| Groq | API key | Fast inference |
+| DeepSeek | API key | Cost-effective |
+| Mistral | API key | Open-weight models |
+| xAI | API key | Grok models |
+| OpenRouter | API key | Multi-provider gateway |
+| Amazon Bedrock | API key | AWS-hosted models |
+| OpenCode | None | Free tier models |
+
+---
+
+## Free Models
+
+These models work without any API key:
+
+| Model | Reasoning | Tool calling |
+|-------|-----------|-------------|
+| Minimix | No | Yes |
+| GLM5 | No | Yes |
+| KimiK2.5 | Yes | Yes |
+
+---
+
+## Setting Up a Provider
+
+<Tabs>
+  <Tab title="API Key">
+    <Steps>
+      <Step title="Open Settings">
+        Navigate to **Settings** in the sidebar.
+      </Step>
+      <Step title="Select provider">
+        Choose your provider from the list.
+      </Step>
+      <Step title="Enter API key">
+        Paste your API key. It is stored locally via OpenCode's configuration.
+      </Step>
+    </Steps>
+
+    Via API:
+    ```bash
+    curl -X POST http://localhost:3001/api/opencode/auth \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <token>" \
+      -d '{"providerId": "anthropic", "apiKey": "sk-ant-..."}'
+    ```
+  </Tab>
+  <Tab title="OAuth">
+    Some providers (like GitHub Copilot) support OAuth:
+
+    <Steps>
+      <Step title="Start OAuth">
+        Click the provider's **Connect** button in Settings. This opens the provider's authorization page.
+      </Step>
+      <Step title="Authorize">
+        Grant OpenLinear access to the provider.
+      </Step>
+      <Step title="Callback">
+        The OAuth callback completes automatically and the provider appears as connected.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+---
+
+## Model Selection
+
+Select which model to use for execution:
+
+1. Open the **Model Selector** dropdown in the project config panel (top of the kanban board)
+2. Browse connected providers and their available models
+3. Select a model — it applies to all subsequent executions
+
+Via API:
+
+```bash
+curl -X POST http://localhost:3001/api/opencode/config/model \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"model": "anthropic/claude-sonnet-4-20250514"}'
+```
+
+Get current model:
+
+```bash
+curl http://localhost:3001/api/opencode/config \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+## Permission System
+
+During execution, the AI agent may request permission to use certain tools (e.g., executing shell commands, writing files). These appear as permission requests in the task detail view.
+
+### Permission Responses
+
+| Response | Effect |
+|----------|--------|
+| `once` | Allow this specific action once |
+| `always` | Always allow this type of action |
+| `reject` | Deny the action |
+
+### Responding to Permissions
+
+In the UI, permission requests appear as actionable cards in the task detail view. Via API:
+
+```bash
+curl -X POST http://localhost:3001/api/tasks/:id/permissions/:permissionId/respond \
+  -H "Content-Type: application/json" \
+  -d '{"response": "once"}'
+```
+
+---
+
+## Provider Status
+
+Check which providers are connected:
+
+```bash
+curl http://localhost:3001/api/opencode/setup-status \
+  -H "Authorization: Bearer <token>"
+```
+
+Returns:
+
+```json
+{
+  "providers": [
+    {"id": "anthropic", "name": "Anthropic", "authenticated": true},
+    {"id": "openai", "name": "OpenAI", "authenticated": false},
+    {"id": "opencode", "name": "OpenCode", "authenticated": true}
+  ],
+  "ready": true
+}
+```
+
+The `ready` field is `true` when at least one provider is authenticated.

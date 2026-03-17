@@ -1,0 +1,94 @@
+---
+title: "OpenLinear Documentation"
+description: "A desktop kanban board that runs AI coding agents on your GitHub repository. Create tasks, execute them, and review real pull requests."
+---
+
+# OpenLinear
+
+**Execute your tasks. Don't just track them.**
+
+OpenLinear is a local-first desktop project management tool that turns your backlog into pull requests. You manage tasks on a Linear-style kanban board. When you're ready, an AI agent — running locally with your own credentials — clones your repo, creates a branch, writes the code, and opens a PR.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get up and running in under 5 minutes with the desktop app or CLI launcher.
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    All installation methods — npm, curl, GitHub Releases, AUR.
+  </Card>
+  <Card title="Desktop App" icon="monitor" href="/desktop/overview">
+    Learn the kanban board, task execution, batch operations, and model selection.
+  </Card>
+  <Card title="API Reference" icon="square-terminal" href="/api/overview">
+    Complete REST API documentation for tasks, teams, projects, and execution.
+  </Card>
+</CardGroup>
+
+---
+
+## What Ships
+
+OpenLinear is distributed as a monorepo with several components:
+
+<CardGroup cols={2}>
+  <Card title="Desktop App" icon="laptop" href="/desktop/overview">
+    Tauri desktop app with a Next.js webview — the primary way to use OpenLinear. Includes the sidecar API for local execution.
+  </Card>
+  <Card title="CLI Launcher" icon="terminal" href="/cli/overview">
+    The `openlinear` npm package — launches the desktop app and handles GitHub authentication from the terminal.
+  </Card>
+  <Card title="npm Library" icon="npm" href="/library/overview">
+    TypeScript utilities for execution metadata validation, payload sanitization, and feature flag management.
+  </Card>
+  <Card title="Landing Site" icon="globe" href="https://github.com/kaizen403/openlinear">
+    Next.js marketing and documentation surface, deployed on Vercel.
+  </Card>
+</CardGroup>
+
+---
+
+## How It Works
+
+<Steps>
+  <Step title="Create a Task">
+    Describe what you want built in plain language on the kanban board. Add labels, set priority, assign to a project.
+  </Step>
+  <Step title="Connect a Repository">
+    Link a GitHub repository or point to a local folder. OpenLinear clones it and creates a working branch.
+  </Step>
+  <Step title="Execute">
+    Click execute. An AI agent (powered by OpenCode) reads your task, writes the code, and commits changes — all locally on your machine.
+  </Step>
+  <Step title="Review the PR">
+    OpenLinear pushes the branch and gives you a compare URL. Review the diff, open a PR, and merge when ready.
+  </Step>
+</Steps>
+
+---
+
+## Agent Support
+
+| Agent | Status |
+|-------|--------|
+| [OpenCode](https://opencode.ai) | Integrated |
+| Claude Code | Planned |
+| Codex | Planned |
+| Aider | Planned |
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Desktop shell | Tauri 2.x (Rust) |
+| Desktop UI | Next.js 16, React 19 |
+| UI components | Radix UI + shadcn/ui |
+| Styling | Tailwind CSS |
+| Local API | Express 5 (sidecar) |
+| Database | PostgreSQL via Prisma |
+| Auth | JWT + GitHub OAuth |
+| AI execution | OpenCode SDK |
+| Validation | Zod |
+| Real-time | Server-Sent Events |
+| Build | Turbo + pnpm workspaces |

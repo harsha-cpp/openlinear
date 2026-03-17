@@ -1,0 +1,132 @@
+---
+title: "Teams"
+description: "Create teams, manage members, and join via invite codes."
+icon: "users"
+---
+
+# Teams API
+
+Teams scope tasks and provide team-specific issue numbering (e.g., `ENG-1`, `DSN-2`).
+
+---
+
+## List Teams
+
+```
+GET /api/teams
+```
+
+Auth: `optionalAuth`. Returns teams the authenticated user belongs to, with member counts and associated projects.
+
+---
+
+## Create Team
+
+```
+POST /api/teams
+```
+
+Auth: `requireAuth`. The creator is automatically added as `owner`.
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `name` | string | Yes | — | 1-50 characters |
+| `key` | string | Yes | — | 1-10 chars, uppercase alphanumeric, starts with letter (e.g., `ENG`) |
+| `description` | string | No | `null` | Up to 500 characters |
+| `color` | string | No | `#6366f1` | Hex color code |
+| `icon` | string | No | `null` | Icon identifier |
+| `private` | boolean | No | `false` | Restrict team visibility |
+
+An invite code is auto-generated in the format `KEY-XXXXXXXX`.
+
+Broadcasts: `team:created`
+
+---
+
+## Join Team
+
+```
+POST /api/teams/join
+```
+
+Auth: `requireAuth`.
+
+| Field | Type | Required |
+|-------|------|----------|
+| `inviteCode` | string | Yes |
+
+Adds the user as a `member` of the team.
+
+---
+
+## Get Team
+
+```
+GET /api/teams/:id
+```
+
+Returns team details with members and project associations.
+
+---
+
+## Update Team
+
+```
+PATCH /api/teams/:id
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Team name |
+| `description` | string | Team description |
+| `color` | string | Hex color |
+| `icon` | string | Icon identifier |
+| `private` | boolean | Visibility |
+
+Broadcasts: `team:updated`
+
+---
+
+## Delete Team
+
+```
+DELETE /api/teams/:id
+```
+
+Cascades: removes all team members, project-team associations, and nullifies `teamId` on associated tasks.
+
+Broadcasts: `team:deleted`
+
+---
+
+## Members
+
+### List Members
+
+```
+GET /api/teams/:id/members
+```
+
+Returns team members with user details, ordered by join date.
+
+### Add Member
+
+```
+POST /api/teams/:id/members
+```
+
+Auth: `requireAuth`.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `email` | string | One of email/userId | User's email |
+| `userId` | string | One of email/userId | User's UUID |
+| `role` | enum | No | `owner`, `admin`, or `member` (default: `member`) |
+
+### Remove Member
+
+```
+DELETE /api/teams/:id/members/:userId
+```
+
+Removes a user from the team.

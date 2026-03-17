@@ -1,0 +1,123 @@
+---
+title: "Kanban Board"
+description: "Drag-and-drop task management with 4 status columns, task cards, and real-time updates."
+icon: "columns-3"
+---
+
+# Kanban Board
+
+The kanban board is the primary workspace. Tasks flow through 4 status columns with drag-and-drop, real-time SSE updates, and inline execution controls.
+
+---
+
+## Columns
+
+| Column | Status | Description |
+|--------|--------|-------------|
+| Todo | `todo` | Tasks waiting to be worked on |
+| In Progress | `in_progress` | Tasks currently being executed by an AI agent |
+| Done | `done` | Successfully completed tasks |
+| Cancelled | `cancelled` | Cancelled or failed tasks |
+
+Drag a task between columns to change its status. The board updates in real-time across all views via SSE.
+
+---
+
+## Task Cards
+
+Each task card displays:
+
+- **Title** — The task description
+- **Identifier** — Team-scoped number (e.g., `ENG-1`)
+- **Priority** — Color-coded indicator (low, medium, high)
+- **Labels** — Colored badges
+- **PR link** — Clickable link when execution produces a PR
+- **Execution progress** — Progress bar during execution
+- **Selection checkbox** — For batch operations
+
+### Task Card Actions
+
+Right-click or use the action menu on any card:
+
+| Action | Available when |
+|--------|---------------|
+| Move to In Progress | Task is in Todo |
+| Execute | Task is in In Progress |
+| Cancel | Task is executing |
+| Delete | Any status |
+| View Details | Any status |
+
+---
+
+## Task Creation
+
+Click **+ Add task** in any column to open the creation form:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| Title | Yes | Task description (what you want built) |
+| Description | No | Additional context and requirements |
+| Priority | No | Low, Medium (default), or High |
+| Labels | No | Categorization tags |
+| Team | No | Assign to a team for scoped numbering |
+| Project | No | Associate with a project |
+| Due date | No | Target completion date |
+
+---
+
+## Task Detail View
+
+Click any task card to open the detail panel showing:
+
+- Full task metadata (title, description, priority, labels, dates)
+- Execution logs (real-time during execution)
+- Execution progress and elapsed time
+- PR URL and outcome summary
+- Pending permission requests from the AI agent
+- Edit and delete controls
+
+---
+
+## Selection and Batch Operations
+
+<Steps>
+  <Step title="Enter selection mode">
+    Click the selection toggle on a column header to enable checkboxes on task cards.
+  </Step>
+  <Step title="Select tasks">
+    Check individual tasks or use "Select All" on the column header.
+  </Step>
+  <Step title="Batch actions">
+    The batch controls bar appears at the bottom with options:
+    - **Move to In Progress** — Move selected Todo tasks
+    - **Execute Parallel** — Run all selected tasks simultaneously
+    - **Execute Queue** — Run selected tasks one at a time
+    - **Clear Selection** — Deselect all
+  </Step>
+</Steps>
+
+---
+
+## Model Selector
+
+The model selector dropdown in the project config panel lets you choose which AI model to use for execution. It shows:
+
+- All connected providers with their available models
+- Free models from OpenCode (Minimix, GLM5, KimiK2.5)
+- Model capabilities (reasoning, tool calling)
+- Cost per token (input/output)
+
+Changing the model applies to all subsequent executions.
+
+---
+
+## Real-Time Updates
+
+The board receives real-time updates via Server-Sent Events:
+
+- Task creation, updates, and deletion from other views
+- Execution progress during agent runs
+- Batch status changes
+- Permission requests from the AI agent
+
+No manual refresh needed — the board stays in sync automatically.

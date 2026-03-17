@@ -1,0 +1,85 @@
+---
+title: "Labels"
+description: "Create, manage, and assign color-coded labels to tasks."
+icon: "tag"
+---
+
+# Labels API
+
+Labels are color-coded tags for categorizing tasks. They are globally scoped (not per-team).
+
+---
+
+## List Labels
+
+```
+GET /api/labels
+```
+
+Returns all labels, ordered by priority (descending).
+
+---
+
+## Create Label
+
+```
+POST /api/labels
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `name` | string | Yes | — | 1-50 chars, must be unique |
+| `color` | string | Yes | — | Hex color code (e.g., `#3B82F6`) |
+| `priority` | number | No | `0` | Display ordering (higher = first) |
+
+Broadcasts: `label:created`
+
+---
+
+## Update Label
+
+```
+PATCH /api/labels/:id
+```
+
+| Field | Type |
+|-------|------|
+| `name` | string |
+| `color` | string |
+| `priority` | number |
+
+Broadcasts: `label:updated`
+
+---
+
+## Delete Label
+
+```
+DELETE /api/labels/:id
+```
+
+Broadcasts: `label:deleted`
+
+---
+
+## Assign Label to Task
+
+```
+POST /api/labels/tasks/:taskId/labels
+```
+
+| Field | Type | Required |
+|-------|------|----------|
+| `labelId` | string | Yes |
+
+Broadcasts: `task:label:assigned`
+
+---
+
+## Remove Label from Task
+
+```
+DELETE /api/labels/tasks/:taskId/labels/:labelId
+```
+
+Broadcasts: `task:label:removed`

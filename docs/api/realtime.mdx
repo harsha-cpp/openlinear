@@ -1,0 +1,113 @@
+---
+title: "Real-Time Events"
+description: "Server-Sent Events for live task updates, execution progress, and batch status."
+icon: "radio"
+---
+
+# Real-Time Events (SSE)
+
+OpenLinear uses Server-Sent Events to push real-time updates to the desktop UI. Connect once and receive all events for the lifetime of the connection.
+
+---
+
+## Endpoint
+
+```
+GET /api/events
+```
+
+Standard SSE connection. The server sends events as they occur.
+
+---
+
+## Connecting
+
+```javascript
+const events = new EventSource('http://localhost:3001/api/events');
+
+events.addEventListener('task:created', (e) => {
+  const task = JSON.parse(e.data);
+  console.log('New task:', task.title);
+});
+
+events.addEventListener('execution:progress', (e) => {
+  const progress = JSON.parse(e.data);
+  console.log(`Task ${progress.taskId}: ${progress.status}`);
+});
+
+events.onerror = () => {
+  console.log('SSE connection lost, reconnecting...');
+};
+```
+
+---
+
+## Event Types
+
+### Task Events
+
+| Event | Payload | Trigger |
+|-------|---------|---------|
+| `task:created` | Full task object | Task created |
+| `task:updated` | Full task object | Task modified or status changed |
+| `task:deleted` | `{ id }` | Task archived |
+
+### Project Events
+
+| Event | Payload | Trigger |
+|-------|---------|---------|
+| `project:created` | Full project object | Project created |
+| `project:updated` | Full project object | Project modified |
+| `project:deleted` | `{ id }` | Project deleted |
+
+### Team Events
+
+| Event | Payload | Trigger |
+|-------|---------|---------|
+| `team:created` | Full team object | Team created |
+| `team:updated` | Full team object | Team modified |
+| `team:deleted` | `{ id }` | Team deleted |
+
+### Label Events
+
+| Event | Payload | Trigger |
+|-------|---------|---------|
+| `label:created` | Full label object | Label created |
+| `label:updated` | Full label object | Label modified |
+| `label:deleted` | `{ id }` | Label deleted |
+| `task:label:assigned` | `{ taskId, label }` | Label assigned to task |
+| `task:label:removed` | `{ taskId, labelId }` | Label removed from task |
+
+### Execution Events
+
+| Event | Payload | Trigger |
+|-------|---------|---------|
+| `execution:progress` | `{ taskId, status, message, ... }` | Execution state change |
+
+### Permission Events
+
+| Event | Payload | Trigger |
+|-------|---------|---------|
+| `permission:new` | `{ taskId, permission }` | Agent requests tool permission |
+| `permission:resolved` | `{ taskId, permissionId }` | Permission responded to |
+
+### Batch Events
+
+| Event | Payload | Trigger |
+|-------|---------|---------|
+| `batch:created` | Batch object | Batch created |
+| `batch:updated` | Batch object | Batch status changed |
+| `batch:completed` | Batch object | Batch finished |
+
+---
+
+## Event Format
+
+Each SSE message follows the standard format:
+
+```
+event: task:created
+data: {"id":"uuid","title":"Add endpoint","status":"todo",...}
+```
+
+The `data` field is always valid JSON. Parse it with `JSON.parse(event.data)`.

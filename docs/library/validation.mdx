@@ -1,0 +1,87 @@
+---
+title: "Validation"
+description: "Payload sanitization, forbidden fields, and trust boundary enforcement."
+icon: "shield"
+---
+
+# Validation (`openlinear/validation`)
+
+Utilities that enforce the trust boundary between local execution and any network transmission. Sensitive fields are stripped before data can leave your machine.
+
+```typescript
+import { sanitizePayload, isForbiddenField } from 'openlinear/validation';
+```
+
+---
+
+## Forbidden Fields
+
+The following fields are blocked from sync:
+
+```typescript
+const FORBIDDEN_SYNC_FIELDS = [
+  'prompt',
+  'logs',
+  'toolLogs',
+  'executionLogs',
+  'repoPath',
+  'accessToken',
+  'apiKey',
+  'passwordHash',
+  'jwt',
+  'client',
+  'timeoutId',
+  'rawOutput',
+  'diff',
+  'fileContents',
+  'env',
+  'environment',
+  'processEnv',
+] as const;
+```
+
+---
+
+## Functions
+
+### `isForbiddenField(field)`
+
+Returns `true` if the field name is in `FORBIDDEN_SYNC_FIELDS`.
+
+```typescript
+import { isForbiddenField } from 'openlinear/validation';
+
+isForbiddenField('accessToken'); // true
+isForbiddenField('taskId');      // false
+```
+
+### `sanitizePayload(payload)`
+
+Strips all forbidden fields and returns the cleaned result with a list of what was removed.
+
+```typescript
+import { sanitizePayload } from 'openlinear/validation';
+
+const { sanitized, removed } = sanitizePayload({
+  taskId: 'tsk_123',
+  status: 'completed',
+  accessToken: 'ghp_...',
+  logs: '[tool output...]',
+});
+
+// sanitized → { taskId: 'tsk_123', status: 'completed' }
+// removed   → ['accessToken', 'logs']
+```
+
+---
+
+## Trust Boundary
+
+| Category | Examples | Synced? |
+|----------|----------|---------|
+| Safe metadata | `taskId`, `status`, `durationMs`, `branch`, `prUrl` | Yes |
+| Local-only paths | `repoPath`, `env`, `environment` | No — stripped |
+| Credentials | `accessToken`, `apiKey`, `passwordHash`, `jwt` | No — stripped |
+| Raw agent output | `prompt`, `logs`, `toolLogs`, `diff`, `rawOutput` | No — stripped |
+
+Any payload passing through `sanitizePayload` or `safeValidateExecutionMetadataSync` has forbidden fields removed before reaching the network.

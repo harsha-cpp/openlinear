@@ -1,0 +1,182 @@
+---
+title: "Authentication"
+description: "JWT auth, GitHub OAuth, device flow, and local desktop sessions."
+icon: "lock"
+---
+
+# Authentication
+
+The auth API supports multiple flows: username/password, GitHub OAuth (browser and device flow), and local desktop sessions.
+
+---
+
+## Username/Password
+
+### Register
+
+```
+POST /api/auth/register
+```
+
+Creates a new user with a personal team.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `username` | string | Yes | 2-50 chars, alphanumeric + hyphens/underscores |
+| `password` | string | Yes | 3-100 chars |
+| `email` | string | No | Valid email address |
+
+```bash
+curl -X POST http://localhost:3001/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username": "dev", "password": "secret", "email": "dev@example.com"}'
+```
+
+Returns: `{ token, user: { id, username, email } }`
+
+### Login
+
+```
+POST /api/auth/login
+```
+
+| Field | Type | Required |
+|-------|------|----------|
+| `username` | string | Yes |
+| `password` | string | Yes |
+
+Returns: `{ token, user: { id, username, email, avatarUrl } }`
+
+---
+
+## Local Desktop Session
+
+```
+POST /api/auth/local/session
+```
+
+Creates or reuses a local desktop user without credentials. Requires the `x-openlinear-client: desktop` header.
+
+The username is auto-generated from your OS username (e.g., `local-kaizen`).
+
+```bash
+curl -X POST http://localhost:3001/api/auth/local/session \
+  -H "x-openlinear-client: desktop"
+```
+
+Returns: `{ token, user: { id, username, email, avatarUrl, githubId } }`
+
+---
+
+## GitHub OAuth
+
+### Browser Flow
+
+```
+GET /api/auth/github?source=desktop
+```
+
+Redirects to GitHub's authorization page. After approval, GitHub redirects to the callback endpoint.
+
+### Callback
+
+```
+GET /api/auth/github/callback?code=<code>&state=<state>
+```
+
+Exchanges the authorization code for a token. Desktop clients are redirected to `openlinear://callback?token=<jwt>`.
+
+### Desktop Local Login
+
+```
+POST /api/auth/github/desktop/login
+```
+
+Uses locally available GitHub credentials (from `gh` CLI or environment). Requires `x-openlinear-client: desktop`.
+
+```bash
+curl -X POST http://localhost:3001/api/auth/github/desktop/login \
+  -H "x-openlinear-client: desktop"
+```
+
+### Check Local Auth
+
+```
+GET /api/auth/github/desktop/check
+```
+
+Returns whether local GitHub auth is available and its source.
+
+```json
+{"available": true, "source": "gh-cli"}
+```
+
+---
+
+## Device Flow
+
+For headless environments or when browser OAuth isn't available.
+
+### Start
+
+```
+POST /api/auth/github/device/start
+```
+
+Returns a user code and verification URL. Requires `x-openlinear-client: desktop`.
+
+### Poll
+
+```
+POST /api/auth/github/device/poll
+```
+
+| Field | Type | Required |
+|-------|------|----------|
+| `deviceCode` | string | Yes |
+
+Returns `{ status: "pending" }` (202) or `{ status: "complete", token, user }` (200).
+
+---
+
+## GitHub Account Linking
+
+### Get Connect URL
+
+```
+GET /api/auth/github/connect
+```
+
+Returns a GitHub authorization URL for linking a GitHub account to an existing user. Requires Bearer auth.
+
+### Confirm Connection
+
+```
+POST /api/auth/github/connect/confirm
+```
+
+| Field | Type | Required |
+|-------|------|----------|
+| `github_connect_token` | string | Yes |
+
+Links the GitHub account to the authenticated user.
+
+---
+
+## Current User
+
+```
+GET /api/auth/me
+```
+
+Returns the authenticated user's profile (excludes `accessToken` and `passwordHash`). Requires Bearer auth.
+
+---
+
+## Logout
+
+```
+POST /api/auth/logout
+```
+
+Returns `{ success: true }`. Token invalidation is handled client-side.

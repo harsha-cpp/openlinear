@@ -41,7 +41,7 @@ export default function ProductPage() {
               Download for macOS <ArrowRight className="h-3.5 w-3.5" />
             </a>
             <a
-              href="/docs"
+              href="https://openlinear.mintlify.app"
               className="btn-secondary inline-flex items-center gap-2 rounded-full border border-[#EDE8D0]/[0.08] bg-[#EDE8D0]/[0.03] px-8 py-3.5 text-[0.875rem] font-medium text-[#EDE8D0]/70"
             >
               Read the docs

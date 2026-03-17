@@ -1,0 +1,190 @@
+---
+title: "Installation"
+description: "All installation methods for OpenLinear — npm, curl, GitHub Releases, and AUR."
+icon: "download"
+---
+
+# Installation
+
+OpenLinear ships as a desktop app with an optional CLI launcher. Choose the installation method for your platform.
+
+---
+
+## System Requirements
+
+| Requirement | Minimum |
+|-------------|---------|
+| Node.js | 22+ |
+| pnpm | 9+ (for development only) |
+| OS | macOS 10.15+ (Apple Silicon / Intel) or Linux x64 |
+| Disk | ~200 MB |
+
+---
+
+## npm (Recommended)
+
+The global npm package installs the CLI launcher and downloads the desktop binary on first run.
+
+```bash
+npm install -g openlinear
+```
+
+After installation:
+
+```bash
+openlinear
+```
+
+<Accordion title="What happens during install">
+  The `postinstall` script downloads the pre-built desktop binary for your platform:
+
+  - **macOS**: Installs `OpenLinear.app` to `~/Applications/`
+  - **Linux**: Places the AppImage at `~/.openlinear/openlinear.AppImage` and registers a `.desktop` entry at `~/.local/share/applications/openlinear.desktop`
+
+  The CLI launcher resolves the binary from these known paths on each run.
+</Accordion>
+
+---
+
+## curl Installer
+
+A single command that detects your platform and installs the latest release:
+
+```bash
+curl -fsSL https://rixie.in/api/install | bash
+```
+
+<Accordion title="What the installer does">
+  1. Detects your OS and architecture
+  2. Downloads the latest release from GitHub Releases
+  3. Installs the binary to `~/.openlinear/` (Linux) or `~/Applications/` (macOS)
+  4. Registers the `openlinear` command in your PATH
+</Accordion>
+
+---
+
+## GitHub Releases
+
+Download pre-built binaries directly:
+
+| Platform | Format | Link |
+|----------|--------|------|
+| macOS (Universal) | `.dmg` | [Latest Release](https://github.com/kaizen403/openlinear/releases/latest) |
+| macOS (Universal) | `.app.tar.gz` | [Latest Release](https://github.com/kaizen403/openlinear/releases/latest) |
+| Linux x64 | AppImage | [Latest Release](https://github.com/kaizen403/openlinear/releases/latest) |
+| Linux x64 | `.deb` | [Latest Release](https://github.com/kaizen403/openlinear/releases/latest) |
+
+---
+
+## Arch Linux (AUR)
+
+```bash
+paru -S openlinear-bin
+```
+
+The AUR package points at GitHub Release artifacts and installs the desktop binary.
+
+---
+
+## Build from Source
+
+For contributors or custom builds:
+
+```bash
+git clone https://github.com/kaizen403/openlinear.git
+cd openlinear
+pnpm install
+
+# Build the sidecar (local API server)
+pnpm build:sidecar
+
+# Build the desktop app
+pnpm build:desktop
+
+# Or build everything
+pnpm build:app
+```
+
+<Warning>
+  Building the desktop app requires Rust and the Tauri CLI. See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
+</Warning>
+
+### Development Mode
+
+```bash
+# Run everything (desktop + sidecar + API)
+pnpm dev
+
+# Run only the landing/docs site
+pnpm dev:web
+
+# Run only the landing site
+pnpm --filter @openlinear/landing dev
+```
+
+The landing site runs on port `3002` by default.
+
+---
+
+## Verifying Installation
+
+```bash
+# Check the CLI is installed
+openlinear --version
+
+# Check GitHub authentication
+openlinear github status
+
+# Launch the app
+openlinear
+```
+
+If the desktop binary is not found, the CLI prints installation instructions:
+
+```
+OpenLinear desktop app not found.
+
+Install it from npm:
+  npm install -g openlinear
+
+Or download the latest desktop release:
+  https://github.com/kaizen403/openlinear/releases/latest
+```
+
+---
+
+## Uninstalling
+
+<Tabs>
+  <Tab title="npm">
+    ```bash
+    npm uninstall -g openlinear
+    rm -rf ~/.openlinear
+    rm -rf ~/Applications/OpenLinear.app
+    ```
+  </Tab>
+  <Tab title="Linux">
+    ```bash
+    rm -rf ~/.openlinear
+    rm ~/.local/share/applications/openlinear.desktop
+    ```
+  </Tab>
+  <Tab title="macOS">
+    ```bash
+    rm -rf ~/Applications/OpenLinear.app
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Create your first task and execute it.
+  </Card>
+  <Card title="GitHub Auth" icon="key" href="/cli/github-auth">
+    Set up GitHub authentication for repository access.
+  </Card>
+</CardGroup>

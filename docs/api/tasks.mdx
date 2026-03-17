@@ -1,0 +1,169 @@
+---
+title: "Tasks"
+description: "Create, read, update, archive, and manage tasks."
+icon: "check-square"
+---
+
+# Tasks API
+
+Tasks are the core entity — items on the kanban board that can be executed by AI agents.
+
+---
+
+## List Tasks
+
+```
+GET /api/tasks
+```
+
+Auth: `optionalAuth`. Returns tasks with flattened labels.
+
+| Query param | Type | Description |
+|-------------|------|-------------|
+| `teamId` | string | Filter by team |
+| `projectId` | string | Filter by project |
+
+Response: Array of task objects with `labels` as flat label objects (not join table entries).
+
+---
+
+## Create Task
+
+```
+POST /api/tasks
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `title` | string | Yes | — | Task description |
+| `description` | string | No | `null` | Additional context |
+| `priority` | enum | No | `medium` | `low`, `medium`, `high` |
+| `status` | enum | No | `todo` | `todo`, `in_progress`, `done`, `cancelled` |
+| `labelIds` | string[] | No | `[]` | Array of label UUIDs |
+| `teamId` | string | No | `null` | Team UUID |
+| `projectId` | string | No | `null` | Project UUID |
+| `dueDate` | string | No | `null` | ISO 8601 datetime |
+
+When `teamId` is provided, the task receives a team-scoped issue number and identifier (e.g., `ENG-1`). If `projectId` is provided, the team is resolved from the project's team association.
+
+```bash
+curl -X POST http://localhost:3001/api/tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Add health check endpoint",
+    "description": "GET /api/health returning {status: ok}",
+    "priority": "high",
+    "teamId": "team-uuid"
+  }'
+```
+
+Broadcasts: `task:created`
+
+---
+
+## Get Task
+
+```
+GET /api/tasks/:id
+```
+
+Returns the task with flattened labels, team, and project info.
+
+---
+
+## Update Task
+
+```
+PATCH /api/tasks/:id
+```
+
+All fields optional. Same schema as create. When updating status to `in_progress`, execution tracking fields are reset.
+
+Broadcasts: `task:updated`
+
+---
+
+## Delete (Archive) Task
+
+```
+DELETE /api/tasks/:id
+```
+
+Soft-deletes by setting `archived: true`. The task disappears from the main board.
+
+Broadcasts: `task:deleted`
+
+---
+
+## Archived Tasks
+
+### List Archived
+
+```
+GET /api/tasks/archived
+```
+
+Auth: `optionalAuth`. Returns archived tasks scoped to the user's teams.
+
+### Delete All Archived
+
+```
+DELETE /api/tasks/archived
+```
+
+Permanently deletes all archived tasks.
+
+### Delete Single Archived
+
+```
+DELETE /api/tasks/archived/:id
+```
+
+Permanently deletes a specific archived task.
+
+---
+
+## Refresh PR
+
+```
+POST /api/tasks/:id/refresh-pr
+```
+
+Auth: `requireAuth`. If the task has a compare URL (`github.com/.../compare/...`), queries the GitHub API to find an actual PR for that branch and updates the `prUrl`.
+
+Returns:
+
+```json
+{"prUrl": "https://github.com/owner/repo/pull/42", "refreshed": true}
+```
+
+---
+
+## Task Object
+
+```json
+{
+  "id": "uuid",
+  "title": "Add health check endpoint",
+  "description": "GET /api/health returning {status: ok}",
+  "priority": "high",
+  "status": "todo",
+  "number": 1,
+  "identifier": "ENG-1",
+  "teamId": "uuid",
+  "projectId": "uuid",
+  "labels": [
+    {"id": "uuid", "name": "backend", "color": "#3B82F6", "priority": 0}
+  ],
+  "team": {"id": "uuid", "name": "Engineering", "key": "ENG", "color": "#6366f1"},
+  "project": {"id": "uuid", "name": "API", "status": "in_progress", "color": "#6366f1"},
+  "executionStartedAt": null,
+  "executionElapsedMs": 0,
+  "executionProgress": null,
+  "prUrl": null,
+  "outcome": null,
+  "dueDate": null,
+  "createdAt": "2025-01-01T00:00:00.000Z",
+  "updatedAt": "2025-01-01T00:00:00.000Z"
+}
+```

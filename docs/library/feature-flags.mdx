@@ -1,0 +1,105 @@
+---
+title: "Feature Flags"
+description: "Control execution mode rollout with feature flags, canary percentages, and kill switches."
+icon: "flag"
+---
+
+# Feature Flags (`openlinear/config`)
+
+Utilities for managing the gradual rollout of local execution mode versus server execution.
+
+```typescript
+import { parseFeatureFlags, isLocalExecutionEnabled } from 'openlinear/config';
+```
+
+---
+
+## Flag Reference
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `LOCAL_EXECUTION_ENABLED` | boolean | `false` | Master switch for local execution |
+| `SERVER_EXECUTION_ENABLED` | boolean | `true` | Master switch for server execution |
+| `CANARY_PERCENTAGE` | number | `0` | Percentage (0-100) of users routed to local execution |
+| `FORCE_LOCAL_EXECUTION` | boolean | `false` | Force local for all users (overrides canary) |
+| `KILL_SWITCH_LOCAL_EXECUTION` | boolean | `false` | Disable local for all users immediately |
+
+---
+
+## Functions
+
+### `parseFeatureFlags(env?)`
+
+Parses flags from `process.env` or a custom key-value map. Never throws — all flags have safe defaults.
+
+```typescript
+import { parseFeatureFlags } from 'openlinear/config';
+
+const flags = parseFeatureFlags();
+
+const testFlags = parseFeatureFlags({
+  LOCAL_EXECUTION_ENABLED: 'true',
+  CANARY_PERCENTAGE: '25',
+});
+```
+
+### `getFeatureFlags()`
+
+Shorthand for `parseFeatureFlags(process.env)`.
+
+### `isLocalExecutionEnabled(userId, flags?)`
+
+Determines whether local execution is active for a specific user. Checks in order:
+
+1. Kill switch → always `false`
+2. Force flag → always `true`
+3. Canary percentage → hash-based user bucketing
+
+```typescript
+import { isLocalExecutionEnabled, getFeatureFlags } from 'openlinear/config';
+
+const flags = getFeatureFlags();
+const useLocal = isLocalExecutionEnabled('user_abc123', flags);
+```
+
+### `isServerExecutionEnabled(flags?)`
+
+Returns `flags.SERVER_EXECUTION_ENABLED`.
+
+### `validateFlagConfiguration(flags)`
+
+Checks for invalid flag combinations.
+
+```typescript
+import { validateFlagConfiguration, getFeatureFlags } from 'openlinear/config';
+
+const { valid, errors } = validateFlagConfiguration(getFeatureFlags());
+if (!valid) {
+  errors.forEach(e => console.error('[config]', e));
+}
+```
+
+Catches:
+- `FORCE_LOCAL_EXECUTION` and `KILL_SWITCH_LOCAL_EXECUTION` both enabled
+- Both `LOCAL_EXECUTION_ENABLED` and `SERVER_EXECUTION_ENABLED` disabled
+
+### `getMigrationPhase(flags?)`
+
+Returns the current rollout phase as a string.
+
+```typescript
+import { getMigrationPhase } from 'openlinear/config';
+getMigrationPhase(); // 'shadow' | 'canary' | 'cutover' | 'rollback' | 'unknown'
+```
+
+---
+
+## Migration Phases
+
+| Phase | Condition |
+|-------|-----------|
+| `rollback` | Kill switch is active |
+| `cutover` | Server execution disabled, local is primary |
+| `canary` | Local enabled with `CANARY_PERCENTAGE > 0` |
+| `shadow` | Local enabled but `CANARY_PERCENTAGE === 0` |
+| `unknown` | No recognizable state |

@@ -1,0 +1,133 @@
+---
+title: "Batch Execution"
+description: "Execute multiple tasks simultaneously in parallel or queue mode."
+icon: "layers"
+---
+
+# Batch Execution
+
+Batch execution lets you run multiple tasks together. Choose parallel mode (all at once) or queue mode (one at a time with approval gates).
+
+---
+
+## Modes
+
+<Tabs>
+  <Tab title="Parallel">
+    All tasks in the batch start executing simultaneously, each on its own branch. Tasks are independent — one failure doesn't affect others.
+
+    Best for: Unrelated tasks that can run concurrently.
+  </Tab>
+  <Tab title="Queue">
+    Tasks execute sequentially, one at a time. After each task completes, the next one starts automatically (or waits for manual approval if `queueAutoApprove` is disabled).
+
+    Best for: Related tasks where order matters, or when you want to review each result before proceeding.
+  </Tab>
+</Tabs>
+
+---
+
+## Creating a Batch
+
+<Steps>
+  <Step title="Select tasks">
+    Enter selection mode on the kanban board and check the tasks you want to execute.
+  </Step>
+  <Step title="Choose mode">
+    Click **Execute Parallel** or **Execute Queue** in the batch controls bar at the bottom of the board.
+  </Step>
+  <Step title="Monitor progress">
+    The batch progress bar appears at the top of the board showing overall status.
+  </Step>
+</Steps>
+
+### API
+
+```bash
+curl -X POST http://localhost:3001/api/batches \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "taskIds": ["task-id-1", "task-id-2", "task-id-3"],
+    "mode": "parallel"
+  }'
+```
+
+---
+
+## Batch Limits
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Max batch size | 20 tasks | Maximum tasks per batch |
+| Parallel limit | 3 | Max concurrent executions (shared with single execution) |
+| Queue auto-approve | `false` | Auto-start next task in queue mode |
+| Stop on failure | `false` | Cancel remaining tasks if one fails |
+| Conflict behavior | `skip` | What to do on conflicts (`skip` or `fail`) |
+
+Configure these in **Settings** or via `PATCH /api/settings`.
+
+---
+
+## Task States Within a Batch
+
+| Status | Description |
+|--------|-------------|
+| `queued` | Waiting to start |
+| `running` | Currently executing |
+| `completed` | Finished successfully |
+| `failed` | Execution failed |
+| `skipped` | Skipped due to conflict or stop-on-failure |
+| `cancelled` | Cancelled by user |
+
+---
+
+## Batch Progress
+
+The batch progress tracker shows:
+
+- Overall completion percentage
+- Per-task status indicators
+- Combined PR URL (if applicable)
+- Cancel batch button
+- Dismiss button (when completed)
+
+Progress is calculated as:
+
+```
+percentage = (completed + failed + skipped + cancelled) / total * 100
+```
+
+---
+
+## Queue Mode Approval
+
+When `queueAutoApprove` is disabled (default), queue mode pauses between tasks:
+
+1. Task 1 completes
+2. Batch waits for approval
+3. You review the result and click **Approve Next**
+4. Task 2 starts
+
+To approve via API:
+
+```bash
+curl -X POST http://localhost:3001/api/batches/:id/approve \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+## Cancellation
+
+Cancel the entire batch or individual tasks:
+
+```bash
+# Cancel entire batch
+curl -X POST http://localhost:3001/api/batches/:id/cancel
+
+# Cancel single task in batch
+curl -X POST http://localhost:3001/api/batches/:id/tasks/:taskId/cancel
+```
+
+Cancelling a batch cancels all queued and running tasks. Completed tasks are not affected.

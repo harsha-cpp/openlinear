@@ -1,0 +1,127 @@
+---
+title: "Types"
+description: "ExecutionMetadataSync schema, TypeScript types, and validation functions."
+icon: "shapes"
+---
+
+# Types (`openlinear/types`)
+
+Zod-validated types for execution metadata synced between the local agent and the dashboard.
+
+```typescript
+import { validateExecutionMetadataSync } from 'openlinear/types';
+```
+
+---
+
+## Enums
+
+### ExecutionStatus
+
+```typescript
+type ExecutionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+```
+
+### ErrorCategory
+
+```typescript
+type ErrorCategory = 'AUTH' | 'RATE_LIMIT' | 'MERGE_CONFLICT' | 'TIMEOUT' | 'UNKNOWN';
+```
+
+---
+
+## ExecutionMetadataSync
+
+The full sync payload shape:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `version` | `'1.0'` | No | Schema version |
+| `taskId` | string | Yes | Task UUID |
+| `runId` | string | Yes | Execution run UUID |
+| `status` | ExecutionStatus | Yes | Current status |
+| `startedAt` | string | No | ISO 8601 datetime |
+| `completedAt` | string | No | ISO 8601 datetime |
+| `durationMs` | number | No | Non-negative integer |
+| `branch` | string | No | Git branch name |
+| `commitSha` | string | No | Git commit hash |
+| `prUrl` | string | No | Valid URL to PR |
+| `prNumber` | number | No | Positive integer |
+| `outcome` | string | No | Max 500 chars summary |
+| `errorCategory` | ErrorCategory | No | Error classification |
+
+---
+
+## Validation Functions
+
+### `validateExecutionMetadataSync(payload)`
+
+Parses and returns the payload as `ExecutionMetadataSync`. Throws `ZodError` on failure.
+
+```typescript
+import { validateExecutionMetadataSync } from 'openlinear/types';
+
+const metadata = validateExecutionMetadataSync({
+  taskId: 'tsk_123',
+  runId: 'run_456',
+  status: 'completed',
+  durationMs: 45000,
+  branch: 'feature/add-login',
+  prUrl: 'https://github.com/org/repo/pull/42',
+  prNumber: 42,
+});
+```
+
+### `safeValidateExecutionMetadataSync(payload)`
+
+Returns a discriminated union — never throws.
+
+```typescript
+import { safeValidateExecutionMetadataSync } from 'openlinear/types';
+
+const result = safeValidateExecutionMetadataSync(payload);
+if (result.success) {
+  console.log('Valid:', result.data);
+} else {
+  console.error('Invalid:', result.error.errors);
+}
+```
+
+### `checkExecutionMetadataSync(payload)`
+
+Returns `{ valid: boolean; issues?: string[] }` for human-readable validation.
+
+```typescript
+import { checkExecutionMetadataSync } from 'openlinear/types';
+
+const { valid, issues } = checkExecutionMetadataSync(payload);
+if (!valid) {
+  issues?.forEach(issue => console.warn(issue));
+}
+```
+
+### `validateExecutionMetadataMiddleware()`
+
+Express middleware factory. Validates `req.body` and sets `req.validatedMetadata`.
+
+```typescript
+import express from 'express';
+import { validateExecutionMetadataMiddleware } from 'openlinear/types';
+
+const app = express();
+app.use(express.json());
+
+app.post('/sync', validateExecutionMetadataMiddleware(), (req, res) => {
+  res.json({ received: req.validatedMetadata.taskId });
+});
+```
+
+Error response (400):
+
+```json
+{
+  "error": "Invalid sync payload",
+  "code": "VALIDATION_ERROR",
+  "details": [{"field": "prUrl", "message": "Invalid url"}]
+}
+```

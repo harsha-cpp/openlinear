@@ -1,0 +1,125 @@
+---
+title: "Batches API"
+description: "Create and manage multi-task batch executions."
+icon: "layers"
+---
+
+# Batches API
+
+Batch execution runs multiple tasks together in parallel or queue mode.
+
+---
+
+## Create Batch
+
+```
+POST /api/batches
+```
+
+Auth: `optionalAuth`.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `taskIds` | string[] | Yes | 1-20 task UUIDs |
+| `mode` | string | Yes | `parallel` or `queue` |
+
+```bash
+curl -X POST http://localhost:3001/api/batches \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"taskIds": ["id1", "id2", "id3"], "mode": "parallel"}'
+```
+
+The batch starts executing immediately after creation.
+
+Returns:
+
+```json
+{
+  "id": "batch-uuid",
+  "status": "running",
+  "mode": "parallel",
+  "tasks": [
+    {"taskId": "id1", "title": "Task 1", "status": "queued", "branch": null}
+  ],
+  "createdAt": "2025-01-01T00:00:00.000Z"
+}
+```
+
+---
+
+## List Active Batches
+
+```
+GET /api/batches
+```
+
+Returns summary of all active batches.
+
+---
+
+## Get Batch Status
+
+```
+GET /api/batches/:id
+```
+
+Returns detailed batch status with per-task progress:
+
+```json
+{
+  "id": "batch-uuid",
+  "status": "running",
+  "mode": "parallel",
+  "tasks": [
+    {"taskId": "id1", "title": "Task 1", "status": "completed", "branch": "openlinear/abc123"},
+    {"taskId": "id2", "title": "Task 2", "status": "running", "branch": "openlinear/def456"},
+    {"taskId": "id3", "title": "Task 3", "status": "queued", "branch": null}
+  ],
+  "prUrl": null,
+  "progress": {
+    "total": 3,
+    "completed": 1,
+    "failed": 0,
+    "running": 1,
+    "queued": 1,
+    "skipped": 0,
+    "cancelled": 0,
+    "percentage": 33
+  },
+  "createdAt": "2025-01-01T00:00:00.000Z",
+  "completedAt": null
+}
+```
+
+---
+
+## Cancel Batch
+
+```
+POST /api/batches/:id/cancel
+```
+
+Cancels all queued and running tasks. Completed tasks are not affected.
+
+---
+
+## Cancel Single Task
+
+```
+POST /api/batches/:id/tasks/:taskId/cancel
+```
+
+Cancels a specific task within the batch.
+
+---
+
+## Approve Next (Queue Mode)
+
+```
+POST /api/batches/:id/approve
+```
+
+In queue mode with `queueAutoApprove: false`, manually approves the next task to start executing.
+
+Returns the updated batch status.
