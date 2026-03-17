@@ -84,6 +84,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@openlinear/desktop-ui':
+        specifier: workspace:*
+        version: link:../desktop-ui
       '@tauri-apps/api':
         specifier: ^2.0.0
         version: 2.10.1
