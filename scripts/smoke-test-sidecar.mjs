@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process";
-import { constants as fsConstants, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { constants as fsConstants } from "node:fs";
 import { access } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const READINESS_LINE = "Server running on http://localhost:3001";
+const STARTUP_TIMEOUT_MS = 15_000;
 
 function resolveBinaryPath() {
   if (process.platform === "linux") {
@@ -46,47 +47,76 @@ function resolveBinaryPath() {
   throw new Error(`Unsupported smoke test platform: ${process.platform}/${process.arch}`);
 }
 
-function shellQuote(value) {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
 async function main() {
   const binaryPath = resolveBinaryPath();
   await access(binaryPath, fsConstants.X_OK);
 
-  const tmpDir = mkdtempSync(path.join(os.tmpdir(), "openlinear-sidecar-smoke-"));
-  const logPath = path.join(tmpDir, "sidecar.log");
-
-  try {
-    const command = [
-      `timeout 15s ${shellQuote(binaryPath)} > ${shellQuote(logPath)} 2>&1 || true`,
-      `cat ${shellQuote(logPath)}`,
-      `grep -q 'Server running on http://localhost:3001' ${shellQuote(logPath)}`,
-    ].join("; ");
-
-    const result = spawnSync("bash", ["-lc", command], {
+  await new Promise((resolve, reject) => {
+    const child = spawn(binaryPath, [], {
       cwd: ROOT_DIR,
       env: { ...process.env },
-      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
     });
 
-    if (result.stdout) {
-      process.stdout.write(result.stdout);
-    }
+    let settled = false;
+    let output = "";
 
-    if (result.stderr) {
-      process.stderr.write(result.stderr);
-    }
+    const settle = (callback) => {
+      if (settled) {
+        return;
+      }
 
-    if (result.status !== 0) {
-      const logOutput = readFileSync(logPath, "utf8");
-      throw new Error(
-        `Sidecar smoke test failed before readiness. Exit code: ${result.status}\n${logOutput}`,
-      );
-    }
-  } finally {
-    rmSync(tmpDir, { recursive: true, force: true });
-  }
+      settled = true;
+      clearTimeout(timeoutId);
+
+      if (!child.killed) {
+        child.kill("SIGTERM");
+      }
+
+      callback();
+    };
+
+    const onChunk = (chunk, writer) => {
+      const text = chunk.toString();
+      output += text;
+      writer.write(text);
+
+      if (output.includes(READINESS_LINE)) {
+        settle(resolve);
+      }
+    };
+
+    child.stdout?.on("data", (chunk) => onChunk(chunk, process.stdout));
+    child.stderr?.on("data", (chunk) => onChunk(chunk, process.stderr));
+
+    child.on("error", (error) => {
+      settle(() => reject(error));
+    });
+
+    child.on("exit", (code, signal) => {
+      if (settled) {
+        return;
+      }
+
+      settle(() => {
+        reject(
+          new Error(
+            `Sidecar smoke test failed before readiness. Exit code: ${code ?? "null"}, signal: ${signal ?? "null"}\n${output}`,
+          ),
+        );
+      });
+    });
+
+    const timeoutId = setTimeout(() => {
+      settle(() => {
+        reject(
+          new Error(
+            `Sidecar smoke test timed out after ${STARTUP_TIMEOUT_MS}ms before readiness.\n${output}`,
+          ),
+        );
+      });
+    }, STARTUP_TIMEOUT_MS);
+  });
 }
 
 main().catch((error) => {

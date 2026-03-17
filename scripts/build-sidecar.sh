@@ -129,5 +129,10 @@ else
   echo "    Get it from: https://github.com/anomalyco/opencode/releases"
 fi
 
+if [ ! -f "$OPENCODE_BIN" ]; then
+  echo "  ! opencode binary is required for desktop packaging" >&2
+  exit 1
+fi
+
 echo "==> Build complete!"
 ls -la "$BINARIES_DIR"
