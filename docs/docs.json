@@ -5,11 +5,7 @@
   "colors": {
     "primary": "#3B82F6",
     "light": "#60A5FA",
-    "dark": "#2563EB",
-    "background": {
-      "light": "#ffffff",
-      "dark": "#0a0a0a"
-    }
+    "dark": "#2563EB"
   },
   "logo": {
     "light": "/logo/light.png",
@@ -22,13 +18,14 @@
     "strict": false
   },
   "background": {
-    "decoration": "grid"
+    "decoration": "grid",
+    "color": {
+      "light": "#ffffff",
+      "dark": "#0a0a0a"
+    }
   },
   "icons": {
     "library": "lucide"
-  },
-  "modeToggle": {
-    "default": "dark"
   },
   "navigation": {
     "tabs": [
