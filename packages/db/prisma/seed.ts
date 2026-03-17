@@ -1,9 +1,23 @@
+import { existsSync } from "fs";
 import { resolve } from "path";
 import { PrismaClient } from "../generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import crypto from "crypto";
 
-process.loadEnvFile(resolve(import.meta.dirname, "../.env"));
+const envCandidates = [
+  resolve(import.meta.dirname, "../.env"),
+  resolve(import.meta.dirname, "../../../.env"),
+];
+
+for (const envPath of envCandidates) {
+  if (existsSync(envPath)) {
+    process.loadEnvFile(envPath);
+  }
+}
+
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL is not set. Add it to .env before running the seed.");
+}
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,

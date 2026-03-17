@@ -7,7 +7,6 @@ import { API_URL } from "@/lib/api/client"
 
 const SSE_URL = `${API_URL}/api/events`
 const SSE_RECONNECT_DELAY = 3000
-const SSE_MAX_RETRIES = 10
 
 type SSEListener = (eventType: SSEEventType, data: SSEEventData) => void
 
@@ -111,13 +110,8 @@ export function SSEProvider({ children }: { children: ReactNode }) {
       eventSourceRef.current = null
       setIsConnected(false)
 
-      if (retryCountRef.current >= SSE_MAX_RETRIES) {
-        console.warn("[SSE Provider] Max retries reached, stopping reconnect")
-        return
-      }
-
       retryCountRef.current++
-      console.log(`[SSE Provider] Connection error, retry ${retryCountRef.current}/${SSE_MAX_RETRIES} in ${SSE_RECONNECT_DELAY}ms`)
+      console.log(`[SSE Provider] Connection error, retry ${retryCountRef.current} in ${SSE_RECONNECT_DELAY}ms`)
 
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
@@ -144,6 +138,24 @@ export function SSEProvider({ children }: { children: ReactNode }) {
       retryCountRef.current = 0
     }
   }, [connect])
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const handleResume = () => {
+      if (!eventSourceRef.current) {
+        connect()
+      }
+    }
+
+    window.addEventListener("online", handleResume)
+    window.addEventListener("focus", handleResume)
+
+    return () => {
+      window.removeEventListener("online", handleResume)
+      window.removeEventListener("focus", handleResume)
+    }
+  }, [connect, isAuthenticated])
 
   const subscribe = useCallback((listener: SSEListener) => {
     listenersRef.current.add(listener)

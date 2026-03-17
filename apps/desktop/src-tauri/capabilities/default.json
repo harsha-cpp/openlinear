@@ -11,6 +11,7 @@
     "core:window:allow-is-fullscreen",
     "core:window:allow-start-dragging",
     "core:window:allow-set-focus",
+    "dialog:allow-open",
     "shell:allow-open",
     "fs:default",
     "store:default",

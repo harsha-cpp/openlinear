@@ -4,6 +4,11 @@ import {
   getOpenCodeStatus,
   getClientForUser,
 } from '../services/opencode';
+import {
+  buildOpenCodeCatalog,
+  resolveOpenCodeModelSelection,
+  setOpenCodeModelSelection,
+} from '../services/opencode-catalog';
 
 const router: Router = Router();
 
@@ -38,48 +43,30 @@ router.get('/status', (_req, res: Response) => {
 
 router.get('/setup-status', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    let providers: Array<{ id: string; name: string; authenticated: boolean }> = [];
-    let ready = false;
-
     try {
-      const client = await getClientForUser(req.userId!);
-      const providerList = await client.provider.list();
+      const catalog = await buildOpenCodeCatalog(req.userId!);
+      const providers = catalog.providers.map((provider) => ({
+        id: provider.id,
+        name: provider.name,
+        authenticated: provider.authenticated,
+      }));
 
-      if (providerList.data?.all) {
-        const connectedSet = new Set(providerList.data.connected ?? []);
+      res.json({
+        providers,
+        ready: providers.some((provider) => provider.authenticated),
+      });
+      return;
+    } catch (catalogError) {
+      const message =
+        catalogError instanceof Error ? catalogError.message : 'OpenCode is unavailable';
 
-        const popularProviderIds = new Set([
-          'anthropic',
-          'openai',
-          'google',
-          'github-copilot',
-          'groq',
-          'deepseek',
-          'mistral',
-          'xai',
-          'openrouter',
-          'amazon-bedrock',
-          'opencode',
-        ]);
-
-        providers = providerList.data.all
-          .filter((provider) => popularProviderIds.has(provider.id))
-          .map((provider) => ({
-            id: provider.id,
-            name: provider.name || provider.id,
-            authenticated: connectedSet.has(provider.id),
-          }));
-      }
-
-      ready = providers.some(p => p.authenticated);
-    } catch {
-      // OpenCode server not responding — return empty
+      res.json({
+        providers: [],
+        ready: false,
+        error: message,
+      });
+      return;
     }
-
-    res.json({
-      providers,
-      ready,
-    });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to get setup status' });
   }
@@ -114,6 +101,14 @@ router.post('/auth', requireAuth, async (req: AuthRequest, res: Response) => {
     }
 
     const client = await getClientForUser(req.userId!);
+    const auth = await client.provider.auth().catch(() => null);
+    const methods = auth?.data?.[providerId] as ProviderAuthEntry[] | undefined;
+
+    if (methods && methods.length > 0 && !methods.some((method) => method?.type === 'api')) {
+      res.status(400).json({ error: `${providerId} does not support API key authentication` });
+      return;
+    }
+
     await client.auth.set({
       path: { id: providerId },
       body: { type: 'api', key: apiKey },
@@ -176,79 +171,29 @@ router.post('/auth/oauth/callback', requireAuth, async (req: AuthRequest, res: R
 
 router.get('/models', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const client = await getClientForUser(req.userId!);
-    const providerList = await client.provider.list();
-
-    if (!providerList.data?.all) {
-      res.json({ providers: [] });
-      return;
-    }
-
-    const connectedSet = new Set(providerList.data.connected ?? []);
-    connectedSet.add('opencode');
-
-    let allProviders = providerList.data.all;
-    if (!allProviders.some(p => p.id === 'opencode')) {
-      allProviders.push({
-        id: 'opencode',
-        name: 'OpenCode',
-        models: {},
-      } as any);
-    }
-
-    const providers = allProviders
-      .filter((provider) => connectedSet.has(provider.id))
-      .map((provider) => {
-        let modelsList = Object.values(provider.models || {}).map((model: any) => ({
-          id: model.id,
-          provider: model.provider,
-          name: model.name || model.id,
-          status: model.status,
-          reasoning: model.reasoning ?? false,
-          toolCall: model.tool_call ?? false,
-          limit: model.limit,
-          cost: {
-            input: model.cost?.input ?? 0,
-            output: model.cost?.output ?? 0,
-          },
-        }));
-
-        if (provider.id === 'opencode') {
-          const freeModels = [
-            { id: 'minimix', provider: 'opencode', name: 'Minimix (Free)', status: 'available', reasoning: false, toolCall: true, limit: { context: 128000, output: 4096 }, cost: { input: 0, output: 0 } },
-            { id: 'glm5', provider: 'opencode', name: 'GLM5 (Free)', status: 'available', reasoning: false, toolCall: true, limit: { context: 128000, output: 4096 }, cost: { input: 0, output: 0 } },
-            { id: 'kimik2.5', provider: 'opencode', name: 'KimiK2.5 (Free)', status: 'available', reasoning: true, toolCall: true, limit: { context: 128000, output: 4096 }, cost: { input: 0, output: 0 } }
-          ];
-          
-          freeModels.forEach(fm => {
-            if (!modelsList.some(m => m.id === fm.id)) {
-              modelsList.push(fm);
-            }
-          });
-        }
-
-        return {
-          id: provider.id,
-          name: provider.name || provider.id,
-          models: modelsList,
-        };
-      });
-
-    res.json({ providers });
+    const catalog = await buildOpenCodeCatalog(req.userId!);
+    res.json({
+      providers: catalog.providers,
+      selection: catalog.selection,
+    });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to list models' });
   }
 });
 
+router.get('/catalog', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const catalog = await buildOpenCodeCatalog(req.userId!);
+    res.json(catalog);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to load OpenCode catalog' });
+  }
+});
+
 router.get('/config', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const client = await getClientForUser(req.userId!);
-    const config = await client.config.get();
-
-    res.json({
-      model: config.data?.model ?? null,
-      small_model: config.data?.small_model ?? null,
-    });
+    const selection = await resolveOpenCodeModelSelection(req.userId!);
+    res.json(selection);
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to get config' });
   }
@@ -257,17 +202,13 @@ router.get('/config', requireAuth, async (req: AuthRequest, res: Response) => {
 router.post('/config/model', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { model } = req.body;
-    if (!model || typeof model !== 'string') {
+    if (!model || typeof model !== 'string' || !model.includes('/')) {
       res.status(400).json({ error: 'model is required (format: provider/model)' });
       return;
     }
 
-    const client = await getClientForUser(req.userId!);
-    await client.config.update({
-      body: { model },
-    });
-
-    res.json({ success: true, model });
+    const selection = await setOpenCodeModelSelection(req.userId!, model);
+    res.json({ success: true, ...selection });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to set model' });
   }

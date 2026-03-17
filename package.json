@@ -4,6 +4,8 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "./scripts/dev.sh",
+    "app:dev": "OPENLINEAR_DEV_USE_REMOTE_DB=0 OPENLINEAR_DEV_PROFILE=low ./scripts/dev.sh",
+    "app:web:dev": "OPENLINEAR_DEV_USE_REMOTE_DB=0 OPENLINEAR_DEV_PROFILE=low ./scripts/dev-web.sh",
     "dev:web": "./scripts/dev-web.sh",
     "lint": "turbo run lint",
     "test": "turbo run test",

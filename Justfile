@@ -11,14 +11,14 @@ default:
 
 # ─── Development ──────────────────────────────────────────────────
 
-# Start API server on :3001
+# Start local sidecar on :3001
 api:
     #!/usr/bin/env bash
     set -e
     pids=$(lsof -ti :3001 2>/dev/null || true)
     [ -n "$pids" ] && echo "$pids" | xargs kill -9 2>/dev/null && sleep 1
-    echo "✓ Starting API on http://localhost:3001"
-    API_PORT=3001 pnpm --filter @openlinear/api dev
+    echo "✓ Starting sidecar on http://localhost:3001"
+    API_PORT=3001 pnpm --filter @openlinear/sidecar dev
 
 # Start Next.js UI in browser on :3000
 web:

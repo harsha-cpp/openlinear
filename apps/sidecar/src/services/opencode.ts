@@ -8,6 +8,7 @@ import { broadcast } from '@openlinear/api/sse';
 const OPENCODE_PORT = parseInt(process.env.OPENCODE_PORT || '4096', 10);
 const OPENCODE_HOST = process.env.OPENCODE_HOST || '127.0.0.1';
 const OPENCODE_TIMEOUT = parseInt(process.env.OPENCODE_TIMEOUT || '10000', 10);
+const OPENCODE_PROBE_TIMEOUT = parseInt(process.env.OPENCODE_PROBE_TIMEOUT || '1500', 10);
 
 let serverHandle: { url: string; close(): void } | null = null;
 
@@ -49,7 +50,7 @@ function spawnOpencodeServer(
 ): Promise<{ url: string; close(): void }> {
   const args = ['serve', `--hostname=${hostname}`, `--port=${port}`];
   const proc = spawn(bin, args, {
-    env: { ...process.env, OPENCODE_CONFIG_CONTENT: '{}' },
+    env: { ...process.env },
   });
 
   return new Promise((resolve, reject) => {
@@ -94,6 +95,61 @@ function spawnOpencodeServer(
   });
 }
 
+async function canConnectToOpencodeServer(
+  url: string,
+  timeout: number,
+): Promise<boolean> {
+  const client = createOpencodeClient({ baseUrl: url });
+
+  return Promise.race<boolean>([
+    client.config
+      .get()
+      .then(() => true)
+      .catch(() => false),
+    new Promise<boolean>((resolve) => {
+      setTimeout(() => resolve(false), timeout);
+    }),
+  ]);
+}
+
+async function resolveOpenCodeServerHandle(
+  bin: string,
+  hostname: string,
+  preferredPort: number,
+  timeout: number,
+): Promise<{ url: string; close(): void }> {
+  const preferredUrl = `http://${hostname}:${preferredPort}`;
+
+  if (preferredPort > 0 && await canConnectToOpencodeServer(preferredUrl, OPENCODE_PROBE_TIMEOUT)) {
+    console.log(`[OpenCode] Reusing existing server at ${preferredUrl}`);
+    return {
+      url: preferredUrl,
+      close: () => {},
+    };
+  }
+
+  try {
+    return await spawnOpencodeServer(bin, hostname, preferredPort, timeout);
+  } catch (error) {
+    if (preferredPort > 0 && await canConnectToOpencodeServer(preferredUrl, OPENCODE_PROBE_TIMEOUT)) {
+      console.log(`[OpenCode] Reusing existing server at ${preferredUrl} after startup failure`);
+      return {
+        url: preferredUrl,
+        close: () => {},
+      };
+    }
+
+    if (preferredPort !== 0) {
+      console.warn(
+        `[OpenCode] Preferred port ${preferredPort} unavailable, retrying with a dynamic port...`,
+      );
+      return spawnOpencodeServer(bin, hostname, 0, timeout);
+    }
+
+    throw error;
+  }
+}
+
 export async function getClientForUser(_userId: string, directory?: string): Promise<OpencodeClient> {
   if (!serverHandle) {
     throw new Error('OpenCode server is not running. Call initOpenCode() first.');
@@ -124,12 +180,18 @@ export async function initOpenCode(): Promise<void> {
   console.log(`[OpenCode] Using binary: ${bin}`);
 
   try {
-    serverHandle = await spawnOpencodeServer(bin, OPENCODE_HOST, OPENCODE_PORT, OPENCODE_TIMEOUT);
+    serverHandle = await resolveOpenCodeServerHandle(
+      bin,
+      OPENCODE_HOST,
+      OPENCODE_PORT,
+      OPENCODE_TIMEOUT,
+    );
     broadcast('opencode:status', { status: 'ready', mode: 'host' });
     console.log(`[OpenCode] Server running at ${serverHandle.url}`);
   } catch (err) {
     console.error('[OpenCode] Failed to start server:', err);
     broadcast('opencode:status', { status: 'error', error: String(err) });
+    throw err;
   }
 }
 

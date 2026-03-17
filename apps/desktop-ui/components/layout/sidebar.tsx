@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, type ReactNode } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams, useRouter } from "next/navigation"
 import {
     Home, Inbox, Layers, Settings,
-    PanelLeftClose, LogOut, Archive, Brain,
+    PanelLeft, PanelLeftClose, LogIn, LogOut, Archive, Brain,
     ChevronRight, ChevronDown, CircleDot, Hexagon, MoreHorizontal, Pencil, Trash2, Plus
 } from "lucide-react"
 import { ProjectSelector } from "@/components/auth/project-selector"
@@ -34,11 +34,54 @@ const subNavItemClass = (isActive: boolean) =>
             : "text-linear-text-secondary hover:text-linear-text hover:bg-linear-bg-tertiary/50"
     )
 
+const railItemClass = (isActive: boolean) =>
+    cn(
+        "relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200",
+        isActive
+            ? "bg-linear-bg-tertiary text-linear-text shadow-sm"
+            : "text-linear-text-secondary hover:text-linear-text hover:bg-linear-bg-tertiary/60"
+    )
+
 interface SidebarProps {
     open: boolean
     onClose: () => void
+    onOpen: () => void
     width: number
     animating: boolean
+    isMobile: boolean
+}
+
+interface RailLinkProps {
+    href: string
+    isActive: boolean
+    label: string
+    badge?: number
+    children: ReactNode
+}
+
+function RailLink({ href, isActive, label, badge, children }: RailLinkProps) {
+    return (
+        <Link
+            href={href}
+            className={railItemClass(isActive)}
+            title={label}
+            aria-label={label}
+        >
+            {children}
+            {typeof badge === "number" && badge > 0 && (
+                <span
+                    className={cn(
+                        "absolute -right-1 -top-1 min-w-[16px] h-4 px-1 rounded-full text-[10px] flex items-center justify-center",
+                        badge > 0
+                            ? "text-linear-accent bg-linear-accent/12 border border-linear-accent/20"
+                            : "text-linear-text-tertiary bg-linear-bg-tertiary"
+                    )}
+                >
+                    {badge > 99 ? "99+" : badge}
+                </span>
+            )}
+        </Link>
+    )
 }
 
 function TeamSection({ team, pathname, searchParams, onDelete }: { team: Team; pathname: string; searchParams: URLSearchParams; onDelete: (teamId: string, teamName: string) => void }) {
@@ -133,7 +176,7 @@ function TeamSection({ team, pathname, searchParams, onDelete }: { team: Team; p
     )
 }
 
-export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
+export function Sidebar({ open, onClose, onOpen, width, animating, isMobile }: SidebarProps) {
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const router = useRouter()
@@ -219,6 +262,138 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
     }
 
     const isHomeNoFilter = pathname === "/" && !searchParams.get("teamId") && !searchParams.get("projectId")
+    const collapsed = !open && !isMobile
+
+    if (collapsed) {
+        return (
+            <aside
+                className="bg-linear-bg-secondary border-r border-linear-border flex flex-col flex-shrink-0 overflow-hidden h-full"
+                style={{
+                    width: 64,
+                    transition: animating ? 'width 150ms cubic-bezier(0.25, 0.1, 0.25, 1)' : 'none',
+                }}
+            >
+                <div className="p-2.5 border-b border-linear-border flex flex-col items-center gap-2">
+                    <Link
+                        href="/"
+                        className="flex h-10 w-10 items-center justify-center rounded-xl hover:bg-linear-bg-tertiary/60 transition-colors"
+                        title="OpenLinear"
+                        aria-label="OpenLinear home"
+                    >
+                        <img src="/logo.png" alt="OpenLinear" className="h-[20px] w-auto" />
+                    </Link>
+                    <button
+                        type="button"
+                        onClick={onOpen}
+                        className="flex h-10 w-10 items-center justify-center rounded-xl text-linear-text-tertiary hover:text-linear-text hover:bg-linear-bg-tertiary/60 transition-colors"
+                        title="Expand sidebar"
+                        aria-label="Expand sidebar"
+                    >
+                        <PanelLeft className="w-4 h-4" />
+                    </button>
+                </div>
+
+                <nav className="flex-1 overflow-y-auto py-3 px-2">
+                    <div className="flex flex-col items-center gap-2">
+                        <RailLink href="/" isActive={isHomeNoFilter} label="Home">
+                            <Home className="w-4 h-4" />
+                        </RailLink>
+                        <RailLink href="/inbox" isActive={pathname === "/inbox"} label="Inbox" badge={inboxCount.total}>
+                            <Inbox className="w-4 h-4" />
+                        </RailLink>
+                        <RailLink href="/my-issues" isActive={pathname === "/my-issues"} label="My Issues">
+                            <Layers className="w-4 h-4" />
+                        </RailLink>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-linear-border/80 flex flex-col items-center gap-2">
+                        {teams.map((team) => {
+                            const teamActive = pathname === "/" && searchParams.get("teamId") === team.id
+                            return (
+                                <Link
+                                    key={team.id}
+                                    href={`/?teamId=${team.id}`}
+                                    className={railItemClass(teamActive)}
+                                    title={`${team.name} issues`}
+                                    aria-label={`${team.name} issues`}
+                                >
+                                    <div
+                                        className="w-5 h-5 rounded-md flex items-center justify-center"
+                                        style={{ backgroundColor: `${team.color}25` }}
+                                    >
+                                        <span className="text-[10px] font-bold" style={{ color: team.color }}>
+                                            {team.name.charAt(0).toUpperCase()}
+                                        </span>
+                                    </div>
+                                </Link>
+                            )
+                        })}
+                        <RailLink href="/teams" isActive={pathname === "/teams" || pathname === "/teams/detail"} label="Teams">
+                            <Plus className="w-4 h-4" />
+                        </RailLink>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-linear-border/80 flex flex-col items-center gap-2">
+                        <RailLink href="/archived" isActive={pathname === "/archived"} label="Archived">
+                            <Archive className="w-4 h-4" />
+                        </RailLink>
+                        <RailLink
+                            href="/settings?section=ai-providers"
+                            isActive={pathname === "/settings" && searchParams.get("section") === "ai-providers"}
+                            label="Connect Provider"
+                        >
+                            <Brain className="w-4 h-4" />
+                        </RailLink>
+                        <RailLink href="/settings" isActive={pathname === "/settings"} label="Settings">
+                            <Settings className="w-4 h-4" />
+                        </RailLink>
+                    </div>
+                </nav>
+
+                <div className="p-2 border-t border-linear-border flex flex-col items-center gap-2">
+                    {isLoading ? (
+                        <div className="w-10 h-10 rounded-full bg-linear-bg-tertiary animate-pulse" />
+                    ) : isAuthenticated && user ? (
+                        <>
+                            {user.avatarUrl ? (
+                                <img
+                                    src={user.avatarUrl}
+                                    alt={user.username}
+                                    className="w-10 h-10 rounded-full border border-linear-border"
+                                    title={user.username}
+                                />
+                            ) : (
+                                <div
+                                    className="w-10 h-10 rounded-full bg-linear-bg-tertiary border border-linear-border flex items-center justify-center text-sm font-semibold text-linear-text"
+                                    title={user.username}
+                                >
+                                    {user.username.charAt(0).toUpperCase()}
+                                </div>
+                            )}
+                            <button
+                                type="button"
+                                onClick={logout}
+                                className="flex h-10 w-10 items-center justify-center rounded-xl text-linear-text-tertiary hover:text-linear-text hover:bg-linear-bg-tertiary/60 transition-colors"
+                                title="Sign out"
+                                aria-label="Sign out"
+                            >
+                                <LogOut className="w-4 h-4" />
+                            </button>
+                        </>
+                    ) : (
+                        <Link
+                            href="/login"
+                            className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-accent text-white hover:bg-linear-accent-hover transition-colors"
+                            title="Sign in"
+                            aria-label="Sign in"
+                        >
+                            <LogIn className="w-4 h-4" />
+                        </Link>
+                    )}
+                </div>
+            </aside>
+        )
+    }
 
     return (
         <aside
@@ -252,7 +427,7 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
                             />
                         </div>
                     )}
-                  <img src="/logo.png" alt="OpenLinear" className="h-[16px]" />
+                  <img src="/logo.png" alt="OpenLinear" className="h-[22px]" />
                 </div>
                 <div className="flex items-center gap-1">
                     <button

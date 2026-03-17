@@ -94,6 +94,7 @@ model TaskLabel {
 model Settings {
   id            String @id @default("default")
   parallelLimit Int    @default(3)
+  executionModel String?
 
   // Batch execution settings
   maxBatchSize     Int     @default(3)

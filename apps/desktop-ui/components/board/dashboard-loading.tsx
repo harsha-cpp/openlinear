@@ -15,7 +15,7 @@ function SkeletonColumn({
   cardCount: number
 }) {
   return (
-    <div className="flex flex-col h-full border-r border-white/[0.06] last:border-r-0 w-[85vw] flex-none md:w-full md:flex-auto snap-start">
+    <div className="flex flex-col h-full border-r border-white/[0.06] last:border-r-0 w-[85vw] flex-none md:w-full md:flex-auto">
       <div className="flex items-center justify-between px-4 py-3 h-12 flex-shrink-0 border-b border-white/[0.04] gap-2">
         <div className="flex items-center gap-2 min-w-0 flex-shrink overflow-hidden">
           <div className="w-16 h-3 bg-[#2a2a2a] rounded flex-shrink-0" />
@@ -59,7 +59,7 @@ function SkeletonCard() {
 export function DashboardLoading() {
   return (
     <div className="flex-1 overflow-hidden relative bg-[#111111] flex flex-col">
-      <div className="flex md:grid md:grid-cols-2 lg:grid-cols-4 flex-1 min-h-0 overflow-x-auto snap-x snap-mandatory md:overflow-x-visible md:snap-none">
+      <div className="flex md:grid md:grid-cols-2 lg:grid-cols-4 flex-1 min-h-0 overflow-x-auto overscroll-x-contain md:overflow-x-visible">
         {COLUMNS.map((column) => (
           <SkeletonColumn
             key={column.id}

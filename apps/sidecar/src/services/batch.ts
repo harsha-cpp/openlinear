@@ -9,6 +9,10 @@ import type { BatchState, BatchTask, BatchSettings, CreateBatchParams, BatchEven
 import type { OpencodeClient } from '@opencode-ai/sdk';
 import { getOrCreateBuffer, appendTextDelta, appendReasoningDelta, flushDeltaBuffer, cleanupDeltaBuffer, markThinking } from './delta-buffer';
 import { getGitIdentityEnv } from './git-identity';
+import {
+  parseModelReference,
+  resolveOpenCodeModelSelection,
+} from './opencode-catalog';
 
 const execAsync = promisify(exec);
 
@@ -22,6 +26,35 @@ interface BatchLogEntry {
   details?: string;
 }
 const batchTaskLogs = new Map<string, BatchLogEntry[]>();
+
+function normalizeBatchStartupError(error: unknown): string {
+  const raw =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : 'Unknown error';
+  const message = raw.trim();
+  const lower = message.toLowerCase();
+
+  if (!message) {
+    return 'OpenCode could not start a session';
+  }
+
+  if (lower.includes('the string did not match the expected pattern')) {
+    return 'OpenCode rejected the session request';
+  }
+
+  if (lower.includes('fetch failed')) {
+    return 'Could not reach the local OpenCode service';
+  }
+
+  if (lower.includes('opencode server is not running')) {
+    return 'The local OpenCode service is not running';
+  }
+
+  return message;
+}
 
 function broadcastBatchEvent(type: BatchEventType, batchId: string, data: Record<string, unknown> = {}): void {
   broadcast(type, { batchId, ...data, timestamp: new Date().toISOString() });
@@ -162,7 +195,6 @@ async function startTask(batch: BatchState, taskIndex: number): Promise<void> {
 
     const sessionResponse = await client.session.create({
       body: { title: task.title },
-      query: { directory: worktreePath },
     });
 
     const sessionId = sessionResponse.data?.id;
@@ -194,16 +226,34 @@ async function startTask(batch: BatchState, taskIndex: number): Promise<void> {
       prompt += `\n\n${taskRecord.description}`;
     }
 
+    let modelOverride: { providerID: string; modelID: string } | undefined;
+    try {
+      const selection = await resolveOpenCodeModelSelection(batch.userId, client);
+      const parsedModel = parseModelReference(selection.model);
+      if (parsedModel) {
+        modelOverride = parsedModel;
+        const labelPrefix = selection.source === 'legacy-openlinear'
+          ? 'Using legacy OpenLinear model'
+          : 'Using OpenCode model';
+        emitBatchLog(task.taskId, 'info', `${labelPrefix}: ${selection.model}`);
+      }
+    } catch (err) {
+      console.debug(`[Batch] Could not read model config for task ${task.taskId.slice(0, 8)}:`, err);
+    }
+
     client.session.prompt({
       path: { id: sessionId },
-      body: { parts: [{ type: 'text', text: prompt }] },
+      body: {
+        parts: [{ type: 'text', text: prompt }],
+        ...(modelOverride ? { model: modelOverride } : {}),
+      },
     }).then(() => {
       console.log(`[Batch] Prompt sent for task ${task.taskId.slice(0, 8)} in batch ${batch.id.slice(0, 8)}`);
     }).catch((err: Error) => {
       console.error(`[Batch] Failed to send prompt for task ${task.taskId.slice(0, 8)}:`, err.message);
     });
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    const errorMsg = normalizeBatchStartupError(error);
     console.error(`[Batch] Failed to start task ${task.taskId.slice(0, 8)}:`, errorMsg);
     task.status = 'failed';
     task.error = errorMsg;

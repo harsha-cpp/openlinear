@@ -2,6 +2,10 @@ import { join } from 'path';
 import { prisma } from '@openlinear/db';
 import { getClientForUser } from '../opencode';
 import { getOrCreateBuffer } from '../delta-buffer';
+import {
+  parseModelReference,
+  resolveOpenCodeModelSelection,
+} from '../opencode-catalog';
 
 import { cloneRepository, createBranch } from './git';
 import { subscribeToSessionEvents } from './events';
@@ -20,6 +24,35 @@ import {
   REPOS_DIR,
   TASK_TIMEOUT_MS,
 } from './state';
+
+function normalizeExecutionStartupError(error: unknown): string {
+  const raw =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : 'Unknown error';
+  const message = raw.trim();
+  const lower = message.toLowerCase();
+
+  if (!message) {
+    return 'OpenCode could not start a session';
+  }
+
+  if (lower.includes('the string did not match the expected pattern')) {
+    return 'OpenCode rejected the session request';
+  }
+
+  if (lower.includes('fetch failed')) {
+    return 'Could not reach the local OpenCode service';
+  }
+
+  if (lower.includes('opencode server is not running')) {
+    return 'The local OpenCode service is not running';
+  }
+
+  return message;
+}
 
 export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promise<{ success: boolean; error?: string }> {
   if (activeExecutions.has(taskId)) {
@@ -109,9 +142,6 @@ export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promis
       body: { 
         title: taskWithProject.title,
       },
-      query: {
-        directory: repoPath,
-      },
     });
 
     const sessionId = sessionResponse.data?.id;
@@ -188,15 +218,14 @@ export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promis
 
     let modelOverride: { providerID: string; modelID: string } | undefined;
     try {
-      const config = await client.config.get();
-      const modelStr = config.data?.model;
-      if (modelStr && modelStr.includes('/')) {
-        const slashIdx = modelStr.indexOf('/');
-        modelOverride = {
-          providerID: modelStr.slice(0, slashIdx),
-          modelID: modelStr.slice(slashIdx + 1),
-        };
-        addLogEntry(taskId, 'info', `Using model: ${modelStr}`);
+      const selection = await resolveOpenCodeModelSelection(userId, client);
+      const parsedModel = parseModelReference(selection.model);
+      if (parsedModel) {
+        modelOverride = parsedModel;
+        const labelPrefix = selection.source === 'legacy-openlinear'
+          ? 'Using legacy OpenLinear model'
+          : 'Using OpenCode model';
+        addLogEntry(taskId, 'info', `${labelPrefix}: ${selection.model}`);
       }
     } catch (err) {
       console.debug(`[Execution] Could not read model config for task ${taskId.slice(0, 8)}:`, err);
@@ -229,9 +258,10 @@ export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promis
     console.log(`[Execution] Started for task ${taskId} in ${repoPath}`);
     return { success: true };
   } catch (error) {
+    const normalizedError = normalizeExecutionStartupError(error);
     console.error(`[Execution] Failed to execute task ${taskId}:`, error);
-    broadcastProgress(taskId, 'error', error instanceof Error ? error.message : 'Execution failed');
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    broadcastProgress(taskId, 'error', normalizedError);
+    return { success: false, error: normalizedError };
   }
 }
 

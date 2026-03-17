@@ -21,7 +21,7 @@ interface ColumnProps {
 
 export function Column({ id, title, taskCount, children, onAddTask, selectionActive, onToggleSelection, onSelectAll, innerRef, droppableProps, isDraggingOver }: ColumnProps) {
   return (
-    <div className="flex flex-col h-full border-r border-white/[0.06] last:border-r-0 w-[90vw] sm:w-[72vw] flex-none md:w-full md:flex-auto snap-start bg-gradient-to-b from-white/[0.02] to-transparent">
+    <div className="flex flex-col h-full border-r border-white/[0.06] last:border-r-0 w-[90vw] sm:w-[72vw] flex-none md:w-full md:flex-auto bg-gradient-to-b from-white/[0.02] to-transparent">
       <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 backdrop-blur-sm bg-white/[0.02] border-b border-white/[0.04] gap-2 flex-nowrap min-h-11 flex-shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-shrink overflow-hidden">
           <h3 className="text-zinc-400 text-xs font-medium uppercase tracking-wider truncate">{title}</h3>

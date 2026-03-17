@@ -54,6 +54,7 @@ import {
   type GitHubRepo,
 } from "@/lib/api"
 import { useSSESubscription } from "@/providers/sse-provider"
+import { pickLocalFolder as chooseLocalFolder } from "@/lib/pick-local-folder"
 
 type StatusType = 'planned' | 'in_progress' | 'paused' | 'completed' | 'cancelled'
 
@@ -227,8 +228,7 @@ function ProjectsContent() {
     }
 
     try {
-      const { invoke } = await import("@tauri-apps/api/core")
-      const selectedPath = await invoke<string | null>("pick_local_folder")
+      const selectedPath = await chooseLocalFolder()
       if (!selectedPath) return
 
       if (isEdit) {

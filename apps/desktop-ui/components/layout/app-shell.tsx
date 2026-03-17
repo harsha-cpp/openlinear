@@ -7,6 +7,7 @@ import { Sidebar } from "./sidebar"
 const MIN_WIDTH = 200
 const MAX_WIDTH = 400
 const DEFAULT_WIDTH = 256
+const COLLAPSED_WIDTH = 64
 
 interface AppShellProps {
     children: ReactNode
@@ -94,8 +95,10 @@ export function AppShell({ children }: AppShellProps) {
                     <Sidebar
                         open={sidebarOpen}
                         onClose={closeSidebar}
+                        onOpen={() => setSidebarOpen(true)}
                         width={isMobile ? 300 : sidebarWidth}
                         animating={!dragging}
+                        isMobile={isMobile}
                     />
                 </Suspense>
             </div>
@@ -114,29 +117,34 @@ export function AppShell({ children }: AppShellProps) {
 
             <div
                 className="flex-1 flex flex-col min-w-0 overflow-hidden"
-                style={{
-                    paddingLeft: isMobile ? 0 : (sidebarOpen ? 0 : 48),
-                    transition: dragging ? 'none' : 'padding-left 150ms cubic-bezier(0.25, 0.1, 0.25, 1)',
-                }}
+                style={
+                    !isMobile
+                        ? {
+                            minWidth: `calc(100% - ${sidebarOpen ? sidebarWidth : COLLAPSED_WIDTH}px)`,
+                        }
+                        : undefined
+                }
             >
                 {children}
             </div>
 
-            {/* Floating sidebar toggle — fades in/out */}
-            <button
-                type="button"
-                onClick={() => setSidebarOpen(true)}
-                className="fixed top-3 left-3 z-50 w-8 h-8 rounded-md flex items-center justify-center bg-linear-bg-secondary/95 border border-linear-border text-linear-text-tertiary hover:text-linear-text hover:bg-linear-bg-tertiary shadow-lg backdrop-blur"
-                style={{
-                    opacity: sidebarOpen ? 0 : 1,
-                    transform: sidebarOpen ? 'scale(0.8)' : 'scale(1)',
-                    pointerEvents: sidebarOpen ? 'none' : 'auto',
-                    transition: 'opacity 150ms ease, transform 150ms ease',
-                }}
-                aria-label="Open sidebar"
-            >
-                <PanelLeft className="w-4 h-4" />
-            </button>
+            {/* Floating sidebar toggle remains mobile-only */}
+            {isMobile && (
+                <button
+                    type="button"
+                    onClick={() => setSidebarOpen(true)}
+                    className="fixed top-3 left-3 z-50 w-8 h-8 rounded-md flex items-center justify-center bg-linear-bg-secondary/95 border border-linear-border text-linear-text-tertiary hover:text-linear-text hover:bg-linear-bg-tertiary shadow-lg backdrop-blur"
+                    style={{
+                        opacity: sidebarOpen ? 0 : 1,
+                        transform: sidebarOpen ? 'scale(0.8)' : 'scale(1)',
+                        pointerEvents: sidebarOpen ? 'none' : 'auto',
+                        transition: 'opacity 150ms ease, transform 150ms ease',
+                    }}
+                    aria-label="Open sidebar"
+                >
+                    <PanelLeft className="w-4 h-4" />
+                </button>
+            )}
         </div>
     )
 }

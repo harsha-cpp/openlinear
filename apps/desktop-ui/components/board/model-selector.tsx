@@ -1,66 +1,114 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
-import { Cpu } from "lucide-react"
-import { getModelConfig, getModels } from "@/lib/api/opencode"
-
-const DEFAULT_MODEL_LABEL = "Local"
-
-function getModelLabel(modelValue: string | null, providers: Awaited<ReturnType<typeof getModels>>["providers"]): string {
-  if (!modelValue) return DEFAULT_MODEL_LABEL
-
-  const [providerId, ...modelIdParts] = modelValue.split("/")
-  const modelId = modelIdParts.join("/")
-  if (!providerId || !modelId) return modelValue
-
-  const matchedProvider = providers.find((provider) => provider.id === providerId)
-  const matchedModel = matchedProvider?.models.find((model) => model.id === modelId)
-
-  return matchedModel?.name || modelId || modelValue
-}
+import { Cpu, Loader2, AlertCircle } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { cn } from "@/lib/utils"
+import {
+  DEFAULT_MODEL_LABEL,
+  buildModelOptions,
+  getModelDescriptor,
+  useOpenCodeModel,
+} from "@/lib/opencode-model-selection"
 
 export function ModelSelector() {
-  const [modelLabel, setModelLabel] = useState(DEFAULT_MODEL_LABEL)
+  const {
+    providers,
+    currentModelValue,
+    currentSelectionLabel,
+    loading,
+    saving,
+    error,
+    setCurrentModel,
+  } = useOpenCodeModel()
 
-  const loadModelLabel = useCallback(async () => {
-    try {
-      const [modelsData, modelConfig] = await Promise.all([
-        getModels().catch(() => ({ providers: [] })),
-        getModelConfig().catch(() => ({ model: null, small_model: null })),
-      ])
+  const providerOptions = buildModelOptions(providers)
+  const hasOptions = providerOptions.length > 0
+  const selectedValue = currentModelValue ?? ""
+  const selectedDescriptor = getModelDescriptor(currentModelValue, providers)
 
-      setModelLabel(getModelLabel(modelConfig.model, modelsData.providers))
-    } catch {
-      setModelLabel(DEFAULT_MODEL_LABEL)
-    }
-  }, [])
-
-  useEffect(() => {
-    void loadModelLabel()
-
-    const handleRefresh = () => {
-      void loadModelLabel()
-    }
-
-    window.addEventListener("focus", handleRefresh)
-    document.addEventListener("visibilitychange", handleRefresh)
-
-    return () => {
-      window.removeEventListener("focus", handleRefresh)
-      document.removeEventListener("visibilitychange", handleRefresh)
-    }
-  }, [loadModelLabel])
+  const displayText = saving
+    ? "Updating..."
+    : selectedDescriptor.modelName || currentSelectionLabel
 
   return (
-    <div className="flex items-center gap-1.5 px-2 py-1 min-w-[132px] sm:min-w-0 flex-1 snap-start">
-      <Cpu className="w-3 h-3 flex-shrink-0 text-linear-text-secondary" />
+    <div className="flex min-w-[200px] flex-1 items-center gap-2 px-3 py-1.5">
+      <div className="relative">
+        <Cpu className="h-3.5 w-3.5 text-linear-text-secondary" />
+        {loading && (
+          <Loader2 className="absolute inset-0 h-3.5 w-3.5 animate-spin text-linear-accent" />
+        )}
+        {error && (
+          <AlertCircle className="absolute inset-0 h-3.5 w-3.5 text-red-400" />
+        )}
+      </div>
       <div className="min-w-0 flex-1">
-        <div className="text-[9px] uppercase tracking-[0.14em] text-linear-text-tertiary leading-tight">
-          Model
-        </div>
-        <div className="text-[12px] font-medium truncate leading-tight text-linear-text">
-          {modelLabel}
-        </div>
+        <div className="text-[10px] text-linear-text-tertiary mb-0.5">Model</div>
+        <Select
+          value={selectedValue}
+          onValueChange={(value) => {
+            void setCurrentModel(value)
+          }}
+          disabled={loading || saving || !hasOptions}
+        >
+          <SelectTrigger
+            className={cn(
+              "h-8 w-full justify-start rounded-lg border border-linear-border",
+              "bg-linear-bg px-2.5 text-sm text-linear-text",
+              "hover:border-linear-border-hover hover:bg-linear-bg-secondary",
+              "focus:ring-0 focus:ring-offset-0",
+              "disabled:cursor-not-allowed disabled:opacity-50",
+              "[&>svg:last-child]:h-3.5 [&>svg:last-child]:w-3.5 [&>svg:last-child]:text-linear-text-tertiary",
+            )}
+          >
+            <SelectValue className="sr-only" placeholder={DEFAULT_MODEL_LABEL} />
+            <span className="truncate">{displayText}</span>
+          </SelectTrigger>
+          <SelectContent className="border-linear-border bg-linear-bg-secondary text-linear-text">
+            {!hasOptions ? (
+              <div className="px-2 py-3 text-xs text-linear-text-tertiary">
+                No models configured
+              </div>
+            ) : (
+              providerOptions.map((provider, index) => (
+                <SelectGroup key={provider.id}>
+                  <SelectLabel className="px-2 pb-1 pt-2 text-xs font-medium text-linear-text-secondary">
+                    {provider.name}
+                  </SelectLabel>
+                  {provider.models.map((model) => (
+                    <SelectItem
+                      key={model.value}
+                      value={model.value}
+                      className="py-2 pr-3 pl-8 text-sm"
+                    >
+                      <div className="flex w-full items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate">
+                          {model.modelName}
+                        </span>
+                        {model.reasoning && (
+                          <span className="inline-flex flex-shrink-0 items-center rounded bg-linear-accent/10 px-1.5 py-0.5 text-[10px] text-linear-accent">
+                            reasoning
+                          </span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                  {index < providerOptions.length - 1 && (
+                    <SelectSeparator className="my-2 bg-linear-border" />
+                  )}
+                </SelectGroup>
+              ))
+            )}
+          </SelectContent>
+        </Select>
       </div>
     </div>
   )

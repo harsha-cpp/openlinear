@@ -10,7 +10,7 @@ export function Header() {
     <header className="sticky top-0 z-50 flex h-[80px] items-center justify-between bg-background px-6 md:px-20 border-b border-foreground/10">
       <div>
         <a href="/" className="flex items-center gap-3">
-          <img src="/logo.png" alt="OpenLinear" className="h-[40px]" />
+          <img src="/logo.png" alt="OpenLinear" className="h-[40px]" loading="lazy" />
           <span className="text-[20px] font-semibold tracking-tight text-foreground">OpenLinear</span>
         </a>
       </div>
@@ -43,7 +43,7 @@ export function Header() {
 
       <button
         type="button"
-        className="md:hidden text-foreground"
+        className="md:hidden text-foreground p-2 -mr-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
         onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
         aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
       >
@@ -52,9 +52,9 @@ export function Header() {
 
       {mobileMenuOpen && (
         <div className="absolute top-[80px] left-0 right-0 md:hidden border-b border-foreground/10 bg-background px-6 py-6">
-          <ul className="flex flex-col gap-4">
-            <li><a href="https://openlinear.mintlify.app" className="text-[16px] text-foreground">Docs</a></li>
-            <li><a href="https://github.com/kaizen403/openlinear" className="text-[16px] text-foreground">GitHub</a></li>
+          <ul className="flex flex-col gap-1">
+            <li><a href="https://openlinear.mintlify.app" className="block text-[16px] text-foreground py-3">Docs</a></li>
+            <li><a href="https://github.com/kaizen403/openlinear" className="block text-[16px] text-foreground py-3">GitHub</a></li>
             <li>
               <a
                 href="https://github.com/kaizen403/openlinear/releases"

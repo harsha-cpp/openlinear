@@ -121,11 +121,11 @@ done
 
 case "$MODE" in
     --api-only)
-        log "Starting API only..."
-        API_PORT=3001 pnpm --filter @openlinear/api dev &
+        log "Starting sidecar only..."
+        API_PORT=3001 pnpm --filter @openlinear/sidecar dev &
         PIDS+=($!)
         sleep 2
-        ok "API:  http://localhost:3001"
+        ok "Sidecar:  http://localhost:3001"
         ;;
     --ui-only)
         log "Starting UI only..."
@@ -135,19 +135,15 @@ case "$MODE" in
         ok "UI:   http://localhost:3000"
         ;;
     --desktop)
-        log "Starting API + Desktop app..."
-        API_PORT=3001 pnpm --filter @openlinear/api dev &
-        PIDS+=($!)
-        sleep 2
-        ok "API:  http://localhost:3001"
         log "Starting Tauri desktop..."
+        ok "Sidecar: managed by desktop app on http://localhost:3001"
         API_PORT=3001 PORT=3000 pnpm --filter @openlinear/desktop tauri dev
         cleanup
         exit 0
         ;;
     all|*)
-        log "Starting API..."
-        API_PORT=3001 pnpm --filter @openlinear/api dev &
+        log "Starting sidecar..."
+        API_PORT=3001 pnpm --filter @openlinear/sidecar dev &
         PIDS+=($!)
         sleep 2
 
@@ -157,7 +153,7 @@ case "$MODE" in
         sleep 2
 
         echo ""
-        echo -e "  ${GREEN}✓${NC} API:  ${CYAN}http://localhost:3001${NC}"
+        echo -e "  ${GREEN}✓${NC} Sidecar:  ${CYAN}http://localhost:3001${NC}"
         echo -e "  ${GREEN}✓${NC} UI:   ${CYAN}http://localhost:3000${NC}"
         echo -e "  ${GREEN}✓${NC} DB:   ${CYAN}localhost:5432${NC}"
         echo ""

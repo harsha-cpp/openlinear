@@ -15,15 +15,11 @@ const router: Router = Router();
 
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    let settings = await prisma.settings.findUnique({
+    const settings = await prisma.settings.upsert({
       where: { id: 'default' },
+      update: {},
+      create: { id: 'default' },
     });
-
-    if (!settings) {
-      settings = await prisma.settings.create({
-        data: { id: 'default' },
-      });
-    }
 
     res.json(settings);
   } catch (error) {

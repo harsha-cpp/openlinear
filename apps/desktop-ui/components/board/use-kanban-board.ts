@@ -7,8 +7,12 @@ import { useAuth } from "@/hooks/use-auth";
 import { Project } from "@/lib/api";
 import type { Repository } from "@/lib/api";
 import { Task, ExecutionProgress, ExecutionLogEntry, PendingPermission } from "@/types/task";
-import { API_URL, getAuthHeader, isDesktopRuntime } from "@/lib/api/client";
-import { getSetupStatus, hasConfiguredProviders } from "@/lib/api/opencode";
+import {
+  API_URL,
+  getAuthHeader,
+  toApiConnectionError,
+} from "@/lib/api/client";
+import { getSetupStatus } from "@/lib/api/opencode";
 import {
   metadataQueue,
   TaskSyncState,
@@ -42,6 +46,124 @@ export interface ActiveBatch {
 
 export const API_BASE_URL = API_URL;
 const SIDECAR_URL = process.env.NEXT_PUBLIC_SIDECAR_URL || "http://localhost:3001";
+const EXECUTION_POLL_INTERVAL_MS = 2500;
+
+function normalizeExecutionMessage(message: string): string {
+  const normalized = message.trim();
+  const lower = normalized.toLowerCase();
+
+  if (!normalized) {
+    return "OpenCode could not start the task.";
+  }
+
+  if (lower.includes("no active project selected")) {
+    return "Select a project or connect a repository before running tasks.";
+  }
+
+  if (lower.includes("task is already running")) {
+    return "This task is already running.";
+  }
+
+  if (
+    lower.includes("opencode server is not running") ||
+    lower.includes("call initopencode() first")
+  ) {
+    return "The local OpenCode service is not running. Restart the app and try again.";
+  }
+
+  if (lower.includes("the string did not match the expected pattern")) {
+    return "OpenCode rejected the session request.";
+  }
+
+  if (
+    lower.includes("failed to start opencode session") ||
+    lower.includes("failed to create opencode session")
+  ) {
+    return "OpenCode could not start a session.";
+  }
+
+  if (
+    lower.includes("fetch failed") ||
+    lower.includes("failed to connect to the local opencode service")
+  ) {
+    return "Could not reach the local OpenCode service.";
+  }
+
+  if (
+    lower.includes("cannot post /api/tasks/") &&
+    lower.includes("/execute")
+  ) {
+    return "The local execution service is not available on the configured port.";
+  }
+
+  return normalized;
+}
+
+async function readResponseErrorMessage(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  const body = await response.text().catch(() => "");
+  const message = body.trim();
+
+  if (!message) {
+    return fallback;
+  }
+
+  try {
+    const payload = JSON.parse(message) as {
+      error?: unknown;
+      message?: unknown;
+    };
+
+    if (typeof payload.error === "string" && payload.error.trim()) {
+      return payload.error.trim();
+    }
+
+    if (typeof payload.message === "string" && payload.message.trim()) {
+      return payload.message.trim();
+    }
+  } catch {}
+
+  const htmlRouteError = message.match(/<pre>([^<]+)<\/pre>/i)?.[1]?.trim();
+  if (htmlRouteError) {
+    return htmlRouteError;
+  }
+
+  return message;
+}
+
+function getLogEntryKey(entry: ExecutionLogEntry): string {
+  return [
+    entry.timestamp,
+    entry.type,
+    entry.message,
+    entry.details ?? "",
+  ].join("|");
+}
+
+function mergeLogEntries(
+  existing: ExecutionLogEntry[],
+  incoming: ExecutionLogEntry[],
+): ExecutionLogEntry[] {
+  if (incoming.length === 0) return existing;
+
+  const merged = [...existing];
+  const seen = new Set(existing.map(getLogEntryKey));
+
+  for (const entry of incoming) {
+    const key = getLogEntryKey(entry);
+    if (!seen.has(key)) {
+      merged.push(entry);
+      seen.add(key);
+    }
+  }
+
+  return merged.sort(
+    (a, b) =>
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+  );
+}
 
 export interface KanbanBoardConfigState {
   tasks: Task[];
@@ -156,6 +278,8 @@ export function useKanbanBoard({
   const { isAuthenticated, activeRepository, refreshActiveRepository } =
     useAuth();
   const metadataUnsubscribersRef = useRef<Map<string, () => void>>(new Map());
+  const taskLogsRef = useRef(taskLogs);
+  const executionProgressRef = useRef(executionProgress);
 
   const batchTaskIds = activeBatch?.tasks.map((t) => t.taskId) ?? [];
   const completedBatchTaskIds = completedBatch?.taskIds ?? [];
@@ -249,6 +373,14 @@ export function useKanbanBoard({
   }, []);
 
   useEffect(() => {
+    taskLogsRef.current = taskLogs;
+  }, [taskLogs]);
+
+  useEffect(() => {
+    executionProgressRef.current = executionProgress;
+  }, [executionProgress]);
+
+  useEffect(() => {
     setSelectingColumns((prev) => {
       const next = new Set(prev);
       let changed = false;
@@ -321,7 +453,6 @@ export function useKanbanBoard({
   }, [isAuthenticated, refreshActiveRepository]);
 
   const selectedProject = projects.find((p) => p.id === projectId);
-  const desktopRuntime = isDesktopRuntime();
   const canExecute = !!(
     selectedProject?.repositoryId ||
     selectedProject?.repoUrl ||
@@ -530,10 +661,10 @@ export function useKanbanBoard({
           if (logData.taskId && logData.entry) {
             setTaskLogs((prev) => ({
               ...prev,
-              [logData.taskId]: [
-                ...(prev[logData.taskId] || []),
-                logData.entry,
-              ],
+              [logData.taskId]: mergeLogEntries(
+                prev[logData.taskId] || [],
+                [logData.entry],
+              ),
             }));
           }
           break;
@@ -827,6 +958,57 @@ export function useKanbanBoard({
     await updateTaskStatus(draggableId, newStatus);
   };
 
+  const appendTaskLog = useCallback(
+    (taskId: string, entry: ExecutionLogEntry) => {
+      setTaskLogs((prev) => ({
+        ...prev,
+        [taskId]: mergeLogEntries(prev[taskId] || [], [entry]),
+      }));
+    },
+    [],
+  );
+
+  const fetchTaskLogs = useCallback(
+    async (taskId: string, force = false) => {
+      if (!force && taskLogsRef.current[taskId] !== undefined) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`${SIDECAR_URL}/api/tasks/${taskId}/logs`, {
+          headers: getAuthHeader(),
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = await response.json();
+        const incomingLogs = Array.isArray(data.logs) ? data.logs : [];
+
+        setTaskLogs((prev) => {
+          const currentLogs = prev[taskId] || [];
+          const nextLogs = mergeLogEntries(currentLogs, incomingLogs);
+
+          if (
+            currentLogs.length === nextLogs.length &&
+            currentLogs.every(
+              (entry, index) =>
+                getLogEntryKey(entry) === getLogEntryKey(nextLogs[index]!),
+            )
+          ) {
+            return prev;
+          }
+
+          return { ...prev, [taskId]: nextLogs };
+        });
+      } catch (err) {
+        console.error("Error fetching task logs:", err);
+      }
+    },
+    [],
+  );
+
   const handleExecute = async (taskId: string) => {
     if (!canExecute) {
       console.error("No active project - connect a repo first");
@@ -834,35 +1016,77 @@ export function useKanbanBoard({
     }
 
     try {
-      if (!desktopRuntime) {
-        const status = await getSetupStatus().catch(() => null);
-        if (status && !status.ready && !hasConfiguredProviders()) {
-          setPendingExecuteTaskId(taskId);
-          setShowProviderSetup(true);
-          return;
-        }
+      const status = await getSetupStatus().catch(() => null);
+      if (status && !status.ready) {
+        setPendingExecuteTaskId(taskId);
+        setShowProviderSetup(true);
+        return;
       }
 
-      const token = localStorage.getItem("token");
-      const headers: HeadersInit = {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
+      const startedAt = new Date().toISOString();
+      setSelectedTaskId(taskId);
+      setTasks((prev) =>
+        prev.map((task) =>
+          task.id === taskId
+            ? {
+                ...task,
+                status:
+                  task.status === "todo" ? ("in_progress" as const) : task.status,
+                executionStartedAt: task.executionStartedAt ?? startedAt,
+                executionPausedAt: null,
+              }
+            : task,
+        ),
+      );
+      setExecutionProgress((prev) => ({
+        ...prev,
+        [taskId]:
+          prev[taskId] &&
+          ["cloning", "executing", "committing", "creating_pr"].includes(
+            prev[taskId].status,
+          )
+            ? prev[taskId]
+            : {
+                taskId,
+                status: "executing",
+                message: "Starting task...",
+              },
+      }));
+      void fetchTaskLogs(taskId, true);
 
       const response = await fetch(
         `${SIDECAR_URL}/api/tasks/${taskId}/execute`,
         {
           method: "POST",
-          headers,
+          headers: getAuthHeader(),
         },
       );
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(
-          error.error || `Failed to execute task: ${response.statusText}`,
+        const message = await readResponseErrorMessage(
+          response,
+          `Failed to execute task: ${response.statusText}`,
         );
+        throw new Error(message);
       }
     } catch (err) {
-      console.error("Error executing task:", err);
+      const error = toApiConnectionError(err, "Failed to execute task");
+      const message = normalizeExecutionMessage(error.message);
+      setExecutionProgress((prev) => ({
+        ...prev,
+        [taskId]: {
+          taskId,
+          status: "error",
+          message,
+        },
+      }));
+      appendTaskLog(taskId, {
+        timestamp: new Date().toISOString(),
+        type: "error",
+        message,
+      });
+      toast.error(message);
+      console.error("Error executing task:", error);
+      void fetchTasks({ silent: true });
     }
   };
 
@@ -886,22 +1110,41 @@ export function useKanbanBoard({
 
   const handleTaskClick = async (taskId: string) => {
     setSelectedTaskId(taskId);
-
-    if (!taskLogs[taskId]) {
-      try {
-        const response = await fetch(
-          `${SIDECAR_URL}/api/tasks/${taskId}/logs`,
-          { headers: getAuthHeader() },
-        );
-        if (response.ok) {
-          const data = await response.json();
-          setTaskLogs((prev) => ({ ...prev, [taskId]: data.logs || [] }));
-        }
-      } catch (err) {
-        console.error("Error fetching task logs:", err);
-      }
-    }
+    const task = tasks.find((item) => item.id === taskId);
+    void fetchTaskLogs(
+      taskId,
+      task?.status === "in_progress" || (taskLogsRef.current[taskId] || []).length === 0,
+    );
   };
+
+  useEffect(() => {
+    if (!selectedTaskId) return;
+
+    const selectedTask = tasks.find((task) => task.id === selectedTaskId);
+    if (!selectedTask || selectedTask.status !== "in_progress") return;
+
+    if (!executionProgressRef.current[selectedTaskId]) {
+      setExecutionProgress((prev) => ({
+        ...prev,
+        [selectedTaskId]: {
+          taskId: selectedTaskId,
+          status: "executing",
+          message: "Task is running...",
+        },
+      }));
+    }
+
+    void fetchTaskLogs(selectedTaskId, true);
+
+    const intervalId = window.setInterval(() => {
+      void fetchTaskLogs(selectedTaskId, true);
+      void fetchTasks({ silent: true });
+    }, EXECUTION_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [selectedTaskId, tasks, fetchTaskLogs, fetchTasks]);
 
   const handleDrawerClose = () => {
     setSelectedTaskId(null);
@@ -961,17 +1204,12 @@ export function useKanbanBoard({
       const taskId = pendingExecuteTaskId;
       setPendingExecuteTaskId(null);
       try {
-        const token = localStorage.getItem("token");
-        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-        await fetch(`${SIDECAR_URL}/api/tasks/${taskId}/execute`, {
-          method: "POST",
-          headers,
-        });
+        await handleExecute(taskId);
       } catch (err) {
         console.error("Error executing task after provider setup:", err);
       }
     }
-  }, [pendingExecuteTaskId]);
+  }, [handleExecute, pendingExecuteTaskId]);
 
   const handlePermissionRespond = useCallback(async (
     taskId: string,

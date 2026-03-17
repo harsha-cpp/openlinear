@@ -1,6 +1,5 @@
 import { getAuthHeader } from './client';
 
-// Sidecar runs locally and handles all OpenCode/execution operations
 const SIDECAR_URL = process.env.NEXT_PUBLIC_SIDECAR_URL || 'http://localhost:3001';
 
 export interface ProviderInfo {
@@ -19,6 +18,153 @@ export interface ProviderAuthMethod {
 }
 
 export type ProviderAuthMethods = Record<string, ProviderAuthMethod[]>;
+
+export interface ModelInfo {
+  id: string;
+  provider: string;
+  name: string;
+  status: string;
+  reasoning: boolean;
+  toolCall: boolean;
+  limit?: { context: number; output: number };
+  cost: { input: number; output: number };
+  source?: 'sdk' | 'fallback';
+}
+
+export interface ProviderModels {
+  id: string;
+  name: string;
+  models: ModelInfo[];
+  source?: 'env' | 'config' | 'custom' | 'api' | 'fallback';
+}
+
+export interface ModelConfig {
+  model: string | null;
+  small_model: string | null;
+  source?: 'opencode' | 'legacy-openlinear' | 'unset';
+  effective_model?: string | null;
+  override_model?: string | null;
+  configured_model?: string | null;
+  legacy_model?: string | null;
+}
+
+export interface ModelCatalog {
+  providers: ProviderModels[];
+  selection: ModelConfig | null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function readString(source: Record<string, unknown> | null | undefined, keys: string[]): string | null {
+  if (!source) return null;
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'string' && value) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function normalizeModelInfo(model: Record<string, unknown>): ModelInfo {
+  const limitValue = model.limit
+  const costValue = model.cost
+
+  const limit = isRecord(limitValue)
+    ? {
+        context: typeof limitValue.context === 'number' ? limitValue.context : 0,
+        output: typeof limitValue.output === 'number' ? limitValue.output : 0,
+      }
+    : undefined;
+
+  const cost = isRecord(costValue)
+    ? {
+        input: typeof costValue.input === 'number' ? costValue.input : 0,
+        output: typeof costValue.output === 'number' ? costValue.output : 0,
+      }
+    : { input: 0, output: 0 };
+
+  return {
+    id: typeof model.id === 'string' ? model.id : '',
+    provider: typeof model.provider === 'string' ? model.provider : '',
+    name: readString(model, ['name']) || (typeof model.id === 'string' ? model.id : ''),
+    status: readString(model, ['status']) || 'available',
+    reasoning: Boolean(model.reasoning),
+    toolCall: Boolean(model.toolCall ?? model.tool_call),
+    limit,
+    cost,
+    source:
+      model.source === 'sdk' || model.source === 'fallback'
+        ? model.source
+        : undefined,
+  };
+}
+
+function normalizeProviderModels(provider: Record<string, unknown>): ProviderModels {
+  const modelsValue = provider.models
+  const rawModels = Array.isArray(modelsValue)
+    ? modelsValue
+    : isRecord(modelsValue)
+      ? Object.values(modelsValue)
+      : [];
+
+  return {
+    id: typeof provider.id === 'string' ? provider.id : '',
+    name: readString(provider, ['name']) || (typeof provider.id === 'string' ? provider.id : ''),
+    models: rawModels.filter(isRecord).map(normalizeModelInfo),
+    source:
+      provider.source === 'env' ||
+      provider.source === 'config' ||
+      provider.source === 'custom' ||
+      provider.source === 'api' ||
+      provider.source === 'fallback'
+        ? provider.source
+        : undefined,
+  };
+}
+
+function normalizeModelSelection(payload: unknown): ModelConfig {
+  if (!isRecord(payload)) {
+    return { model: null, small_model: null };
+  }
+
+  const selection = isRecord(payload.selection) ? payload.selection : null;
+  const selectionSource = readString(selection, ['source']);
+  const payloadSource = readString(payload, ['source']);
+  const effectiveModel =
+    readString(selection, ['effective_model', 'effectiveModel']) ||
+    readString(selection, ['model']) ||
+    readString(payload, ['effective_model', 'effectiveModel', 'model']);
+  const configuredModel =
+    readString(selection, ['configured_model', 'configuredModel']) ||
+    readString(payload, ['configured_model', 'configuredModel']);
+  const legacyModel =
+    readString(selection, ['legacy_model', 'legacyModel']) ||
+    readString(payload, ['legacy_model', 'legacyModel']);
+  const normalizedSource =
+    selectionSource === 'opencode' || selectionSource === 'legacy-openlinear' || selectionSource === 'unset'
+      ? selectionSource
+      : payloadSource === 'opencode' || payloadSource === 'legacy-openlinear' || payloadSource === 'unset'
+        ? payloadSource
+        : undefined;
+
+  return {
+    model: effectiveModel,
+    small_model:
+      readString(selection, ['small_model', 'smallModel']) ||
+      readString(payload, ['small_model', 'smallModel']),
+    source: normalizedSource as ModelConfig['source'],
+    effective_model: effectiveModel,
+    override_model:
+      readString(selection, ['override_model', 'overrideModel']) ||
+      readString(payload, ['override_model', 'overrideModel']) ||
+      legacyModel,
+    configured_model: configuredModel,
+    legacy_model: legacyModel,
+  };
+}
 
 export async function getSetupStatus(): Promise<SetupStatus> {
   const res = await fetch(`${SIDECAR_URL}/api/opencode/setup-status`, {
@@ -104,83 +250,41 @@ export async function oauthCallback(
   }
 }
 
-// --- Configured providers localStorage cache ---
-// The sidecar's provider list can be slow to update after auth.set().
-// We persist confirmed saves here so the execute flow doesn't show a false "not configured" state.
-const CONFIGURED_PROVIDERS_KEY = 'openlinear-configured-providers';
-
-export function addConfiguredProvider(providerId: string): void {
-  try {
-    const existing = JSON.parse(localStorage.getItem(CONFIGURED_PROVIDERS_KEY) || '[]') as string[];
-    if (!existing.includes(providerId)) {
-      existing.push(providerId);
-      localStorage.setItem(CONFIGURED_PROVIDERS_KEY, JSON.stringify(existing));
-    }
-  } catch {
-    localStorage.setItem(CONFIGURED_PROVIDERS_KEY, JSON.stringify([providerId]));
-  }
-}
-
-export function getConfiguredProviderIds(): string[] {
-  try {
-    return JSON.parse(localStorage.getItem(CONFIGURED_PROVIDERS_KEY) || '[]') as string[];
-  } catch {
-    return [];
-  }
-}
-
-export function hasConfiguredProviders(): boolean {
-  return getConfiguredProviderIds().length > 0;
-}
-
-export interface ModelInfo {
-  id: string
-  provider: string
-  name: string
-  status: string
-  reasoning: boolean
-  toolCall: boolean
-  limit?: { context: number; output: number }
-  cost: { input: number; output: number }
-}
-
-export interface ProviderModels {
-  id: string
-  name: string
-  models: ModelInfo[]
-}
-
-export interface ModelConfig {
-  model: string | null
-  small_model: string | null
-}
-
-export async function getModels(): Promise<{ providers: ProviderModels[] }> {
+export async function getModels(): Promise<ModelCatalog> {
   const res = await fetch(`${SIDECAR_URL}/api/opencode/models`, {
     headers: getAuthHeader(),
-  })
+  });
   if (!res.ok) {
-    if (res.status === 401 || res.status === 500) {
-      return { providers: [] }
-    }
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Failed to get models')
+    throw new Error(data.error || 'Failed to get models');
   }
-  return res.json()
+
+  const payload = await res.json().catch(() => ({}));
+  const providersRaw = isRecord(payload)
+    ? Array.isArray(payload.providers)
+      ? payload.providers
+      : isRecord(payload.catalog) && Array.isArray(payload.catalog.providers)
+        ? payload.catalog.providers
+        : []
+    : [];
+
+  return {
+    providers: providersRaw.filter(isRecord).map(normalizeProviderModels),
+    selection: normalizeModelSelection(payload),
+  };
 }
 
 export async function getModelConfig(): Promise<ModelConfig> {
   const res = await fetch(`${SIDECAR_URL}/api/opencode/config`, {
     headers: getAuthHeader(),
-  })
+  });
   if (!res.ok) {
-    if (res.status === 401 || res.status === 500) {
-      return { model: null, small_model: null }
-    }
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Failed to get model config')
+    throw new Error(data.error || 'Failed to get model config');
   }
-  return res.json()
+
+  const payload = await res.json().catch(() => ({}));
+  return normalizeModelSelection(payload);
 }
 
 export async function setModel(model: string): Promise<void> {
@@ -191,9 +295,9 @@ export async function setModel(model: string): Promise<void> {
       ...getAuthHeader(),
     },
     body: JSON.stringify({ model }),
-  })
+  });
   if (!res.ok) {
-    const data = await res.json().catch(() => ({}))
-    throw new Error(data.error || 'Failed to set model')
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to set model');
   }
 }

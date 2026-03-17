@@ -30,7 +30,11 @@ pub async fn start_api_server(app: tauri::AppHandle, database_url: String) -> Re
 }
 
 pub async fn start_api_server_with_saved_database_url(app: tauri::AppHandle) -> Result<(), String> {
-    let database_url = load_saved_database_url(&app).unwrap_or_else(|| DEFAULT_DATABASE_URL.to_string());
+    let database_url = std::env::var("DATABASE_URL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| load_saved_database_url(&app))
+        .unwrap_or_else(|| DEFAULT_DATABASE_URL.to_string());
     start_api_server_inner(app, database_url).await
 }
 

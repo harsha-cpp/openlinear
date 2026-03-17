@@ -1,6 +1,7 @@
 //! OpenCode CLI detection module
 
 use serde::Serialize;
+use std::path::PathBuf;
 use std::process::Command;
 use which::which;
 
@@ -82,7 +83,12 @@ pub fn check_opencode() -> OpenCodeStatus {
 
 #[tauri::command]
 pub fn pick_local_folder() -> Option<String> {
-    rfd::FileDialog::new()
+    let dialog = match default_home_dir() {
+        Some(path) => rfd::FileDialog::new().set_directory(path),
+        None => rfd::FileDialog::new(),
+    };
+
+    dialog
         .pick_folder()
         .map(|path| path.to_string_lossy().to_string())
 }
@@ -90,6 +96,12 @@ pub fn pick_local_folder() -> Option<String> {
 #[allow(dead_code)]
 fn check_binary_exists(binary_name: &str) -> bool {
     which(binary_name).is_ok()
+}
+
+fn default_home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
 }
 
 #[cfg(test)]

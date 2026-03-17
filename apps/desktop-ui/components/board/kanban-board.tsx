@@ -261,7 +261,10 @@ export function KanbanBoard(props: KanbanBoardProps) {
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          style={provided.draggableProps.style}
+          style={{
+            ...(provided.draggableProps.style || {}),
+            willChange: snapshot.isDragging ? "transform" : undefined,
+          }}
         >
           <TaskCard
             task={task}
@@ -334,7 +337,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
           />
         )}
 
-        <div className="flex md:grid md:grid-cols-2 lg:grid-cols-4 flex-1 min-h-0 overflow-x-auto snap-x snap-mandatory md:overflow-x-visible md:snap-none">
+        <div className="flex md:grid md:grid-cols-2 lg:grid-cols-4 flex-1 min-h-0 overflow-x-auto overscroll-x-contain md:overflow-x-visible">
           {COLUMNS.map((column) => {
             const columnTasks = getTasksByStatus(column.status);
             const hasParallelGroup =

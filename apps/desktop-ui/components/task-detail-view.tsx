@@ -50,6 +50,44 @@ const logColors = {
   success: 'text-green-400',
 }
 
+const progressConfig = {
+  cloning: {
+    label: 'Preparing repository',
+    tone: 'text-blue-400',
+    surface: 'bg-blue-500/10 border-blue-500/20',
+  },
+  executing: {
+    label: 'Running',
+    tone: 'text-linear-accent',
+    surface: 'bg-linear-accent/10 border-linear-accent/20',
+  },
+  committing: {
+    label: 'Committing changes',
+    tone: 'text-yellow-400',
+    surface: 'bg-yellow-500/10 border-yellow-500/20',
+  },
+  creating_pr: {
+    label: 'Creating pull request',
+    tone: 'text-purple-400',
+    surface: 'bg-purple-500/10 border-purple-500/20',
+  },
+  done: {
+    label: 'Done',
+    tone: 'text-green-400',
+    surface: 'bg-green-500/10 border-green-500/20',
+  },
+  cancelled: {
+    label: 'Cancelled',
+    tone: 'text-zinc-400',
+    surface: 'bg-zinc-500/10 border-zinc-500/20',
+  },
+  error: {
+    label: 'Failed',
+    tone: 'text-red-400',
+    surface: 'bg-red-500/10 border-red-500/20',
+  },
+}
+
 function formatTime(timestamp: string): string {
   const date = new Date(timestamp)
   return date.toLocaleTimeString('en-US', {
@@ -181,6 +219,12 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
   const statusInfo = statusConfig[task.status]
   const priorityInfo = priorityConfig[task.priority]
   const PriorityIcon = priorityInfo.icon
+  const liveProgress = progress ?? (isExecuting ? {
+    taskId: task.id,
+    status: 'executing' as const,
+    message: 'Task is running...'
+  } : undefined)
+  const showLiveProgress = !!liveProgress && task.status !== 'done'
 
   return (
     <div className="absolute inset-0 z-40 bg-linear-bg">
@@ -288,6 +332,40 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                     </h1>
                   )}
                 </div>
+
+                {showLiveProgress && (
+                  <div
+                    className={cn(
+                      "mb-6 p-4 border rounded-lg",
+                      progressConfig[liveProgress.status].surface,
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-full bg-black/20 flex items-center justify-center flex-shrink-0">
+                        {['cloning', 'executing', 'committing', 'creating_pr'].includes(liveProgress.status) ? (
+                          <Loader2 className={cn("w-4 h-4 animate-spin", progressConfig[liveProgress.status].tone)} />
+                        ) : liveProgress.status === 'done' ? (
+                          <CheckCircle className={cn("w-4 h-4", progressConfig[liveProgress.status].tone)} />
+                        ) : liveProgress.status === 'error' ? (
+                          <AlertCircle className={cn("w-4 h-4", progressConfig[liveProgress.status].tone)} />
+                        ) : (
+                          <Clock className={cn("w-4 h-4", progressConfig[liveProgress.status].tone)} />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[11px] uppercase tracking-[0.16em] text-linear-text-tertiary">
+                          Status
+                        </div>
+                        <div className={cn("text-sm font-medium mt-1", progressConfig[liveProgress.status].tone)}>
+                          {progressConfig[liveProgress.status].label}
+                        </div>
+                        <p className="text-sm text-linear-text-secondary mt-1 break-words">
+                          {liveProgress.message || progressConfig[liveProgress.status].label}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {task.status === 'done' && (
                   <div className="mb-6 p-4 bg-linear-bg-secondary border border-linear-border rounded-lg">
@@ -461,8 +539,14 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                     {logs.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-12 text-linear-text-tertiary">
                         <Clock className="w-8 h-8 mb-2 opacity-50" />
-                        <p className="text-sm">No activity yet</p>
-                        <p className="text-xs mt-1">Execution logs will appear here when a task is run</p>
+                        <p className="text-sm">
+                          {showLiveProgress ? 'Waiting for logs...' : 'No activity yet'}
+                        </p>
+                        <p className="text-xs mt-1 text-center max-w-xs">
+                          {showLiveProgress
+                            ? 'The task is running. Logs will appear here when the agent emits them.'
+                            : 'Execution logs will appear here when a task is run'}
+                        </p>
                       </div>
                     ) : (
                       [...logs].reverse().map((log, index) => {

@@ -28,6 +28,7 @@ import {
 } from "@/lib/api"
 import { useAuth } from "@/hooks/use-auth"
 import { openExternal } from "@/lib/utils"
+import { pickLocalFolder as chooseLocalFolder } from "@/lib/pick-local-folder"
 
 const SPRING = { type: "spring" as const, stiffness: 300, damping: 30 }
 
@@ -419,13 +420,14 @@ function ProjectStep({
 
     setIsPickingLocalPath(true)
     try {
-      const { invoke } = await import("@tauri-apps/api/core")
-      const selectedPath = await invoke<string | null>("pick_local_folder")
+      const selectedPath = await chooseLocalFolder()
       if (selectedPath) {
         setLocalPath(selectedPath)
       }
-    } catch {
-      toast.error("Failed to choose local folder")
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to choose local folder",
+      )
     } finally {
       setIsPickingLocalPath(false)
     }
