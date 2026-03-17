@@ -42,6 +42,7 @@ fi
 
 replace_line "$PKGBUILD" "^pkgver=" "pkgver=${VERSION}"
 replace_line "$PKGBUILD" "^pkgrel=" "pkgrel=1"
+chmod 644 "$PKGBUILD"
 
 cat > "$SRCINFO" <<EOF
 pkgbase = openlinear-bin
@@ -69,5 +70,7 @@ pkgbase = openlinear-bin
 
 pkgname = openlinear-bin
 EOF
+
+chmod 644 "$SRCINFO"
 
 echo "Updated Arch metadata for v${VERSION}"
