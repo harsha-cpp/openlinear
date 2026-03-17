@@ -1,0 +1,150 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "OpenLinear",
+  "theme": "mint",
+  "colors": {
+    "primary": "#3B82F6",
+    "light": "#60A5FA",
+    "dark": "#2563EB",
+    "background": {
+      "light": "#ffffff",
+      "dark": "#0a0a0a"
+    }
+  },
+  "logo": {
+    "light": "/docs/logo/light.png",
+    "dark": "/docs/logo/dark.png",
+    "href": "https://github.com/kaizen403/openlinear"
+  },
+  "favicon": "/docs/logo/dark.png",
+  "appearance": {
+    "default": "dark",
+    "strict": false
+  },
+  "background": {
+    "decoration": "grid"
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "modeToggle": {
+    "default": "dark"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "icon": "rocket",
+            "pages": [
+              "docs/index",
+              "docs/quickstart",
+              "docs/installation"
+            ]
+          },
+          {
+            "group": "Desktop App",
+            "icon": "monitor",
+            "pages": [
+              "docs/desktop/overview",
+              "docs/desktop/kanban-board",
+              "docs/desktop/task-execution",
+              "docs/desktop/batch-execution",
+              "docs/desktop/agent-integration"
+            ]
+          },
+          {
+            "group": "CLI",
+            "icon": "terminal",
+            "pages": [
+              "docs/cli/overview",
+              "docs/cli/github-auth"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "icon": "sitemap",
+            "pages": [
+              "docs/architecture",
+              "docs/data-models",
+              "docs/configuration"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "icon": "code-pull-request",
+            "pages": [
+              "docs/contributing"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "docs/api/overview",
+              "docs/api/realtime"
+            ]
+          },
+          {
+            "group": "Core API",
+            "pages": [
+              "docs/api/authentication",
+              "docs/api/tasks",
+              "docs/api/projects",
+              "docs/api/teams",
+              "docs/api/repositories",
+              "docs/api/labels",
+              "docs/api/settings"
+            ]
+          },
+          {
+            "group": "Execution API",
+            "pages": [
+              "docs/api/execution",
+              "docs/api/batches"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Library",
+        "groups": [
+          {
+            "group": "npm Package",
+            "pages": [
+              "docs/library/overview",
+              "docs/library/types",
+              "docs/library/validation",
+              "docs/library/feature-flags"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/kaizen403/openlinear"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Download",
+      "href": "https://github.com/kaizen403/openlinear/releases"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/kaizen403/openlinear",
+      "x": "https://x.com/openlinear"
+    }
+  }
+}
