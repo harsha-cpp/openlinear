@@ -12,7 +12,7 @@ import { useOpenCodeModel } from "@/lib/opencode-model-selection"
 interface TaskCardProps {
   task: Task
   onExecute?: (taskId: string) => void
-  onCancel?: (taskId: string) => void
+  onCancel?: (taskId: string) => void | Promise<void>
   onDelete?: (taskId: string) => void
   onMoveToInProgress?: (taskId: string) => void
   onTaskClick?: (taskId: string) => void
@@ -107,7 +107,9 @@ function TaskCardComponent({ task, onExecute, onCancel, onDelete, onMoveToInProg
   const handleCancel = () => {
     if (onCancel) {
       setCancelling(true)
-      onCancel(task.id)
+      void Promise.resolve(onCancel(task.id)).catch(() => {
+        setCancelling(false)
+      })
     }
   }
 

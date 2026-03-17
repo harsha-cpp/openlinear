@@ -1103,8 +1103,38 @@ export function useKanbanBoard({
       if (!response.ok) {
         throw new Error(`Failed to cancel task: ${response.statusText}`);
       }
+
+      const cancelledAt = new Date().toISOString();
+      setTasks((prev) =>
+        prev.map((task) =>
+          task.id === taskId
+            ? {
+                ...task,
+                status: "cancelled",
+                sessionId: null,
+                executionPausedAt: cancelledAt,
+              }
+            : task,
+        ),
+      );
+      setExecutionProgress((prev) => ({
+        ...prev,
+        [taskId]: {
+          taskId,
+          status: "cancelled",
+          message: "Execution cancelled",
+        },
+      }));
+      appendTaskLog(taskId, {
+        timestamp: cancelledAt,
+        type: "info",
+        message: "Execution cancelled by user",
+      });
+      void fetchTasks({ silent: true });
     } catch (err) {
       console.error("Error cancelling task:", err);
+      toast.error("Failed to cancel task");
+      throw err;
     }
   };
 

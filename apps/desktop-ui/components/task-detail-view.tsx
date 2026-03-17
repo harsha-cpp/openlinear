@@ -13,7 +13,7 @@ interface TaskDetailViewProps {
   open: boolean
   onClose: () => void
   onDelete?: (taskId: string) => void
-  onCancel?: (taskId: string) => void
+  onCancel?: (taskId: string) => void | Promise<void>
   onExecute?: (taskId: string) => void
   onUpdate?: (taskId: string, data: { title?: string; description?: string | null }) => void
   isExecuting?: boolean
@@ -252,7 +252,12 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                   size="sm"
                   className="h-8 px-2 sm:px-3 text-linear-text-secondary hover:text-yellow-400 hover:bg-yellow-400/10"
                   disabled={cancelling}
-                  onClick={() => { setCancelling(true); onCancel(task.id) }}
+                  onClick={() => {
+                    setCancelling(true)
+                    void Promise.resolve(onCancel(task.id)).catch(() => {
+                      setCancelling(false)
+                    })
+                  }}
                 >
                   {cancelling ? (
                     <>
