@@ -34,7 +34,7 @@
     "icon": [
       "icons/icon.png"
     ],
-    "externalBin": ["binaries/openlinear-sidecar", "binaries/opencode"],
+    "externalBin": ["binaries/openlinear-sidecar"],
     "resources": {
       "../../sidecar/dist/sidecar-entry.cjs": "sidecar-entry.cjs"
     },

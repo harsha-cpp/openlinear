@@ -1,11 +1,8 @@
-//! OpenCode CLI detection module
-
 use serde::Serialize;
 use std::path::PathBuf;
 use std::process::Command;
 use which::which;
 
-/// Status of OpenCode CLI installation
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct OpenCodeStatus {
     pub found: bool,
@@ -23,54 +20,27 @@ impl Default for OpenCodeStatus {
     }
 }
 
+fn get_opencode_version(binary_path: &std::path::Path) -> Option<String> {
+    Command::new(binary_path)
+        .arg("--version")
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                String::from_utf8(output.stdout).ok()
+            } else {
+                String::from_utf8(output.stderr).ok()
+            }
+        })
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
 #[tauri::command]
 pub fn check_opencode() -> OpenCodeStatus {
-    // First check bundled sidecar next to our own binary
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(bin_dir) = exe.parent() {
-            let target_triple = env!("TARGET");
-            let bundled = bin_dir.join(format!("opencode-{}", target_triple));
-            if bundled.exists() {
-                let version = Command::new(&bundled)
-                    .arg("--version")
-                    .output()
-                    .ok()
-                    .and_then(|output| {
-                        if output.status.success() {
-                            String::from_utf8(output.stdout).ok()
-                        } else {
-                            String::from_utf8(output.stderr).ok()
-                        }
-                    })
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty());
-
-                return OpenCodeStatus {
-                    found: true,
-                    version,
-                    path: Some(bundled.to_string_lossy().to_string()),
-                };
-            }
-        }
-    }
-
-    // Fall back to system PATH
     match which("opencode") {
         Ok(path) => {
-            let version = Command::new(&path)
-                .arg("--version")
-                .output()
-                .ok()
-                .and_then(|output| {
-                    if output.status.success() {
-                        String::from_utf8(output.stdout).ok()
-                    } else {
-                        String::from_utf8(output.stderr).ok()
-                    }
-                })
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty());
-
+            let version = get_opencode_version(&path);
             OpenCodeStatus {
                 found: true,
                 version,
@@ -93,11 +63,6 @@ pub fn pick_local_folder() -> Option<String> {
         .map(|path| path.to_string_lossy().to_string())
 }
 
-#[allow(dead_code)]
-fn check_binary_exists(binary_name: &str) -> bool {
-    which(binary_name).is_ok()
-}
-
 fn default_home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
@@ -114,18 +79,6 @@ mod tests {
         assert!(!status.found);
         assert!(status.version.is_none());
         assert!(status.path.is_none());
-    }
-
-    #[test]
-    fn test_check_binary_exists_with_common_binary() {
-        assert!(check_binary_exists("ls"));
-    }
-
-    #[test]
-    fn test_check_binary_exists_with_nonexistent_binary() {
-        assert!(!check_binary_exists(
-            "this-binary-definitely-does-not-exist-12345"
-        ));
     }
 
     #[test]
