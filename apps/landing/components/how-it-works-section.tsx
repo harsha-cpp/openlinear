@@ -6,7 +6,7 @@ const howItWorksLazy = () => import("@/remotion/HowItWorksAnimation")
 
 export function HowItWorksSection() {
   return (
-    <section className="py-20 md:py-24 px-6 md:px-20">
+    <section className="py-20 md:py-24 px-6 md:px-20" style={{ fontFamily: "'Anthropic Sans', system-ui, sans-serif" }}>
       <div className="mx-auto max-w-content">
         <p className="text-[13px] text-label mb-10 tracking-wide uppercase">How it works</p>
 

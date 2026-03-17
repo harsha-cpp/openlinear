@@ -8,19 +8,26 @@ import { FadeIn } from "@/components/fade-in"
 
 export default function Page() {
   return (
-    <main className="min-h-screen">
-      <Header />
-      <Hero />
-      <FadeIn>
-        <TestimonialsSection />
-      </FadeIn>
-      <FadeIn>
-        <HowItWorksSection />
-      </FadeIn>
-      <FadeIn>
-        <FAQSection />
-      </FadeIn>
-      <Footer />
+    <main className="min-h-screen bg-background">
+      <div className="mx-8 md:mx-16 lg:mx-24 xl:mx-32 border-x border-white/20">
+        <Header />
+        <div className="h-px bg-white/20 w-full" />
+        <Hero />
+        <div className="h-px bg-white/20 w-full" />
+        <FadeIn>
+          <TestimonialsSection />
+        </FadeIn>
+        <div className="h-px bg-white/20 w-full" />
+        <FadeIn>
+          <HowItWorksSection />
+        </FadeIn>
+        <div className="h-px bg-white/20 w-full" />
+        <FadeIn>
+          <FAQSection />
+        </FadeIn>
+        <div className="h-px bg-white/20 w-full" />
+        <Footer />
+      </div>
     </main>
   )
 }
