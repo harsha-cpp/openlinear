@@ -10,10 +10,9 @@ TARGET_TRIPLE="${3:-x86_64-unknown-linux-gnu}"
 
 APP_BINARY="$ROOT_DIR/apps/desktop/src-tauri/target/release/openlinear-desktop"
 SIDECAR_BINARY="$ROOT_DIR/apps/desktop/src-tauri/binaries/openlinear-sidecar-${TARGET_TRIPLE}"
-OPENCODE_BINARY="$ROOT_DIR/apps/desktop/src-tauri/binaries/opencode-${TARGET_TRIPLE}"
 ICON_SOURCE="$ROOT_DIR/apps/desktop/src-tauri/icons/icon.png"
 
-for required in "$APP_BINARY" "$SIDECAR_BINARY" "$OPENCODE_BINARY" "$ICON_SOURCE"; do
+for required in "$APP_BINARY" "$SIDECAR_BINARY" "$ICON_SOURCE"; do
   if [ ! -f "$required" ]; then
     echo "Required file missing: $required" >&2
     exit 1
@@ -30,7 +29,6 @@ mkdir -p "$ICON_DIR" "$(dirname "$OUTPUT_TARBALL")"
 
 install -m 755 "$APP_BINARY" "$BUNDLE_DIR/openlinear-desktop"
 install -m 755 "$SIDECAR_BINARY" "$BUNDLE_DIR/openlinear-sidecar"
-install -m 755 "$OPENCODE_BINARY" "$BUNDLE_DIR/opencode-${TARGET_TRIPLE}"
 install -m 644 "$ICON_SOURCE" "$ICON_DIR/openlinear.png"
 
 printf '%s\n' "$VERSION" > "$BUNDLE_DIR/VERSION"
