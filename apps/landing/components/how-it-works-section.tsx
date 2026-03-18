@@ -30,7 +30,7 @@ export function HowItWorksSection() {
 
         <RemotionPlayerWrapper
           lazyComponent={howItWorksLazy}
-          durationInFrames={450}
+          durationInFrames={540}
           fps={30}
           aspectRatio="16/9"
           className="mt-10 md:mt-14"

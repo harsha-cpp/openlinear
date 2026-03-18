@@ -1,10 +1,11 @@
 import { readFile } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
-
-const installScriptPath = fileURLToPath(new URL('../../../../../install.sh', import.meta.url))
+import path from 'node:path'
 
 export async function GET() {
-  const installScript = await readFile(installScriptPath, 'utf8')
+  const installScript = await readFile(
+    path.join(process.cwd(), 'public', 'install.sh'),
+    'utf8',
+  )
 
   return new Response(installScript, {
     headers: {
