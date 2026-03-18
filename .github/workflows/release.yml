@@ -4,22 +4,17 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag (e.g. v0.1.44)"
-        required: true
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ inputs.tag || github.ref_name }}
+  group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 env:
   TURBO_TELEMETRY_DISABLED: 1
-  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+  RELEASE_TAG: ${{ github.ref_name }}
 
 jobs:
   build-release:
@@ -157,57 +152,6 @@ jobs:
         with:
           generate_release_notes: true
           files: dist/release/*
-
-  publish-npm:
-    name: Publish npm package
-    needs: create-release
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RELEASE_TAG }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          registry-url: https://registry.npmjs.org
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: Verify tag matches package version
-        run: |
-          set -euo pipefail
-          VERSION=${RELEASE_TAG#v}
-          PACKAGE_VERSION=$(node -p "require('./packages/openlinear/package.json').version")
-          if [ "$VERSION" != "$PACKAGE_VERSION" ]; then
-            echo "Tag version $VERSION does not match packages/openlinear/package.json version $PACKAGE_VERSION" >&2
-            exit 1
-          fi
-
-      - name: Publish openlinear
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          set -euo pipefail
-          cd packages/openlinear
-          LOCAL_VERSION=$(node -p "require('./package.json').version")
-          REMOTE_VERSION=$(npm view openlinear version 2>/dev/null || echo "0.0.0")
-          if [ "$LOCAL_VERSION" = "$REMOTE_VERSION" ]; then
-            echo "Version $LOCAL_VERSION already published, skipping"
-            exit 0
-          fi
-          npm publish --access public --provenance
 
   publish-aur:
     name: Publish Arch package metadata
