@@ -4,16 +4,22 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.1.44)"
+        required: true
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref_name }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
   TURBO_TELEMETRY_DISABLED: 1
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   build-release:
@@ -39,6 +45,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -73,7 +81,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Verify release version metadata
-        run: bash ./scripts/sync-aur-metadata.sh "${GITHUB_REF_NAME#v}"
+        run: bash ./scripts/sync-aur-metadata.sh "${RELEASE_TAG#v}"
 
       - name: Build sidecar artifacts
         run: bash ./scripts/build-sidecar.sh
@@ -97,7 +105,7 @@ jobs:
           TMP_DIR=$(mktemp -d)
           trap 'rm -rf "$TMP_DIR"' EXIT
           PORTABLE_TARBALL="$TMP_DIR/openlinear-linux-x64.tar.gz"
-          bash ./scripts/package-linux-portable.sh "${GITHUB_REF_NAME#v}" "$PORTABLE_TARBALL"
+          bash ./scripts/package-linux-portable.sh "${RELEASE_TAG#v}" "$PORTABLE_TARBALL"
           tar -xzf "$PORTABLE_TARBALL" -C "$TMP_DIR"
           timeout 15s "$TMP_DIR/openlinear-linux-x64/openlinear-sidecar" > "$TMP_DIR/sidecar.log" 2>&1 || true
           cat "$TMP_DIR/sidecar.log"
@@ -106,7 +114,7 @@ jobs:
       - name: Prepare release artifacts
         run: |
           set -euo pipefail
-          VERSION=${GITHUB_REF_NAME#v}
+          VERSION=${RELEASE_TAG#v}
           mkdir -p dist/release
           if [ "${{ runner.os }}" = "Linux" ]; then
             DEB=$(ls apps/desktop/src-tauri/target/release/bundle/deb/*.deb | head -n 1)
@@ -161,6 +169,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -178,7 +188,7 @@ jobs:
       - name: Verify tag matches package version
         run: |
           set -euo pipefail
-          VERSION=${GITHUB_REF_NAME#v}
+          VERSION=${RELEASE_TAG#v}
           PACKAGE_VERSION=$(node -p "require('./packages/openlinear/package.json').version")
           if [ "$VERSION" != "$PACKAGE_VERSION" ]; then
             echo "Tag version $VERSION does not match packages/openlinear/package.json version $PACKAGE_VERSION" >&2
@@ -207,9 +217,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Sync Arch package metadata
-        run: bash ./scripts/sync-aur-metadata.sh "${GITHUB_REF_NAME#v}"
+        run: bash ./scripts/sync-aur-metadata.sh "${RELEASE_TAG#v}"
 
       - name: Publish to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
@@ -222,4 +234,4 @@ jobs:
           commit_username: kaizen403
           commit_email: kaizen403@proton.me
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-          commit_message: "Update to ${{ github.ref_name }}"
+          commit_message: "Update to ${{ env.RELEASE_TAG }}"
