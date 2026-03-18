@@ -61,7 +61,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_PAT }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -89,5 +89,5 @@ jobs:
 
       - name: Trigger release workflow
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
         run: gh workflow run release.yml -f tag="v$(node -p "require('./packages/openlinear/package.json').version")"
