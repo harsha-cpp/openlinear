@@ -49,7 +49,7 @@ export function Header() {
           </a>
 
           <a
-            href="https://dashboard.rixie.in"
+            href="https://openlinear.tech"
             className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.1] text-sm font-medium text-white/90 hover:text-white hover:bg-white/[0.08] transition-all"
           >
             Try for Free <ArrowRight className="h-3.5 w-3.5 ml-0.5 opacity-70" />
@@ -81,7 +81,7 @@ export function Header() {
             <hr className="border-white/[0.06] my-4" />
             
             <a
-              href="https://dashboard.rixie.in"
+              href="https://openlinear.tech"
               className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white/[0.06] border border-white/[0.12] text-sm font-medium text-white hover:bg-white/[0.1] transition-all"
             >
               Try for Free <ArrowRight className="h-4 w-4" />

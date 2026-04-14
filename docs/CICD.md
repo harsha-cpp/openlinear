@@ -95,7 +95,7 @@ All three jobs run in **parallel**.
 | **checks** | — | Typecheck + build all apps + run API tests vs fresh Postgres 16 |
 | **deploy** | checks | SSH into droplet → `scripts/deploy.sh` |
 | **diagnostics** | deploy (always runs) | `pm2 show`, port check, `curl localhost:3001/health` |
-| **verify** | — | Poll `https://rixie.in/health` for 200 |
+| **verify** | — | Poll `https://openlinear.tech/health` for 200 |
 
 `scripts/deploy.sh` pulls the latest code on the droplet, rebuilds what changed, and reloads PM2 for zero-downtime restarts.
 

@@ -20,7 +20,7 @@ export function FinalCTASection() {
 
         <div className="flex flex-wrap items-center justify-center gap-4">
           <a
-            href="https://dashboard.rixie.in"
+            href="https://openlinear.tech"
             className="group inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-gradient-to-b from-blue-500 to-blue-600 text-white font-medium hover:from-blue-400 hover:to-blue-500 transition-all shadow-lg shadow-blue-500/25"
           >
             Get Started Free

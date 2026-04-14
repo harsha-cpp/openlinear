@@ -37,7 +37,7 @@ const plans = [
     price: "$0",
     period: "/month",
     description: "For individual developers exploring AI execution.",
-    cta: { label: "Get Started", href: "https://dashboard.rixie.in", style: "secondary" as const },
+    cta: { label: "Get Started", href: "https://openlinear.tech", style: "secondary" as const },
     features: [
       { text: "Single project", icon: FolderOpen as LucideIcon },
       { text: "Basic execution", icon: Zap as LucideIcon },
@@ -52,7 +52,7 @@ const plans = [
     period: "/month",
     description: "For developers who need more power and flexibility.",
     popular: true,
-    cta: { label: "Upgrade to Pro", href: "https://dashboard.rixie.in", style: "primary" as const },
+    cta: { label: "Upgrade to Pro", href: "https://openlinear.tech", style: "primary" as const },
     features: [
       { text: "Multiple projects", icon: Layers as LucideIcon },
       { text: "Batch execution (parallel + queue)", icon: Cpu as LucideIcon },

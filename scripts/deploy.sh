@@ -98,7 +98,7 @@ rm -rf apps/desktop-ui/.next apps/landing/.next
 ok "Old Next artifacts removed"
 
 step "Building Web..."
-NEXT_PUBLIC_API_URL=https://rixie.in \
+NEXT_PUBLIC_API_URL=https://openlinear.tech \
 NEXT_TELEMETRY_DISABLED=1 \
 NEXT_PRIVATE_BUILD_WORKER=1 \
 NEXT_IGNORE_BUILD_ERRORS=1 \

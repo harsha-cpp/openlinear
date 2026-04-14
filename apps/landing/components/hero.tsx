@@ -53,7 +53,7 @@ export function Hero() {
 
         <div className="hero-reveal-4 flex flex-wrap items-center justify-center gap-4 mt-12">
           <a
-            href="https://dashboard.rixie.in"
+            href="https://openlinear.tech"
             className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-blue-500 to-blue-600 px-6 py-3.5 text-sm font-medium text-white hover:from-blue-400 hover:to-blue-500 transition-all duration-300 shadow-lg shadow-blue-500/25"
           >
             Setup in 5 mins

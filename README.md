@@ -9,7 +9,7 @@ Drag tasks on a kanban board. Click execute. Get a pull request.
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
 [![pnpm](https://img.shields.io/badge/pnpm-9-orange)](https://pnpm.io)
-[![Deploy](https://img.shields.io/badge/production-rixie.in-purple)](https://rixie.in)
+[![Deploy](https://img.shields.io/badge/production-openlinear.tech-purple)](https://openlinear.tech)
 
 </div>
 

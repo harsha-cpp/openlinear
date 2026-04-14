@@ -9,7 +9,7 @@ openlinear/
       components/     React components (board, task forms, overlays, settings)
       hooks/          Custom hooks (SSE subscription, auth)
       lib/            API client, utilities
-    api/              Cloud metadata API (deployed at rixie.in)
+    api/              Cloud metadata API (deployed at openlinear.tech)
       src/
         routes/       REST endpoints (auth, tasks, labels, settings, teams, projects, inbox, repos)
         services/     Business logic (github, team-scope)
@@ -67,7 +67,7 @@ PostgreSQL via Prisma ORM. Schema lives at `packages/db/prisma/schema.prisma`.
 
 ## API
 
-The cloud API (`apps/api`) is an Express server deployed at rixie.in. It handles metadata only — no execution, no OpenCode. Routes are mounted under `/api/`:
+The cloud API (`apps/api`) is an Express server deployed at openlinear.tech. It handles metadata only — no execution, no OpenCode. Routes are mounted under `/api/`:
 
 **Cloud API routes:**
 - `/api/auth` -- username/password registration and login, GitHub OAuth

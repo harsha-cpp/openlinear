@@ -8,7 +8,7 @@ A deep dive into how OpenLinear works — from authentication to task execution.
 
 ## System Overview
 
-OpenLinear is a monorepo with four main components: a Next.js desktop UI (`apps/desktop-ui`), a cloud metadata API (`apps/api`), a local execution sidecar (`apps/sidecar`), and a Neon cloud PostgreSQL database. The cloud API runs at rixie.in and handles all metadata (auth, tasks, teams, repos, etc.). The sidecar runs locally inside the Tauri desktop app, manages OpenCode, and handles all task execution.
+OpenLinear is a monorepo with four main components: a Next.js desktop UI (`apps/desktop-ui`), a cloud metadata API (`apps/api`), a local execution sidecar (`apps/sidecar`), and a Neon cloud PostgreSQL database. The cloud API runs at openlinear.tech and handles all metadata (auth, tasks, teams, repos, etc.). The sidecar runs locally inside the Tauri desktop app, manages OpenCode, and handles all task execution.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -29,7 +29,7 @@ OpenLinear is a monorepo with four main components: a Next.js desktop UI (`apps/
           │                    │
 ┌─────────▼──────────────┐  ┌──▼────────────────────────────┐
 │  Cloud API (apps/api)  │  │  OpenCode (host machine)      │
-│  Express — rixie.in    │  │  No containers, direct run    │
+│  Express — openlinear.tech    │  │  No containers, direct run    │
 │  Auth, Tasks, Labels   │  └───────────────────────────────┘
 │  Teams, Repos, Inbox   │
 │  Neon PostgreSQL       │
@@ -238,11 +238,11 @@ OpenCode is the AI agent that executes tasks. The agent runs directly on your ma
 
 ## Production Deployment
 
-Production runs on a DigitalOcean droplet at `https://rixie.in`.
+Production runs on a DigitalOcean droplet at `https://openlinear.tech`.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│              DigitalOcean Droplet (rixie.in)                 │
+│              DigitalOcean Droplet (openlinear.tech)                 │
 │                                                             │
 │  PM2 Process Manager                                        │
 │  ├── openlinear-api  (Express, port 3001)                   │
@@ -265,7 +265,7 @@ Push to `main` triggers automatic deployment:
 1. GitHub Actions builds API + Web
 2. SSH to droplet → run `/opt/openlinear/deploy.sh`
 3. Deploy script: `git pull` → `pnpm install` → prisma migrate → build apps → PM2 restart
-4. Health check: `curl https://rixie.in/health`
+4. Health check: `curl https://openlinear.tech/health`
 
 ### Release Pipeline
 
