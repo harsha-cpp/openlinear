@@ -31,7 +31,8 @@ async function handleSessionComplete(taskId: string): Promise<void> {
     const commitResult = await commitAndPush(
       execution.repoPath,
       execution.branchName,
-      await getTaskTitle(taskId)
+      await getTaskTitle(taskId),
+      execution.accessToken
     );
 
     if (commitResult.status === 'pushed') {

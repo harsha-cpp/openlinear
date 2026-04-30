@@ -56,3 +56,25 @@ Subagents must APPEND (never overwrite). Format: `## [TIMESTAMP] Task: T## — {
 - Use Next.js 14+ `Metadata.icons` object (no manual `<link>` tags needed for favicons)
 - `metadataBase: new URL('https://openlinear.tech')` enables relative OG image URLs
 - Apple touch icon must be 180x180; favicon.ico bundles 16/32/48
+
+## [2026-05-01] Task: T6 — Shell injection elimination in git.ts/worktree.ts
+
+**Pattern**: Centralize all subprocess invocation through one promisified `execFile` seam (`apps/sidecar/src/services/execution/exec.ts`). NEVER use `child_process.exec` with template literals — even seemingly-safe interpolated values (branch names, repo paths, commit messages) become RCE vectors when sourced from user/DB input.
+
+**Key conversion rule**:
+- `execAsync(\`git -C ${path} commit -m "${msg}"\`)` → `execFileAsync('git', ['-C', path, 'commit', '-m', msg])`
+- Each argv element is passed verbatim, so `;`, `&&`, `|`, `$()`, backticks inside untrusted strings become literal characters.
+
+**GitHub token handling (avoid .git/config leak)**:
+- Old: `https://oauth2:${token}@github.com/...` baked into clone URL → token persisted in `.git/config`.
+- New: `git -c credential.helper='!f() { echo "username=oauth2"; echo "password=$GH_TOKEN"; }; f' clone <plain-url>` with `GH_TOKEN` set in process env only.
+- The `-c credential.helper=...` flag is itself a single argv element (not shell-parsed), so the helper script string is safe.
+
+**Force-push hardening**: replaced `--force` with `--force-with-lease` everywhere — prevents clobbering refs that moved since last fetch (finding #56).
+
+**Caller-signature impact**: `commitAndPush` now takes optional `accessToken` for the credential helper on push. Updated single caller (`events.ts handleSessionComplete`) to pass `execution.accessToken`.
+
+**Verification commands**:
+- `grep -nE 'execAsync\(\`|exec\(\`' apps/sidecar/src/services/execution/git.ts apps/sidecar/src/services/worktree.ts` → 0 matches
+- Injection harness: malicious branch name `'feature; rm /tmp/SHOULD_NOT_EXIST'` → git rejects as invalid ref name; marker file untouched.
+- Token-leak harness: cloned `.git/config` contains plain URL with no `oauth2:` substring.

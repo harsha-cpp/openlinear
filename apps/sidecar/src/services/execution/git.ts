@@ -1,11 +1,7 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { existsSync, mkdirSync, rmSync, accessSync, constants } from 'fs';
-import { join } from 'path';
 import { PullRequestResult, REPOS_DIR } from './state';
 import { getGitIdentityEnv } from '../git-identity';
-
-const execAsync = promisify(exec);
+import { execFileAsync } from './exec';
 
 export type CommitPushResult =
   | { status: 'no_changes' }
@@ -22,6 +18,20 @@ function getExecErrorReason(error: unknown): string {
   return 'Unknown git error';
 }
 
+function buildCredentialHelperArgs(accessToken: string | null): {
+  args: string[];
+  env: NodeJS.ProcessEnv;
+} {
+  if (!accessToken) {
+    return { args: [], env: {} };
+  }
+  const helperScript = 'f() { echo "username=oauth2"; echo "password=$GH_TOKEN"; }; f';
+  return {
+    args: ['-c', `credential.helper=!${helperScript}`],
+    env: { GH_TOKEN: accessToken },
+  };
+}
+
 export async function cloneRepository(
   cloneUrl: string,
   repoPath: string,
@@ -29,7 +39,7 @@ export async function cloneRepository(
   defaultBranch: string
 ): Promise<void> {
   console.log(`[Execution] Preparing to clone into ${repoPath}`);
-  
+
   if (!existsSync(REPOS_DIR)) {
     mkdirSync(REPOS_DIR, { recursive: true });
     console.log(`[Execution] Created repos directory: ${REPOS_DIR}`);
@@ -46,50 +56,57 @@ export async function cloneRepository(
     console.log(`[Execution] Removed existing directory: ${repoPath}`);
   }
 
-  const url = accessToken 
-    ? cloneUrl.replace('https://', `https://oauth2:${accessToken}@`)
-    : cloneUrl;
-  
+  const { args: credArgs, env: credEnv } = buildCredentialHelperArgs(accessToken);
+
   console.log(`[Execution] Cloning ${cloneUrl} (branch: ${defaultBranch})...`);
-  await execAsync(`git clone --depth 1 --branch ${defaultBranch} ${url} ${repoPath}`);
-  await execAsync(`chmod -R a+rwX ${repoPath}`);
+  await execFileAsync(
+    'git',
+    [...credArgs, 'clone', '--depth', '1', '--branch', defaultBranch, cloneUrl, repoPath],
+    { env: { ...process.env, ...credEnv } }
+  );
+  await execFileAsync('chmod', ['-R', 'a+rwX', repoPath]);
   console.log(`[Execution] Clone complete`);
 }
 
 export async function createBranch(repoPath: string, branchName: string): Promise<void> {
   console.log(`[Execution] Creating branch: ${branchName}`);
-  await execAsync(`git checkout -B ${branchName}`, { cwd: repoPath });
+  await execFileAsync('git', ['-C', repoPath, 'checkout', '-B', branchName]);
   console.log(`[Execution] Branch ready and checked out`);
 }
 
 export async function commitAndPush(
   repoPath: string,
   branchName: string,
-  taskTitle: string
+  taskTitle: string,
+  accessToken: string | null = null
 ): Promise<CommitPushResult> {
   try {
     const env = { ...process.env, ...getGitIdentityEnv() };
 
     console.log(`[Execution] Checking for changes in ${repoPath}`);
-    const { stdout: status } = await execAsync('git status --porcelain', { cwd: repoPath });
-    
+    const { stdout: status } = await execFileAsync('git', ['-C', repoPath, 'status', '--porcelain']);
+
     if (!status.trim()) {
       console.log(`[Execution] No changes to commit`);
       return { status: 'no_changes' };
     }
 
     console.log(`[Execution] Changes detected, staging files...`);
-    await execAsync('git add -A', { cwd: repoPath });
-    
+    await execFileAsync('git', ['-C', repoPath, 'add', '-A']);
+
     const commitMessage = `feat: ${taskTitle.toLowerCase().replace(/[^a-z0-9\s]/g, '').slice(0, 50)}`;
     console.log(`[Execution] Committing: ${commitMessage}`);
-    await execAsync(`git commit -m "${commitMessage}"`, { cwd: repoPath, env });
-    
+    await execFileAsync('git', ['-C', repoPath, 'commit', '-m', commitMessage], { env });
+
     console.log(`[Execution] Pushing to origin/${branchName}...`);
-    // Force push is safe here: these are ephemeral task branches we create fresh each run
-    await execAsync(`git push --force -u origin ${branchName}`, { cwd: repoPath, env });
+    const { args: credArgs, env: credEnv } = buildCredentialHelperArgs(accessToken);
+    await execFileAsync(
+      'git',
+      ['-C', repoPath, ...credArgs, 'push', '--force-with-lease', '-u', 'origin', branchName],
+      { env: { ...env, ...credEnv } }
+    );
     console.log(`[Execution] Push complete`);
-    
+
     return { status: 'pushed' };
   } catch (error) {
     const reason = getExecErrorReason(error);
@@ -135,7 +152,6 @@ export async function createPullRequest(
     if (!response.ok) {
       const error = await response.text();
       console.error('[Execution] PR creation failed:', error);
-      // Return compare URL as fallback when API fails
       return { url: compareUrl, type: 'compare' };
     }
 
@@ -143,7 +159,6 @@ export async function createPullRequest(
     return { url: pr.html_url, type: 'pr' };
   } catch (error) {
     console.error('[Execution] PR creation error:', error);
-    // Return compare URL as fallback on error
     return { url: compareUrl, type: 'compare' };
   }
 }

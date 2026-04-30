@@ -1,11 +1,23 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { existsSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { getGitIdentityEnv } from './git-identity';
+import { execFileAsync } from './execution/exec';
 
-const execAsync = promisify(exec);
 const REPOS_DIR = process.env.REPOS_DIR || '/tmp/openlinear-repos';
+
+function buildCredentialHelperArgs(accessToken: string | null): {
+  args: string[];
+  env: NodeJS.ProcessEnv;
+} {
+  if (!accessToken) {
+    return { args: [], env: {} };
+  }
+  const helperScript = 'f() { echo "username=oauth2"; echo "password=$GH_TOKEN"; }; f';
+  return {
+    args: ['-c', `credential.helper=!${helperScript}`],
+    env: { GH_TOKEN: accessToken },
+  };
+}
 
 export async function ensureMainRepo(
   projectId: string,
@@ -15,14 +27,16 @@ export async function ensureMainRepo(
   const projectDir = join(REPOS_DIR, projectId);
   const mainRepoPath = join(projectDir, '.main');
 
-  const url = accessToken
-    ? cloneUrl.replace('https://', `https://oauth2:${accessToken}@`)
-    : cloneUrl;
+  const { args: credArgs, env: credEnv } = buildCredentialHelperArgs(accessToken);
 
   try {
     if (existsSync(mainRepoPath)) {
       console.log(`[Worktree] Fetching latest for project ${projectId}`);
-      await execAsync(`git -C ${mainRepoPath} fetch origin --prune`);
+      await execFileAsync(
+        'git',
+        ['-C', mainRepoPath, ...credArgs, 'fetch', 'origin', '--prune'],
+        { env: { ...process.env, ...credEnv } }
+      );
       console.log(`[Worktree] Fetch complete for project ${projectId}`);
     } else {
       if (!existsSync(projectDir)) {
@@ -31,7 +45,11 @@ export async function ensureMainRepo(
       }
 
       console.log(`[Worktree] Creating bare clone for project ${projectId}`);
-      await execAsync(`git clone --bare ${url} ${mainRepoPath}`);
+      await execFileAsync(
+        'git',
+        [...credArgs, 'clone', '--bare', cloneUrl, mainRepoPath],
+        { env: { ...process.env, ...credEnv } }
+      );
       console.log(`[Worktree] Bare clone complete for project ${projectId}`);
     }
 
@@ -60,10 +78,16 @@ export async function createWorktree(
     }
 
     console.log(`[Worktree] Fetching latest before creating worktree for task ${taskId}`);
-    await execAsync(`git -C ${mainRepoPath} fetch origin`);
+    await execFileAsync('git', ['-C', mainRepoPath, 'fetch', 'origin']);
 
     try {
-      const { stdout: worktreeList } = await execAsync(`git -C ${mainRepoPath} worktree list --porcelain`);
+      const { stdout: worktreeList } = await execFileAsync('git', [
+        '-C',
+        mainRepoPath,
+        'worktree',
+        'list',
+        '--porcelain',
+      ]);
       const lines = worktreeList.split('\n');
       for (let i = 0; i < lines.length; i++) {
         if (lines[i].startsWith('worktree ')) {
@@ -71,7 +95,14 @@ export async function createWorktree(
           for (let j = i + 1; j < lines.length && lines[j] !== ''; j++) {
             if (lines[j] === `branch refs/heads/${branchName}`) {
               console.log(`[Worktree] Removing stale worktree at ${wtPath} for branch ${branchName}`);
-              await execAsync(`git -C ${mainRepoPath} worktree remove ${wtPath} --force`).catch(() => {
+              await execFileAsync('git', [
+                '-C',
+                mainRepoPath,
+                'worktree',
+                'remove',
+                wtPath,
+                '--force',
+              ]).catch(() => {
                 if (existsSync(wtPath)) rmSync(wtPath, { recursive: true, force: true });
               });
               break;
@@ -83,15 +114,22 @@ export async function createWorktree(
     }
 
     try {
-      await execAsync(`git -C ${mainRepoPath} branch -D ${branchName}`);
+      await execFileAsync('git', ['-C', mainRepoPath, 'branch', '-D', branchName]);
       console.log(`[Worktree] Deleted stale branch ${branchName}`);
     } catch {
     }
 
     console.log(`[Worktree] Creating worktree for task ${taskId} on branch ${branchName}`);
-    await execAsync(
-      `git -C ${mainRepoPath} worktree add ${worktreePath} -b ${branchName} ${defaultBranch}`
-    );
+    await execFileAsync('git', [
+      '-C',
+      mainRepoPath,
+      'worktree',
+      'add',
+      worktreePath,
+      '-b',
+      branchName,
+      defaultBranch,
+    ]);
     console.log(`[Worktree] Worktree created at ${worktreePath}`);
 
     return worktreePath;
@@ -99,7 +137,14 @@ export async function createWorktree(
     console.error(`[Worktree] Failed to create worktree for task ${taskId}:`, error);
     if (existsSync(worktreePath)) {
       try {
-        await execAsync(`git -C ${mainRepoPath} worktree remove ${worktreePath} --force`);
+        await execFileAsync('git', [
+          '-C',
+          mainRepoPath,
+          'worktree',
+          'remove',
+          worktreePath,
+          '--force',
+        ]);
       } catch {
         rmSync(worktreePath, { recursive: true, force: true });
       }
@@ -116,7 +161,14 @@ export async function removeWorktree(
 
   try {
     console.log(`[Worktree] Removing worktree: ${worktreePath}`);
-    await execAsync(`git -C ${mainRepoPath} worktree remove ${worktreePath} --force`);
+    await execFileAsync('git', [
+      '-C',
+      mainRepoPath,
+      'worktree',
+      'remove',
+      worktreePath,
+      '--force',
+    ]);
     console.log(`[Worktree] Worktree removed: ${worktreePath}`);
   } catch (error) {
     console.error(`[Worktree] Failed to remove worktree ${worktreePath}:`, error);
@@ -138,7 +190,13 @@ export async function listWorktrees(
   }
 
   try {
-    const { stdout } = await execAsync(`git -C ${mainRepoPath} worktree list --porcelain`);
+    const { stdout } = await execFileAsync('git', [
+      '-C',
+      mainRepoPath,
+      'worktree',
+      'list',
+      '--porcelain',
+    ]);
     const paths: string[] = [];
 
     for (const line of stdout.split('\n')) {
@@ -196,39 +254,78 @@ export async function mergeBranch(
     const env = { ...process.env, ...getGitIdentityEnv() };
     if (existsSync(mergePath)) {
       try {
-        await execAsync(`git -C ${mainRepoPath} worktree remove ${mergePath} --force`);
+        await execFileAsync('git', [
+          '-C',
+          mainRepoPath,
+          'worktree',
+          'remove',
+          mergePath,
+          '--force',
+        ]);
       } catch {
         rmSync(mergePath, { recursive: true, force: true });
       }
     }
 
     console.log(`[Worktree] Creating temp worktree for merge at ${mergePath}`);
-    await execAsync(`git -C ${mainRepoPath} worktree add ${mergePath} ${targetBranch}`);
+    await execFileAsync('git', [
+      '-C',
+      mainRepoPath,
+      'worktree',
+      'add',
+      mergePath,
+      targetBranch,
+    ]);
 
     try {
       console.log(`[Worktree] Merging ${taskBranch} into ${targetBranch}`);
-      await execAsync(
-        `git -C ${mergePath} merge --no-ff ${taskBranch} -m "Merge ${taskBranch}"`,
+      await execFileAsync(
+        'git',
+        [
+          '-C',
+          mergePath,
+          'merge',
+          '--no-ff',
+          taskBranch,
+          '-m',
+          `Merge ${taskBranch}`,
+        ],
         { env }
       );
       console.log(`[Worktree] Merge succeeded: ${taskBranch} → ${targetBranch}`);
 
-      const { stdout: mergeHead } = await execAsync(`git -C ${mergePath} rev-parse HEAD`);
+      const { stdout: mergeHead } = await execFileAsync('git', [
+        '-C',
+        mergePath,
+        'rev-parse',
+        'HEAD',
+      ]);
       const mergeCommit = mergeHead.trim();
 
-      await execAsync(`git -C ${mainRepoPath} worktree remove ${mergePath} --force`).catch(() => {
+      await execFileAsync('git', [
+        '-C',
+        mainRepoPath,
+        'worktree',
+        'remove',
+        mergePath,
+        '--force',
+      ]).catch(() => {
         if (existsSync(mergePath)) rmSync(mergePath, { recursive: true, force: true });
       });
 
-      await execAsync(
-        `git -C ${mainRepoPath} update-ref refs/heads/${targetBranch} ${mergeCommit}`
-      );
+      await execFileAsync('git', [
+        '-C',
+        mainRepoPath,
+        'update-ref',
+        `refs/heads/${targetBranch}`,
+        mergeCommit,
+      ]);
 
       return true;
     } catch (mergeError) {
       console.error(`[Worktree] Merge conflict: ${taskBranch} → ${targetBranch}`, mergeError);
       try {
-        await execAsync(`git -C ${mergePath} merge --abort`);
+        await execFileAsync('git', ['-C', mergePath, 'merge', '--abort']);
       } catch {
       }
       return false;
@@ -238,7 +335,14 @@ export async function mergeBranch(
     return false;
   } finally {
     try {
-      await execAsync(`git -C ${mainRepoPath} worktree remove ${mergePath} --force`);
+      await execFileAsync('git', [
+        '-C',
+        mainRepoPath,
+        'worktree',
+        'remove',
+        mergePath,
+        '--force',
+      ]);
     } catch {
       if (existsSync(mergePath)) {
         rmSync(mergePath, { recursive: true, force: true });
@@ -254,7 +358,13 @@ export async function createBatchBranch(
 ): Promise<void> {
   const mainRepoPath = join(REPOS_DIR, projectId, '.main');
   console.log(`[Worktree] Creating batch branch ${batchBranch} from ${defaultBranch}`);
-  await execAsync(`git -C ${mainRepoPath} branch ${batchBranch} ${defaultBranch}`);
+  await execFileAsync('git', [
+    '-C',
+    mainRepoPath,
+    'branch',
+    batchBranch,
+    defaultBranch,
+  ]);
 }
 
 export async function pushBranch(
@@ -264,10 +374,12 @@ export async function pushBranch(
   accessToken: string | null
 ): Promise<void> {
   const mainRepoPath = join(REPOS_DIR, projectId, '.main');
-  const url = accessToken
-    ? cloneUrl.replace('https://', `https://oauth2:${accessToken}@`)
-    : cloneUrl;
+  const { args: credArgs, env: credEnv } = buildCredentialHelperArgs(accessToken);
   console.log(`[Worktree] Pushing ${branchName} to remote`);
-  await execAsync(`git -C ${mainRepoPath} push ${url} ${branchName}`);
+  await execFileAsync(
+    'git',
+    ['-C', mainRepoPath, ...credArgs, 'push', '--force-with-lease', cloneUrl, branchName],
+    { env: { ...process.env, ...credEnv } }
+  );
   console.log(`[Worktree] Push complete for ${branchName}`);
 }
