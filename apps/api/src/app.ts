@@ -21,6 +21,8 @@ import projectsRouter from './routes/projects';
 import inboxRouter from './routes/inbox';
 import searchRouter from './routes/search';
 import commentsRouter from './routes/comments';
+import notificationsRouter from './routes/notifications';
+import activityLogRouter from './routes/activity-log';
 import agentRunsRouter from './routes/agent-runs';
 import jwt from 'jsonwebtoken';
 import { clients, SSEClient } from './sse';
@@ -140,6 +142,8 @@ export function createApp(): Application {
   app.use('/api/projects', projectsRouter);
   app.use('/api/inbox', inboxRouter);
   app.use('/api', commentsRouter);
+  app.use('/api/notifications', notificationsRouter);
+  app.use('/api/activity', activityLogRouter);
   app.use('/api/search', searchRouter);
   app.use('/api/agent-runs', agentRunsRouter);
 

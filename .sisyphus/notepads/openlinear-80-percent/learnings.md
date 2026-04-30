@@ -425,3 +425,45 @@ changes locally without a full rebuild:
 2. `docker cp apps/sidecar/dist/index.js openlinear:/app/apps/sidecar/dist/index.js`
 3. `docker restart openlinear` OR `docker exec openlinear sh -c 'kill -TERM <sidecar PID>'` then `docker exec -d openlinear sh -c 'node /app/apps/sidecar/dist/index.js > /var/log/openlinear/api.log 2>&1'`
 4. `docker exec openlinear grep Recovery /var/log/openlinear/api.log`
+
+## T13 — Notifications + ActivityLog API + mutation integration
+
+### Notification dedup: never notify the actor
+- `createNotification(input)` early-returns if `recipientUserId === actorUserId`.
+- Cleaner than spraying `if (recipient !== req.userId)` at every call site.
+- Same for status_change: PATCH only fires when `creatorId !== req.userId`.
+
+### Best-effort writes don't block mutations
+- Both `logActivity()` and `createNotification()` wrap their prisma calls in
+  try/catch and log + swallow on failure. The mutation handler must always
+  succeed for the client even if downstream notification/activity bookkeeping
+  fails. This matches Linear/GitHub semantics.
+
+### Payload shape per action
+- `task_created`     : `{ title, status, priority, identifier }`
+- `task_updated`     : `{ fields: string[] }`              (only changed keys)
+- `task_status_changed`: `{ from, to, title }`             (string transition)
+- `task_assigned`    : `{ from: userId|null, to: userId }`
+- `task_archived`    : `{ id }`
+- `project_updated`  : `{ fields: string[] }`
+- `team_member_added`: `{ addedUserId, role }`
+- `team_member_removed`: `{ removedUserId }`
+- `comment_created`  : `{ commentId, mentionCount }`
+- `agent_run_started`  : `{ agentRunId, agent, model }`
+- `agent_run_completed`: `{ agentRunId, status, prUrl?, errorMessage? }`
+
+### Cross-package import for sidecar
+- Sidecar already mounts `@openlinear/api/middleware`, `/ownership`, etc.
+- Added `./activity` to `apps/api/package.json` exports so sidecar's
+  `agent-run.ts` can call `logActivity()` directly without duplicating
+  the helper. No build step needed (TS path resolves).
+
+### PATCH activity-vs-status branching
+- When status is in the patch body, emit `task_status_changed` only.
+- Otherwise emit a generic `task_updated` with the changed field names.
+- Avoids double-logging for the same operation while preserving observability.
+
+### Live route mount QA
+- Hitting an unauth GET on a newly-mounted route returns `401` (not `404`).
+  This single-byte signal is enough to confirm registration without needing
+  a real DB user — useful when the dev DB isn't seeded.

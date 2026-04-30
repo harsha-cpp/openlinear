@@ -9,6 +9,7 @@ import {
   assertTeamRole,
   OwnershipError,
 } from '../services/ownership';
+import { logActivity } from '../services/activity';
 import {
   createCommentSchema,
   updateCommentSchema,
@@ -152,12 +153,19 @@ router.post(
       }
 
       for (const notification of result.notifications) {
-        broadcastToUser(
-          notification.userId,
-          'notification:created',
-          notification,
-        );
+        broadcastToUser(notification.userId, 'notification:created', notification);
       }
+
+      await logActivity({
+        taskId,
+        teamId: task.teamId,
+        userId: req.userId!,
+        action: 'comment_created',
+        payload: {
+          commentId: result.comment.id,
+          mentionCount: result.notifications.length,
+        },
+      });
 
       res.status(201).json(result.comment);
     } catch (error) {

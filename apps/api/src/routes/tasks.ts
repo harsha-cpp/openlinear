@@ -1,6 +1,6 @@
 import { Router, Response, NextFunction } from 'express';
 import { prisma } from '@openlinear/db';
-import { broadcast } from '../sse';
+import { broadcastToTask, broadcastToTeam, broadcastToUser } from '../sse';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { validateBody, validateQuery, ValidatedRequest } from '../middleware/validate';
 import { getUserTeamIds } from '../services/team-scope';
@@ -11,6 +11,8 @@ import {
   OwnershipError,
 } from '../services/ownership';
 import { ValidationError } from '../errors';
+import { logActivity } from '../services/activity';
+import { createNotification } from './notifications';
 import {
   createTaskBodySchema,
   updateTaskBodySchema,
@@ -218,7 +220,33 @@ router.post(
       }, { timeout: 15000, maxWait: 5000 });
 
       const transformedTask = flattenLabels(task);
-      broadcast('task:created', transformedTask);
+      broadcastToTask('task:created', transformedTask);
+
+      await logActivity({
+        taskId: task.id,
+        projectId: task.projectId,
+        teamId: task.teamId,
+        userId: req.userId!,
+        action: 'task_created',
+        payload: {
+          title: task.title,
+          status: task.status,
+          priority: task.priority,
+          identifier: task.identifier,
+        },
+      });
+
+      const taskAssigneeId = (task as { assigneeId?: string | null }).assigneeId;
+      if (taskAssigneeId && taskAssigneeId !== req.userId) {
+        await createNotification({
+          recipientUserId: taskAssigneeId,
+          actorUserId: req.userId!,
+          type: 'assignment',
+          taskId: task.id,
+          body: `Assigned to you: ${task.title}`,
+        });
+      }
+
       res.status(201).json(transformedTask);
     } catch (error) {
       next(error);
@@ -254,6 +282,10 @@ router.patch(
     try {
       const id = req.params.id as string;
       const existing = await assertTaskOwned(id, req.userId!);
+      const previousTaskMeta = await prisma.task.findUnique({
+        where: { id },
+        select: { assigneeId: true, creatorId: true, title: true },
+      });
 
       const { labelIds, teamId, projectId, dueDate, ...updateData } = req.validBody!;
 
@@ -299,7 +331,67 @@ router.patch(
       });
 
       const transformedTask = flattenLabels(task);
-      broadcast('task:updated', transformedTask);
+      broadcastToTask('task:updated', transformedTask);
+
+      const statusChanged =
+        updateData.status !== undefined && updateData.status !== existing.status;
+      const newAssigneeId = (updateData as { assigneeId?: string | null }).assigneeId;
+      const previousAssigneeId = previousTaskMeta?.assigneeId ?? null;
+      const assigneeChanged =
+        newAssigneeId !== undefined && newAssigneeId !== previousAssigneeId;
+
+      if (statusChanged) {
+        await logActivity({
+          taskId: task.id,
+          projectId: task.projectId,
+          teamId: task.teamId,
+          userId: req.userId!,
+          action: 'task_status_changed',
+          payload: {
+            from: existing.status,
+            to: task.status,
+            title: task.title,
+          },
+        });
+        const creatorId = previousTaskMeta?.creatorId ?? null;
+        if (creatorId && creatorId !== req.userId) {
+          await createNotification({
+            recipientUserId: creatorId,
+            actorUserId: req.userId!,
+            type: 'status_change',
+            taskId: task.id,
+            body: `Status changed: ${task.title} → ${task.status}`,
+          });
+        }
+      } else {
+        await logActivity({
+          taskId: task.id,
+          projectId: task.projectId,
+          teamId: task.teamId,
+          userId: req.userId!,
+          action: 'task_updated',
+          payload: { fields: Object.keys(updateData) },
+        });
+      }
+
+      if (assigneeChanged && newAssigneeId && newAssigneeId !== req.userId) {
+        await createNotification({
+          recipientUserId: newAssigneeId,
+          actorUserId: req.userId!,
+          type: 'assignment',
+          taskId: task.id,
+          body: `Assigned to you: ${task.title}`,
+        });
+        await logActivity({
+          taskId: task.id,
+          projectId: task.projectId,
+          teamId: task.teamId,
+          userId: req.userId!,
+          action: 'task_assigned',
+          payload: { from: previousAssigneeId, to: newAssigneeId },
+        });
+      }
+
       res.json(transformedTask);
     } catch (error) {
       next(error);
@@ -310,14 +402,37 @@ router.patch(
 router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    await assertTaskOwned(id, req.userId!);
+    const owned = await assertTaskOwned(id, req.userId!);
+
+    const fullTask = await prisma.task.findUnique({
+      where: { id },
+      select: { teamId: true, creatorId: true },
+    });
 
     await prisma.task.update({
       where: { id },
       data: { archived: true },
     });
 
-    broadcast('task:deleted', { id });
+    const teamId = fullTask?.teamId ?? owned.teamId ?? null;
+    const creatorId = fullTask?.creatorId ?? null;
+    if (teamId) {
+      broadcastToTeam(teamId, 'task:deleted', { id });
+    } else if (creatorId) {
+      broadcastToUser(creatorId, 'task:deleted', { id });
+    } else {
+      broadcastToUser(req.userId!, 'task:deleted', { id });
+    }
+
+    await logActivity({
+      taskId: id,
+      projectId: owned.projectId,
+      teamId,
+      userId: req.userId!,
+      action: 'task_archived',
+      payload: { id },
+    });
+
     res.status(204).send();
   } catch (error) {
     next(error);

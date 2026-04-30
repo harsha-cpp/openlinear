@@ -5,6 +5,7 @@ import { broadcastToTeam, broadcastToUser } from '../sse';
 import { requireAuth, optionalAuth, AuthRequest } from '../middleware/auth';
 import { validateBody, ValidatedRequest } from '../middleware/validate';
 import { assertTeamRole, OwnershipError } from '../services/ownership';
+import { logActivity } from '../services/activity';
 import {
   createTeamBodySchema,
   updateTeamBodySchema,
@@ -197,11 +198,7 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response, next:
       broadcastToUser(uid, 'team:deleted', { id });
     }
     res.status(204).send();
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes('Record to delete does not exist')) {
-      res.status(404).json({ error: 'Team not found' });
-      return;
-    }
+  } catch (error) {
     next(error);
   }
 });
@@ -281,6 +278,13 @@ router.post(
         include: { user: true },
       });
 
+      await logActivity({
+        teamId: id,
+        userId: req.userId!,
+        action: 'team_member_added',
+        payload: { addedUserId: user.id, role },
+      });
+
       res.status(201).json(member);
     } catch (error) {
       next(error);
@@ -309,6 +313,13 @@ router.delete('/:id/members/:userId', requireAuth, async (req: AuthRequest, res:
       where: {
         teamId_userId: { teamId: id, userId: targetUserId },
       },
+    });
+
+    await logActivity({
+      teamId: id,
+      userId: req.userId!,
+      action: 'team_member_removed',
+      payload: { removedUserId: targetUserId },
     });
 
     res.status(204).send();

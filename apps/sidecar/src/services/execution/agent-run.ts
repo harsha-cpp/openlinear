@@ -1,5 +1,6 @@
 import { Prisma, prisma } from '@openlinear/db';
 import { logger } from '@openlinear/api/logger';
+import { logActivity } from '@openlinear/api/activity';
 
 import type { ExecutionState } from './state';
 
@@ -22,6 +23,22 @@ export async function createAgentRun(params: {
       },
       select: { id: true },
     });
+
+    if (params.userId) {
+      const taskScope = await prisma.task.findUnique({
+        where: { id: params.taskId },
+        select: { teamId: true, projectId: true },
+      });
+      await logActivity({
+        taskId: params.taskId,
+        teamId: taskScope?.teamId ?? null,
+        projectId: taskScope?.projectId ?? null,
+        userId: params.userId,
+        action: 'agent_run_started',
+        payload: { agentRunId: row.id, agent: params.agent, model: params.model },
+      });
+    }
+
     return row.id;
   } catch (err) {
     logger.error(
@@ -76,6 +93,26 @@ export async function finalizeAgentRun(
       where: { id: state.agentRunId },
       data,
     });
+
+    if (state.userId) {
+      const taskScope = await prisma.task.findUnique({
+        where: { id: state.taskId },
+        select: { teamId: true, projectId: true },
+      });
+      await logActivity({
+        taskId: state.taskId,
+        teamId: taskScope?.teamId ?? null,
+        projectId: taskScope?.projectId ?? null,
+        userId: state.userId,
+        action: 'agent_run_completed',
+        payload: {
+          agentRunId: state.agentRunId,
+          status,
+          ...(extra.prUrl ? { prUrl: extra.prUrl } : {}),
+          ...(extra.errorMessage ? { errorMessage: extra.errorMessage.slice(0, 500) } : {}),
+        },
+      });
+    }
   } catch (err) {
     logger.error(
       { err, taskId: state.taskId, agentRunId: state.agentRunId, status },

@@ -7,6 +7,7 @@ import { addRepositoryByUrl } from '../services/github';
 import { getUserTeamIds } from '../services/team-scope';
 import { assertProjectOwned, assertTeamRole } from '../services/ownership';
 import { HttpError } from '../errors';
+import { logActivity } from '../services/activity';
 import {
   createProjectBodySchema,
   updateProjectBodySchema,
@@ -239,7 +240,28 @@ router.patch(
       }, { timeout: 15000, maxWait: 5000 });
 
       const result = transformProject(project);
-      broadcast('project:updated', result);
+      const broadcastTeamIds = (project.projectTeams as Array<{ teamId: string }>).map(
+        (pt) => pt.teamId,
+      );
+      if (broadcastTeamIds.length > 0) {
+        for (const tid of broadcastTeamIds) {
+          broadcastToTeam(tid, 'project:updated', result);
+        }
+      } else {
+        broadcastToUser(req.userId!, 'project:updated', result);
+      }
+
+      const activityTeamIds = broadcastTeamIds.length > 0 ? broadcastTeamIds : owned.teamIds;
+      for (const tid of activityTeamIds) {
+        await logActivity({
+          projectId: id,
+          teamId: tid,
+          userId: req.userId!,
+          action: 'project_updated',
+          payload: { fields: Object.keys(req.validBody!) },
+        });
+      }
+
       res.json(result);
     } catch (error) {
       next(error);
@@ -263,7 +285,13 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response, next:
 
     await prisma.project.delete({ where: { id } });
 
-    broadcast('project:deleted', { id });
+    if (owned.teamIds.length > 0) {
+      for (const tid of owned.teamIds) {
+        broadcastToTeam(tid, 'project:deleted', { id });
+      }
+    } else {
+      broadcastToUser(req.userId!, 'project:deleted', { id });
+    }
     res.status(204).send();
   } catch (error) {
     next(error);
