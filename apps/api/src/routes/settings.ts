@@ -1,6 +1,6 @@
 import { Router, Response, NextFunction } from 'express';
 import { prisma } from '@openlinear/db';
-import { broadcast } from '../sse';
+import { broadcastToUser } from '../sse';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { validateBody, ValidatedRequest } from '../middleware/validate';
 import { updateSettingsBodySchema, UpdateSettingsBody } from '../schemas/settings';
@@ -36,7 +36,7 @@ router.patch(
         create: { userId, ...data },
       });
 
-      broadcast('settings:updated', settings);
+      broadcastToUser(userId, 'settings:updated', settings);
       res.json(settings);
     } catch (error) {
       next(error);

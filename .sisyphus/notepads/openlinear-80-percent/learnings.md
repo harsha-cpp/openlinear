@@ -467,3 +467,48 @@ changes locally without a full rebuild:
 - Hitting an unauth GET on a newly-mounted route returns `401` (not `404`).
   This single-byte signal is enough to confirm registration without needing
   a real DB user — useful when the dev DB isn't seeded.
+
+## [2026-05-01] Task: T9 — VALIDATION + STANDARDIZED ERROR ENVELOPE
+
+**ValidationError contract** (mirrors T7's OwnershipError discipline — typed throw, middleware maps to wire):
+
+```ts
+class ValidationError extends Error {
+  readonly code = 'VALIDATION_ERROR';
+  readonly statusCode = 400;
+  readonly details?: unknown;          // zod.flatten() output
+  static fromZod(error: ZodError, message?): ValidationError;
+}
+class HttpError extends Error {        // escape hatch when neither ValidationError nor OwnershipError fits
+  statusCode: number;
+  code: string;
+  details?: unknown;
+}
+```
+
+**Wire format** (set by `apps/api/src/app.ts` errorHandler — single source of truth for ALL error responses):
+
+- ValidationError       → 400 + `{error:'validation_error', code:'VALIDATION_ERROR', details, requestId}`
+- HttpError             → statusCode + `{error, code, message, details?, requestId}`
+- Prisma P2002 (unique) → 409 + `{error:'conflict',   code:'P2002', message, details:meta?, requestId}`
+- Prisma P2025 (404)    → 404 + `{error:'not_found',  code:'P2025', message, requestId}`
+- Prisma P2003 (FK)     → 409 + `{error:'conflict',   code:'P2003', message, details:meta?, requestId}`
+- Fall-through 5xx/4xx  → `{error:'internal_error'|'request_failed', code:'INTERNAL_ERROR'|'REQUEST_FAILED', requestId}`
+
+**`validateBody(schema)` / `validateQuery(schema)` middleware** (`apps/api/src/middleware/validate.ts`):
+- Mounts AFTER `requireAuth`, BEFORE the route handler.
+- Sets `req.validBody` / `req.validQuery` (typed via `ValidatedRequest<TBody,TQuery>` extending Express Request).
+- On failure, calls `next(ValidationError.fromZod(parsed.error))` — global middleware turns it into the wire envelope.
+- Routes do NOT call `safeParse` inline anymore. Routes do NOT inline `res.status(400).json(...)`.
+
+**Schemas live in `apps/api/src/schemas/<domain>.ts`** — one file per route domain (tasks/projects/teams/labels/repos/inbox/settings/comments/search). Each exports `<verb><Domain><Body|Query>Schema` + `<Verb><Domain><Body|Query>` type. Reuse via `import { ... } from '../schemas/<domain>'`.
+
+**Prisma error code matching — NEVER string-match again.** All `error.message.includes('Unique constraint')` / `'Record to update not found'` / `'Record to delete does not exist'` were removed. Use `error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'` (or let global middleware do it — preferred). Import: `import { Prisma } from '@openlinear/db'` (re-export from `packages/db/generated/prisma/client`).
+
+**201 on POST creates — enforced everywhere**: tasks/teams/teams.members/projects/labels/labels.tasks/repos.url/repos.import all return 201. Verified with `grep -n "res\.status(201)"`.
+
+**Orphan task rejection**: `createTaskBodySchema` has `.refine((d)=>d.teamId||d.projectId, {message:'Task must belong to a team or a project', path:['teamId']})`. POST handler also throws `ValidationError` after project resolution if `resolvedTeamId` is still null (defense in depth — handles edge case where project has zero teams).
+
+**Coordination gotcha (BURNED ON THIS)**: Multiple agents running in parallel on Wave 2 had conflicting versions of `apps/api/src/sse.ts` (one renamed `broadcast` → `broadcastToAll/broadcastToTeam/broadcastToUser`). Routes I touched were checked in by another agent already importing `validate` and `errors` (commit e96261b) BUT those modules didn't exist on disk — that's why typecheck baseline mid-session showed phantom errors. Resolution: kept `broadcastToAll` rename, added `export const broadcast = broadcastToAll;` alias in `sse.ts` for backward compat. **Lesson**: when stash/pop after parallel-wave coordinated work, prefer `git checkout HEAD -- <files>` over `git stash pop` to avoid 3-way merge garbage.
+
+**QA evidence**: `.sisyphus/evidence/task-9-validation.txt` (8 scenarios, all pass), `.sisyphus/evidence/task-9-201.txt` (code-level proof + wire envelope shape; 201/409 wire test deferred — Postgres + Docker daemon down at QA time).

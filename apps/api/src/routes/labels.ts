@@ -1,6 +1,6 @@
 import { Router, Response, NextFunction } from 'express';
 import { prisma } from '@openlinear/db';
-import { broadcast } from '../sse';
+import { broadcastToTeam, broadcastToUser, broadcastToTaskById } from '../sse';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { validateBody, validateQuery, ValidatedRequest } from '../middleware/validate';
 import { getUserTeamIds } from '../services/team-scope';
@@ -66,7 +66,11 @@ router.post(
         data: { ...rest, teamId: teamId ?? null },
       });
 
-      broadcast('label:created', label);
+      if (label.teamId) {
+        broadcastToTeam(label.teamId, 'label:created', label);
+      } else {
+        broadcastToUser(req.userId!, 'label:created', label);
+      }
       res.status(201).json(label);
     } catch (error) {
       next(error);
@@ -101,7 +105,11 @@ router.patch(
         data: req.validBody!,
       });
 
-      broadcast('label:updated', label);
+      if (label.teamId) {
+        broadcastToTeam(label.teamId, 'label:updated', label);
+      } else {
+        broadcastToUser(req.userId!, 'label:updated', label);
+      }
       res.json(label);
     } catch (error) {
       next(error);
@@ -114,9 +122,18 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response, next:
     const id = req.params.id as string;
     await assertLabelAccess(id, req.userId!);
 
+    const existing = await prisma.label.findUnique({
+      where: { id },
+      select: { teamId: true },
+    });
+
     await prisma.label.delete({ where: { id } });
 
-    broadcast('label:deleted', { id });
+    if (existing?.teamId) {
+      broadcastToTeam(existing.teamId, 'label:deleted', { id });
+    } else {
+      broadcastToUser(req.userId!, 'label:deleted', { id });
+    }
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -140,7 +157,7 @@ router.post(
         include: { label: true },
       });
 
-      broadcast('task:label:assigned', { taskId, label: taskLabel.label });
+      broadcastToTaskById(taskId, 'task:label:assigned', { taskId, label: taskLabel.label });
       res.status(201).json(taskLabel);
     } catch (error) {
       next(error);
@@ -161,7 +178,7 @@ router.delete('/tasks/:id/labels/:labelId', requireAuth, async (req: AuthRequest
       },
     });
 
-    broadcast('task:label:removed', { taskId, labelId });
+    broadcastToTaskById(taskId, 'task:label:removed', { taskId, labelId });
     res.status(204).send();
   } catch (error) {
     next(error);

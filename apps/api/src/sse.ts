@@ -46,6 +46,9 @@ export function broadcastToAll(event: string, data: unknown): void {
   });
 }
 
+export const broadcast = broadcastToAll;
+
+
 /**
  * Send to every SSE connection currently held by `userId`.
  */
