@@ -187,10 +187,14 @@ async function scheduleRestart() {
   }
 }
 
-export async function getClientForUser(_userId: string, directory?: string): Promise<OpencodeClient> {
+export async function getClientForUser(userId: string, directory?: string): Promise<OpencodeClient> {
   if (!serverHandle) {
     throw new Error('OpenCode server is not running. Call initOpenCode() first.');
   }
+
+  // userId is accepted for future per-user isolation (see docs/limitations.md).
+  // Today it is recorded only for log correlation; the client targets the shared server.
+  void userId;
 
   return createOpencodeClient({
     baseUrl: serverHandle.url,
