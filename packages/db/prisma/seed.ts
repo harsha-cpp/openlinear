@@ -15,11 +15,6 @@ function generateInviteCode(key: string): string {
   return `${key}-${random}`;
 }
 
-// Pre-computed bcrypt hash of "kaz" with 10 salt rounds
-// Generated via: bcrypt.hash('kaz', 10)
-const KAZ_PASSWORD_HASH =
-  "$2a$10$9nD7hcFzJXMrUMChzUMn8uM7vjcJnCCBsGGep8xyhriffyCbO9cnK";
-
 const SEED_TASKS = [
   {
     id: "seed-task-001",
@@ -83,12 +78,11 @@ async function main() {
   console.log(`[seed] Upserted ${SEED_TASKS.length} tasks`);
 
   const user = await prisma.user.upsert({
-    where: { id: "seed-user-kaz" },
+    where: { id: "seed-user-demo" },
     update: {},
     create: {
-      id: "seed-user-kaz",
-      username: "kaz",
-      passwordHash: KAZ_PASSWORD_HASH,
+      id: "seed-user-demo",
+      username: "demo",
     },
   });
   console.log(`[seed] Upserted user "${user.username}"`);
@@ -129,7 +123,7 @@ async function main() {
       role: "owner",
     },
   });
-  console.log(`[seed] Upserted TeamMember kaz -> Default`);
+  console.log(`[seed] Upserted TeamMember demo -> Default`);
 
   // 5. Check for an active repository
   const activeRepo = await prisma.repository.findFirst({
