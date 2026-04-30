@@ -19,9 +19,15 @@ import reposRouter from './routes/repos';
 import teamsRouter from './routes/teams';
 import projectsRouter from './routes/projects';
 import inboxRouter from './routes/inbox';
+import searchRouter from './routes/search';
+import commentsRouter from './routes/comments';
+import jwt from 'jsonwebtoken';
 import { clients, SSEClient } from './sse';
 import { logger } from './logger';
 import { isOwnershipError } from './services/ownership';
+import { isValidationError, isHttpError } from './errors';
+import { Prisma } from '@openlinear/db';
+import { getUserTeamIds } from './services/team-scope';
 
 function buildCorsOrigin(): cors.CorsOptions['origin'] {
   const raw = process.env.CORS_ORIGIN || 'http://localhost:3000';
@@ -132,6 +138,8 @@ export function createApp(): Application {
   app.use('/api/teams', teamsRouter);
   app.use('/api/projects', projectsRouter);
   app.use('/api/inbox', inboxRouter);
+  app.use('/api', commentsRouter);
+  app.use('/api/search', searchRouter);
 
   app.get('/health', (_req: Request, res: Response) => {
     res.json({
@@ -141,8 +149,48 @@ export function createApp(): Application {
     });
   });
 
-  app.get('/api/events', (req: Request, res: Response) => {
-    const clientId = (req.query.clientId as string) || randomUUID();
+  app.get('/api/events', async (req: Request, res: Response) => {
+    const tokenRaw = req.query.token;
+    const token = typeof tokenRaw === 'string' ? tokenRaw : '';
+    if (!token) {
+      res.status(401).json({ error: 'unauthorized', code: 'SSE_TOKEN_REQUIRED' });
+      return;
+    }
+
+    const secret =
+      process.env.JWT_SECRET ||
+      (process.env.NODE_ENV === 'production'
+        ? null
+        : 'openlinear-dev-secret-change-in-production');
+    if (!secret) {
+      res.status(500).json({ error: 'server_misconfigured' });
+      return;
+    }
+
+    let userId: string;
+    try {
+      const trustProxy = process.env.OPENLINEAR_TRUST_PROXY_AUTH === '1';
+      const claims = trustProxy
+        ? (jwt.decode(token) as { userId?: string } | null)
+        : (jwt.verify(token, secret) as { userId?: string });
+      if (!claims?.userId) {
+        res.status(401).json({ error: 'invalid_token' });
+        return;
+      }
+      userId = claims.userId;
+    } catch {
+      res.status(401).json({ error: 'invalid_token' });
+      return;
+    }
+
+    let teamIds: string[] = [];
+    try {
+      teamIds = await getUserTeamIds(userId);
+    } catch (err) {
+      req.log?.warn({ err, userId }, '[SSE] failed to load team memberships');
+    }
+
+    const clientId = randomUUID();
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -150,30 +198,46 @@ export function createApp(): Application {
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
-    const client: SSEClient = { id: clientId, res };
+    const client: SSEClient = { id: clientId, res, userId, teamIds };
     clients.set(clientId, client);
 
-    req.log?.info({ clientId, total: clients.size }, '[SSE] client connected');
+    req.log?.info(
+      { clientId, userId, teamCount: teamIds.length, total: clients.size },
+      '[SSE] client connected',
+    );
 
-    res.write(`data: ${JSON.stringify({ type: 'connected', clientId })}\n\n`);
+    try {
+      res.write(`data: ${JSON.stringify({ type: 'connected', clientId })}\n\n`);
+    } catch (err) {
+      req.log?.warn({ err, clientId }, '[SSE] initial write failed');
+    }
 
     const heartbeatInterval = setInterval(() => {
-      if (!res.writableEnded) {
+      if (res.writableEnded) return;
+      try {
         res.write(`: heartbeat\n\n`);
+      } catch (err) {
+        req.log?.debug({ err, clientId }, '[SSE] heartbeat write failed');
+        cleanup();
       }
     }, 30000);
 
-    const cleanup = () => {
+    let cleaned = false;
+    function cleanup() {
+      if (cleaned) return;
+      cleaned = true;
       clearInterval(heartbeatInterval);
       clients.delete(clientId);
       req.log?.info(
-        { clientId, total: clients.size },
+        { clientId, userId, total: clients.size },
         '[SSE] client disconnected',
       );
-    };
+    }
 
     req.on('close', cleanup);
     req.on('error', cleanup);
+    res.on('close', cleanup);
+    res.on('error', cleanup);
   });
 
   // 7. Global error middleware — MUST be last
@@ -211,6 +275,59 @@ export function createApp(): Application {
       return;
     }
 
+    if (isValidationError(err)) {
+      res.status(err.statusCode).json({
+        error: 'validation_error',
+        code: err.code,
+        ...(err.details !== undefined ? { details: err.details } : {}),
+        requestId,
+      });
+      return;
+    }
+
+    if (isHttpError(err)) {
+      res.status(err.statusCode).json({
+        error: err.statusCode >= 500 ? 'internal_error' : 'request_failed',
+        code: err.code,
+        message: err.message,
+        ...(err.details !== undefined ? { details: err.details } : {}),
+        requestId,
+      });
+      return;
+    }
+
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      if (err.code === 'P2002') {
+        res.status(409).json({
+          error: 'conflict',
+          code: 'P2002',
+          message: 'Unique constraint violation',
+          ...(err.meta ? { details: err.meta } : {}),
+          requestId,
+        });
+        return;
+      }
+      if (err.code === 'P2025') {
+        res.status(404).json({
+          error: 'not_found',
+          code: 'P2025',
+          message: 'Record not found',
+          requestId,
+        });
+        return;
+      }
+      if (err.code === 'P2003') {
+        res.status(409).json({
+          error: 'conflict',
+          code: 'P2003',
+          message: 'Foreign key constraint violation',
+          ...(err.meta ? { details: err.meta } : {}),
+          requestId,
+        });
+        return;
+      }
+    }
+
     const status =
       typeof (err as { statusCode?: unknown })?.statusCode === 'number'
         ? ((err as { statusCode: number }).statusCode)
@@ -220,6 +337,7 @@ export function createApp(): Application {
 
     res.status(status).json({
       error: status >= 500 ? 'internal_error' : 'request_failed',
+      code: status >= 500 ? 'INTERNAL_ERROR' : 'REQUEST_FAILED',
       requestId,
     });
   };
