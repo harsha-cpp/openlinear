@@ -16,7 +16,7 @@ async function teamScope(userId?: string): Promise<Record<string, unknown> | nul
   return { teamId: { in: teamIds } };
 }
 
-router.get('/count', optionalAuth, async (req: AuthRequest, res: Response) => {
+router.get('/count', optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const scope = await teamScope(req.userId);
     if (!scope) {
@@ -32,12 +32,11 @@ router.get('/count', optionalAuth, async (req: AuthRequest, res: Response) => {
     });
     res.json({ total, unread });
   } catch (error) {
-    console.error('[Inbox] Error counting inbox items:', error);
-    res.status(500).json({ error: 'Failed to count inbox items' });
+    next(error);
   }
 });
 
-router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
+router.get('/', optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const scope = await teamScope(req.userId);
     if (!scope) {
@@ -66,8 +65,7 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
 
     res.json(flatTasks);
   } catch (error) {
-    console.error('[Inbox] Error listing inbox:', error);
-    res.status(500).json({ error: 'Failed to list inbox items' });
+    next(error);
   }
 });
 
@@ -85,7 +83,7 @@ router.patch('/read/:id', requireAuth, async (req: AuthRequest, res: Response, n
   }
 });
 
-router.patch('/read-all', optionalAuth, async (req: AuthRequest, res: Response) => {
+router.patch('/read-all', optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const scope = await teamScope(req.userId);
     if (!scope) {
@@ -104,8 +102,7 @@ router.patch('/read-all', optionalAuth, async (req: AuthRequest, res: Response) 
     });
     res.json({ success: true });
   } catch (error) {
-    console.error('[Inbox] Error marking all read:', error);
-    res.status(500).json({ error: 'Failed to mark all inbox items as read' });
+    next(error);
   }
 });
 

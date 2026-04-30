@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils"
 import { checkBrainstormAvailability, generateBrainstormQuestions, streamBrainstormTasks, transcribeAudio, type BrainstormTask } from "@/lib/api/brainstorm"
 import { fetchProjects } from "@/lib/api/projects"
 import type { Project } from "@/lib/api/types"
-import { API_URL, getAuthHeader } from "@/lib/api/client"
+import { getApiUrl, getAuthHeader } from "@/lib/api/client"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -377,7 +377,7 @@ export function GlobalQuickCapture() {
     try {
       await Promise.all(
         selectedTasks.map((task) =>
-          fetch(`${API_URL}/api/tasks`, {
+          fetch(`${getApiUrl()}/api/tasks`, {
             method: "POST",
             headers: { "Content-Type": "application/json", ...getAuthHeader() },
             body: JSON.stringify({

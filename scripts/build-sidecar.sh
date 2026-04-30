@@ -4,6 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 SIDECAR_DIR="$ROOT_DIR/apps/sidecar"
+DB_DIR="$ROOT_DIR/packages/db"
 BINARIES_DIR="$ROOT_DIR/apps/desktop/src-tauri/binaries"
 
 OS="$(uname -s)"
@@ -18,33 +19,32 @@ echo "==> Bundling with esbuild (ESM -> CJS)..."
 cd "$SIDECAR_DIR"
 npx esbuild src/index.ts --bundle --platform=node --target=node18 --outfile=dist/bundle.cjs --format=cjs
 
-echo "==> Copying Prisma engine and schema..."
-PRISMA_CLIENT="$ROOT_DIR/node_modules/.pnpm/@prisma+client@5.22.0_prisma@5.22.0/node_modules/.prisma/client"
+echo "==> Resolving Prisma generated client path..."
+PRISMA_RUNTIME_DIR="$DB_DIR/generated/prisma/client"
 
-copy_prisma_engine() {
-  local pattern="$1"
-  local found=false
-  for engine in "$PRISMA_CLIENT"/$pattern; do
-    if [ -f "$engine" ]; then
-      cp "$engine" dist/
-      echo "  - Copied $(basename "$engine")"
-      found=true
-    fi
-  done
-  if [ "$found" = false ]; then
-    echo "  ! Warning: No Prisma engine found matching $pattern"
-  fi
-}
-
-if [ -f "$PRISMA_CLIENT/schema.prisma" ]; then
-  cp "$PRISMA_CLIENT/schema.prisma" dist/
+if [ ! -d "$PRISMA_RUNTIME_DIR" ]; then
+  echo "  ! Prisma generated client not found at $PRISMA_RUNTIME_DIR"
+  echo "  ! Run 'pnpm --filter @openlinear/db db:generate' first."
+  exit 1
 fi
+
+echo "  - Prisma runtime dir: $PRISMA_RUNTIME_DIR"
+
+echo "==> Copying Prisma client artifacts (schema + WASM query compiler)..."
+mkdir -p dist
+if [ -f "$PRISMA_RUNTIME_DIR/schema.prisma" ]; then
+  cp "$PRISMA_RUNTIME_DIR/schema.prisma" dist/
+  echo "  - Copied schema.prisma"
+fi
+for wasm in "$PRISMA_RUNTIME_DIR"/query_compiler_fast_bg.wasm; do
+  if [ -f "$wasm" ]; then
+    cp "$wasm" dist/
+    echo "  - Copied $(basename "$wasm")"
+  fi
+done
 
 case "$OS" in
   Darwin)
-    echo "==> Copying macOS Prisma engine..."
-    copy_prisma_engine "libquery_engine-darwin*.dylib.node"
-
     echo "==> Building macOS binary with pkg..."
     if [ "$ARCH" = "arm64" ]; then
       npx @yao-pkg/pkg dist/bundle.cjs --target node18-macos-arm64 --output dist/sidecar-macos-arm64
@@ -53,10 +53,6 @@ case "$OS" in
     fi
     ;;
   Linux)
-    echo "==> Copying Linux Prisma engine..."
-    copy_prisma_engine "libquery_engine-debian-openssl-*.so.node"
-    copy_prisma_engine "libquery_engine-linux-musl-openssl-*.so.node"
-
     echo "==> Building Linux binary with pkg..."
     npx @yao-pkg/pkg dist/bundle.cjs --target node18-linux-x64 --output dist/sidecar-linux-x64
     ;;
@@ -73,19 +69,16 @@ mkdir -p "$BINARIES_DIR"
 
 echo "==> Copying and renaming binaries with Tauri target triples..."
 
-# Mac Intel
 if [ -f "$SIDECAR_DIR/dist/sidecar-macos-x64" ]; then
   cp "$SIDECAR_DIR/dist/sidecar-macos-x64" "$BINARIES_DIR/openlinear-sidecar-x86_64-apple-darwin"
   echo "  - openlinear-sidecar-x86_64-apple-darwin"
 fi
 
-# Mac ARM
 if [ -f "$SIDECAR_DIR/dist/sidecar-macos-arm64" ]; then
   cp "$SIDECAR_DIR/dist/sidecar-macos-arm64" "$BINARIES_DIR/openlinear-sidecar-aarch64-apple-darwin"
   echo "  - openlinear-sidecar-aarch64-apple-darwin"
 fi
 
-# Linux x64
 if [ -f "$SIDECAR_DIR/dist/sidecar-linux-x64" ]; then
   cp "$SIDECAR_DIR/dist/sidecar-linux-x64" "$BINARIES_DIR/openlinear-sidecar-x86_64-unknown-linux-gnu"
   echo "  - openlinear-sidecar-x86_64-unknown-linux-gnu"

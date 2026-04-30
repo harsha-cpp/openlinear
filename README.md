@@ -82,13 +82,15 @@ pnpm --filter @openlinear/desktop dev
 | Variable | Description |
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection string |
-| `JWT_SECRET` | Secret for signing auth tokens |
+| `JWT_SECRET` | Secret for signing auth tokens (REQUIRED in production) |
 | `GITHUB_CLIENT_ID` | GitHub OAuth app client ID |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth app client secret |
-| `GITHUB_REDIRECT_URI` | OAuth callback URL |
-| `REPOS_DIR` | Host path for cloned repos (default: `/tmp/openlinear-repos`) |
-| `API_PORT` | API server port (default: `3001`) |
-| `CORS_ORIGIN` | Allowed CORS origin (default: `http://localhost:3000`) |
+| `GITHUB_REDIRECT_URI` | OAuth callback URL (e.g. `http://localhost:3001/api/auth/github/callback` for dev, `https://openlinear.tech/api/auth/github/callback` for prod). The same URL handles both web and desktop logins; desktop callbacks are auto-detected by the `?client=desktop` state and redirected to the `openlinear://` deep link. |
+| `REPOS_DIR` | Host path for cloned repos (default: `<tmp>/openlinear-repos`) |
+| `API_PORT` | API server port (default: `3001`; ignored in the bundled desktop app, which picks a free ephemeral port) |
+| `CORS_ORIGIN` | Comma-separated allowed origins (default: `http://localhost:3000`). Tauri origins (`tauri://localhost`, `https://tauri.localhost`) are always added implicitly. |
+| `OAUTH_INTERCEPTOR_PORT` | Sidecar OAuth interceptor port for OpenCode AI provider OAuth (default: `1455`) |
+| `NEXT_PUBLIC_CLOUD_API_URL` | Cloud API base URL baked into the desktop UI build (default: `https://openlinear.tech`) |
 
 ## How It Works
 
@@ -127,7 +129,7 @@ openlinear/
 | AUR | Arch Linux | `yay -S openlinear-bin` |
 | npm CLI | Any | `npm install @kaizen403/openlinear-cli` |
 
-> **macOS note**: The app is unsigned. On first launch, right-click the app and select "Open", or run `xattr -cr /Applications/OpenLinear.app` to bypass Gatekeeper.
+> **macOS note**: The app currently ships ad-hoc signed (`signingIdentity: "-"`). On first launch macOS will warn that "Apple cannot verify" the app — right-click → Open, or run `xattr -cr /Applications/OpenLinear.app` to bypass Gatekeeper. To produce a properly signed/notarized build, add a Developer ID certificate and set `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` in the release workflow and replace `signingIdentity: "-"` in `apps/desktop/src-tauri/tauri.conf.json` with your identity name.
 
 Release builds are triggered automatically on tag push (`v*`).
 

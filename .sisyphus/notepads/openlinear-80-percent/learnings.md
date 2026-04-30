@@ -204,3 +204,112 @@ class OwnershipError extends Error {
 **Test data drift**: Existing vitest suites assumed unauthenticated routes worked. Updated `tasks.test.ts`, `teams.test.ts`, `projects.test.ts` to use `Authorization: Bearer <token>` + `TeamMember` rows for the test user. Tests run against a real Postgres so they're skipped in environments without one — manual QA via curl is canonical (see `.sisyphus/evidence/task-7-*.txt`).
 
 **N+1 risk**: `assertTeamRole` is one Prisma query (TeamMember lookup by composite unique). `assertTaskOwned` is one query for the task + one `getUserTeamIds()` call (which is one query). Routes that loop (e.g. project create with multiple teamIds, batch create with multiple taskIds) intentionally iterate sequentially — small N (≤20 enforced by zod) and clearer error messages than `Promise.all` rejection.
+
+## T12 — Search API
+- Prisma ILIKE on Postgres = `{ contains: q, mode: 'insensitive' }` (Postgres-only filter)
+- Scope source of truth = `getUserTeamIds(userId)` (T7). NEVER trust client-supplied teamId for scoping.
+- Short-circuit when userTeamIds=[]: skip Prisma query, return [] for tasks/projects.
+- Project scoping is many-to-many: `projectTeams.some({ teamId: { in: userTeamIds } })`.
+- Team scoping is direct: `members.some({ userId })` — do NOT route through teamIds (different invariant: list of teams the user is a member of).
+- Per-user rate limiter: mount AFTER requireAuth so AuthRequest.userId is populated; use it as keyGenerator (NOT IP — same-NAT users would share a bucket).
+- Limit distribution across types: `Math.max(1, Math.floor(limit / types.length))`.
+- Search hit shapes deliberately abbreviated (id + title/name + type discriminator + identifier for tasks) → keeps Cmd+K (T25) payload small.
+
+## [2026-05-01] Task: T10 — Comments API + @mention → Notification fan-out
+
+**Mention regex** (consumed by T13 notifications, T27 UI mention picker):
+
+```ts
+/(?:^|\s)@([a-zA-Z0-9_-]+)/g
+```
+
+The leading `(?:^|\s)` anchor is non-negotiable — without it `email@domain.com`
+matches as `@domain` and creates ghost notifications. Allowed username chars
+mirror the `User.username` column (alphanum + `_` + `-`); add chars here ONLY
+if you also widen the schema constraint.
+
+Use `RegExp.exec()` in a `while` loop, not `String.matchAll()` — TS2802 in the
+repo's current `target` setting (no downlevelIteration on the `RegExpStringIterator`).
+
+**Mention dedupe + commenter-exclusion** (one helper, reused by PATCH):
+
+```ts
+const recipientIds = Array.from(
+  new Set(mentionedUsers.map(u => u.id).filter(id => id !== req.userId)),
+);
+```
+
+Two filters in one expression: `Set` collapses duplicates from `@bob @bob` AND
+when two distinct usernames resolve to the same userId (rare, but possible
+during rename windows). The `!== req.userId` filter prevents self-notification —
+required because the spec says "exclude commenter" and because a self-notification
+would render as a confusing "you mentioned you" inbox row.
+
+**Silent-skip on missing mention** (don't break the comment over a typo):
+
+```ts
+const found = new Set(mentionedUsers.map(u => u.username));
+const missing = usernames.filter(u => !found.has(u));
+if (missing.length > 0) {
+  req.log?.warn({ missing, taskId, userId }, '[comments] @mention skipped — user(s) not found');
+}
+```
+
+The comment is still created with `mentions: <only resolved IDs>` — no notification
+row exists for ghost mentions, and the missing names are NOT stored. T27 UI must
+treat the rendered `@username` differently if it's not in `comment.mentions`
+(unresolved → render as plain text or strikethrough).
+
+**Broadcast pairing** (T13 will reuse for assignment + status_change events):
+
+For mutation routes that change a resource AND fan-out notifications:
+1. **Resource event** → `broadcastToTeam(task.teamId, 'comment:created', ...)` (or
+   `broadcastToUser(authorId, ...)` for legacy null-team tasks).
+2. **Notification event** → `broadcastToUser(recipientId, 'notification:created', notification)`
+   per recipient.
+
+Two separate broadcasts, not one combined event — different consumers (kanban
+board listens for the resource event; inbox listens for notification events).
+The notification row carries enough state (`commentId`, `actorUserId`, `body`)
+that the inbox doesn't need to re-fetch the comment.
+
+**Transaction boundary**:
+
+Wrap `comment.create` + `notification.create` fan-out in `prisma.$transaction(async (tx) => ...)`
+so a notification-table FK failure rolls back the comment. Broadcasts happen
+AFTER the transaction commits — never broadcast inside the txn closure (would
+fire on rollback paths).
+
+**Mount path**:
+
+Routes use `/tasks/:taskId/comments` AND `/comments/:id` patterns, so mount on
+`/api` (not `/api/comments`):
+
+```ts
+app.use('/api', commentsRouter);
+```
+
+**Permission ladder for DELETE**:
+
+- Author             → allowed (T7 `assertCommentOwned` returns owned)
+- Team owner/admin   → allowed via `assertTeamRole(teamId, userId, ['owner','admin'])`
+- Else               → 403
+
+PATCH is strictly author-only — even team owners can't edit others' comments
+(constraint from T10 "Must NOT do"). This is asymmetric on purpose: editing
+implies authorship, deleting is moderation.
+
+**Notification.actorUserId convention** (set every time a notification is
+created on someone's behalf):
+
+```ts
+{
+  userId: <recipient-id>,        // who sees it in their inbox
+  actorUserId: <causer-id>,      // who did the action
+  type: 'mention' | 'assignment' | 'status_change' | 'comment',
+  taskId, commentId, body,
+}
+```
+
+Inbox UI (T28) renders `<actor.username> mentioned you in <task.title>` — the
+recipient is implicit (it's "you") so it's NOT shown.

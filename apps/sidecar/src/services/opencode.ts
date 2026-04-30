@@ -1,20 +1,28 @@
-import { spawn } from 'node:child_process';
+import { spawn, ChildProcess } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { createOpencodeClient } from '@opencode-ai/sdk';
 import type { OpencodeClient } from '@opencode-ai/sdk';
-import { broadcast } from '@openlinear/api/sse';
+import { broadcastToAll } from '@openlinear/api/sse';
 
 const OPENCODE_PORT = parseInt(process.env.OPENCODE_PORT || '4096', 10);
 const OPENCODE_HOST = process.env.OPENCODE_HOST || '127.0.0.1';
 const OPENCODE_TIMEOUT = parseInt(process.env.OPENCODE_TIMEOUT || '10000', 10);
+const KILL_GRACE_MS = parseInt(process.env.OPENCODE_KILL_GRACE_MS || '3000', 10);
+const MAX_RESTART_ATTEMPTS = 5;
+const RESTART_BACKOFF_BASE_MS = 1000;
 
-let serverHandle: { url: string; close(): void } | null = null;
+interface ServerHandle {
+  url: string;
+  proc: ChildProcess;
+  close(): Promise<void>;
+}
 
-// Resolves the opencode binary path:
-// 1. OPENCODE_BIN env var override
-// 2. Bundled sidecar next to this binary (Tauri target-triple naming)
-// 3. Fallback to system PATH (dev mode)
+let serverHandle: ServerHandle | null = null;
+let restartAttempts = 0;
+let restarting = false;
+let shuttingDown = false;
+
 function resolveOpencodeBinary(): string {
   if (process.env.OPENCODE_BIN) {
     return process.env.OPENCODE_BIN;
@@ -39,14 +47,45 @@ function resolveOpencodeBinary(): string {
   return 'opencode';
 }
 
-// Replaces the SDK's createOpencodeServer() which hardcodes spawn("opencode").
-// This version uses the resolved binary path so it works with bundled sidecars.
+async function killProcess(proc: ChildProcess): Promise<void> {
+  if (proc.exitCode !== null) return;
+
+  try {
+    proc.kill('SIGTERM');
+  } catch {
+    // process may already be dead in race; treat as success
+  }
+
+  await new Promise<void>((resolve) => {
+    let resolved = false;
+    const finish = () => {
+      if (resolved) return;
+      resolved = true;
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      if (proc.exitCode === null) {
+        try {
+          proc.kill('SIGKILL');
+        } catch {
+          // process may already be dead in race; treat as success
+        }
+      }
+      finish();
+    }, KILL_GRACE_MS);
+    proc.once('exit', () => {
+      clearTimeout(timer);
+      finish();
+    });
+  });
+}
+
 function spawnOpencodeServer(
   bin: string,
   hostname: string,
   port: number,
   timeout: number,
-): Promise<{ url: string; close(): void }> {
+): Promise<ServerHandle> {
   const args = ['serve', `--hostname=${hostname}`, `--port=${port}`];
   const proc = spawn(bin, args, {
     env: { ...process.env, OPENCODE_CONFIG_CONTENT: '{}' },
@@ -54,11 +93,12 @@ function spawnOpencodeServer(
 
   return new Promise((resolve, reject) => {
     const id = setTimeout(() => {
-      proc.kill();
+      void killProcess(proc);
       reject(new Error(`opencode server did not start within ${timeout}ms`));
     }, timeout);
 
     let output = '';
+    let resolved = false;
 
     proc.stdout?.on('data', (chunk: Buffer) => {
       output += chunk.toString();
@@ -67,12 +107,17 @@ function spawnOpencodeServer(
           const match = line.match(/on\s+(https?:\/\/[^\s]+)/);
           if (!match) {
             clearTimeout(id);
-            proc.kill();
+            void killProcess(proc);
             reject(new Error(`Failed to parse server URL from: ${line}`));
             return;
           }
           clearTimeout(id);
-          resolve({ url: match[1], close: () => proc.kill() });
+          resolved = true;
+          resolve({
+            url: match[1],
+            proc,
+            close: () => killProcess(proc),
+          });
           return;
         }
       }
@@ -82,16 +127,64 @@ function spawnOpencodeServer(
       output += chunk.toString();
     });
 
-    proc.on('exit', (code) => {
+    proc.on('exit', (code, signal) => {
       clearTimeout(id);
-      reject(new Error(`opencode exited with code ${code}\n${output}`));
+      if (!resolved) {
+        reject(
+          new Error(
+            `opencode exited with code ${code} signal ${signal} during startup\n${output}`,
+          ),
+        );
+      }
     });
 
     proc.on('error', (err) => {
       clearTimeout(id);
-      reject(err);
+      if (!resolved) reject(err);
     });
   });
+}
+
+function attachExitWatcher(handle: ServerHandle) {
+  handle.proc.once('exit', (code, signal) => {
+    if (shuttingDown) return;
+    if (serverHandle !== handle) return;
+    console.warn(
+      `[OpenCode] server exited unexpectedly (code=${code}, signal=${signal}). Scheduling restart.`,
+    );
+    serverHandle = null;
+    broadcastToAll('opencode:status', {
+      status: 'crashed',
+      code,
+      signal,
+    });
+    void scheduleRestart();
+  });
+}
+
+async function scheduleRestart() {
+  if (restarting || shuttingDown) return;
+  if (restartAttempts >= MAX_RESTART_ATTEMPTS) {
+    console.error(
+      `[OpenCode] giving up after ${restartAttempts} restart attempts.`,
+    );
+    broadcastToAll('opencode:status', { status: 'unrecoverable' });
+    return;
+  }
+  restarting = true;
+  const delay = RESTART_BACKOFF_BASE_MS * Math.pow(2, restartAttempts);
+  restartAttempts += 1;
+  console.log(
+    `[OpenCode] restart attempt ${restartAttempts} in ${delay}ms`,
+  );
+  await new Promise((r) => setTimeout(r, delay));
+  restarting = false;
+  try {
+    await initOpenCode({ restart: true });
+  } catch (err) {
+    console.error('[OpenCode] restart attempt failed:', err);
+    void scheduleRestart();
+  }
 }
 
 export async function getClientForUser(_userId: string, directory?: string): Promise<OpencodeClient> {
@@ -109,6 +202,7 @@ export interface OpenCodeStatus {
   mode: 'host';
   serverUrl: string | null;
   running: boolean;
+  restartAttempts: number;
 }
 
 export function getOpenCodeStatus(): OpenCodeStatus {
@@ -116,29 +210,41 @@ export function getOpenCodeStatus(): OpenCodeStatus {
     mode: 'host',
     serverUrl: serverHandle?.url ?? null,
     running: serverHandle !== null,
+    restartAttempts,
   };
 }
 
-export async function initOpenCode(): Promise<void> {
+export async function initOpenCode(opts: { restart?: boolean } = {}): Promise<void> {
+  if (serverHandle) return;
   const bin = resolveOpencodeBinary();
   console.log(`[OpenCode] Using binary: ${bin}`);
 
   try {
-    serverHandle = await spawnOpencodeServer(bin, OPENCODE_HOST, OPENCODE_PORT, OPENCODE_TIMEOUT);
-    broadcast('opencode:status', { status: 'ready', mode: 'host' });
-    console.log(`[OpenCode] Server running at ${serverHandle.url}`);
+    const handle = await spawnOpencodeServer(bin, OPENCODE_HOST, OPENCODE_PORT, OPENCODE_TIMEOUT);
+    serverHandle = handle;
+    attachExitWatcher(handle);
+    if (!opts.restart) {
+      restartAttempts = 0;
+    } else {
+      restartAttempts = 0;
+    }
+    broadcastToAll('opencode:status', { status: 'ready', mode: 'host', url: handle.url });
+    console.log(`[OpenCode] Server running at ${handle.url}`);
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error('[OpenCode] Failed to start server:', err);
-    broadcast('opencode:status', { status: 'error', error: String(err) });
+    broadcastToAll('opencode:status', { status: 'error', error: message });
+    throw err;
   }
 }
 
 export async function shutdownOpenCode(): Promise<void> {
+  shuttingDown = true;
   if (serverHandle) {
-    serverHandle.close();
+    await serverHandle.close();
     serverHandle = null;
   }
-  broadcast('opencode:status', { status: 'stopped' });
+  broadcastToAll('opencode:status', { status: 'stopped' });
 }
 
 export function registerShutdownHandlers(): void {
@@ -148,7 +254,7 @@ export function registerShutdownHandlers(): void {
     process.exit(0);
   };
 
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('beforeExit', () => shutdownOpenCode());
+  process.on('SIGINT', () => void shutdown('SIGINT'));
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  process.on('beforeExit', () => void shutdownOpenCode());
 }

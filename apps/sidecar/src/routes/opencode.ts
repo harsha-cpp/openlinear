@@ -187,7 +187,7 @@ router.get('/models', requireAuth, async (req: AuthRequest, res: Response) => {
     const connectedSet = new Set(providerList.data.connected ?? []);
     connectedSet.add('opencode');
 
-    let allProviders = providerList.data.all;
+    const allProviders = [...providerList.data.all];
     if (!allProviders.some(p => p.id === 'opencode')) {
       allProviders.push({
         id: 'opencode',

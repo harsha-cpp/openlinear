@@ -1,7 +1,7 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { prisma } from '@openlinear/db';
-import { broadcast } from '@openlinear/api/sse';
+import { broadcastToTask, broadcastToTaskById } from '@openlinear/api/sse';
 
 import type { OpencodeClient } from '@opencode-ai/sdk';
 import { cleanupDeltaBuffer, flushDeltaBuffer } from '../delta-buffer';
@@ -40,6 +40,12 @@ export interface ExecutionState {
   toolsExecuted: number;
   promptSent: boolean;
   cancelled: boolean;
+  // T11: SDK `message.updated` reports per-message TOTALS (not deltas). Keep
+  // the latest snapshot per assistant messageId; sum at finalize time.
+  agentRunId: string | null;
+  cost: { input: number; output: number; total: number };
+  tokens: { input: number; output: number };
+  messageUsage: Map<string, { cost: number; inputTokens: number; outputTokens: number }>;
 }
 
 export interface ExecutionLogEntry {
@@ -76,7 +82,7 @@ export function getExecutionStatus(taskId: string): ExecutionState | undefined {
 
 export function broadcastProgress(taskId: string, status: string, message: string, data?: Record<string, unknown>) {
   console.log(`[Execution] ${taskId.slice(0, 8)} → ${status}: ${message}`);
-  broadcast('execution:progress', { taskId, status, message, ...data });
+  void broadcastToTaskById(taskId, 'execution:progress', { taskId, status, message, ...data });
 }
 
 export function addLogEntry(taskId: string, type: ExecutionLogEntry['type'], message: string, details?: string) {
@@ -99,7 +105,7 @@ export function addLogEntry(taskId: string, type: ExecutionLogEntry['type'], mes
   const detailStr = typeof details === 'string' ? details : details ? JSON.stringify(details) : undefined;
   console.log(`[Execution] ${taskId.slice(0, 8)} ${emoji} ${message}${detailStr ? ` (${detailStr.slice(0, 50)})` : ''}`);
 
-  broadcast('execution:log', { taskId, entry });
+  broadcastToTaskById(taskId, 'execution:log', { taskId, entry }).catch(() => {});
 }
 
 export function getExecutionLogs(taskId: string): ExecutionLogEntry[] {

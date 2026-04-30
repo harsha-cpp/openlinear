@@ -4,6 +4,7 @@ import type { OpencodeClient } from '@opencode-ai/sdk';
 import { appendTextDelta, appendReasoningDelta, flushDeltaBuffer, markThinking } from '../delta-buffer';
 
 import { commitAndPush, createPullRequest } from './git';
+import { finalizeAgentRun, recordMessageUsage } from './agent-run';
 import {
   activeExecutions,
   broadcastProgress,
@@ -92,6 +93,7 @@ async function handleSessionComplete(taskId: string): Promise<void> {
       outcome = `Commit/push failed: ${commitResult.reason}`;
       addLogEntry(taskId, 'error', 'Failed to commit and push changes', commitResult.reason);
       broadcastProgress(taskId, 'error', 'Failed to commit and push changes');
+      await finalizeAgentRun(execution, 'failed', { errorMessage: outcome });
       await updateTaskStatus(taskId, 'cancelled', null, {
         executionElapsedMs: elapsedMs,
         executionProgress: 100,
@@ -100,6 +102,7 @@ async function handleSessionComplete(taskId: string): Promise<void> {
       return;
     }
 
+    await finalizeAgentRun(execution, 'succeeded', { prUrl });
     await updateTaskStatus(taskId, 'done', null, {
       executionElapsedMs: elapsedMs,
       executionProgress: 100,
@@ -110,6 +113,9 @@ async function handleSessionComplete(taskId: string): Promise<void> {
     console.error('[Execution] Post-execution error:', error);
     addLogEntry(taskId, 'error', 'Post-execution failed');
     broadcastProgress(taskId, 'error', 'Post-execution failed');
+    await finalizeAgentRun(execution, 'failed', {
+      errorMessage: error instanceof Error ? error.message : 'Post-execution failed',
+    });
   } finally {
     await persistLogs(taskId);
     await cleanupExecution(taskId);
@@ -231,6 +237,10 @@ async function handleOpenCodeEvent(event: { type: string; properties?: Record<st
             : 'Execution failed';
         addLogEntry(taskId, 'error', headline, errorDetail);
         broadcastProgress(taskId, 'error', headline);
+        const execution = activeExecutions.get(taskId);
+        if (execution) {
+          await finalizeAgentRun(execution, 'failed', { errorMessage: errorDetail });
+        }
         await updateTaskStatus(taskId, 'cancelled', null);
         await persistLogs(taskId);
         await cleanupExecution(taskId);

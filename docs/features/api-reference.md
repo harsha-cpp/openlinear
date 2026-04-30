@@ -19,23 +19,8 @@ Returns server status and connected SSE client count.
 
 ## Authentication
 
-### `POST /api/auth/register`
-Create a new account with username and password.
-
-Body: `{ "username": "string (2-50 chars, alphanumeric/-/_)", "password": "string (3-100 chars)", "email": "string (optional)" }`
-
-Response (201): `{ "token": "jwt...", "user": { "id", "username", "email" } }`
-
-Errors: 400 (validation), 409 (username taken).
-
-### `POST /api/auth/login`
-Log in with username and password.
-
-Body: `{ "username": "string", "password": "string" }`
-
-Response: `{ "token": "jwt...", "user": { "id", "username", "email", "avatarUrl" } }`
-
-Errors: 401 (invalid credentials).
+GitHub OAuth is the only login method. After login, all downstream AI provider keys
+(OpenAI, Anthropic, etc.) are managed by OpenCode itself, not by OpenLinear.
 
 ### `GET /api/auth/github`
 Redirects to GitHub OAuth authorization page.
@@ -44,7 +29,7 @@ Redirects to GitHub OAuth authorization page.
 Handles OAuth callback. Exchanges code for token, creates/updates user, redirects to frontend with JWT.
 
 ### `GET /api/auth/me`
-**Auth: required**. Returns the authenticated user (excludes access token and password hash).
+**Auth: required**. Returns the authenticated user (excludes the GitHub access token).
 
 ### `POST /api/auth/logout`
 Returns `{ success: true }`. Client should clear the stored JWT.

@@ -38,11 +38,9 @@ OpenLinear is a monorepo with four main components: a Next.js desktop UI (`apps/
 
 ## Authentication
 
-OpenLinear supports two authentication methods, both producing the same JWT:
+GitHub OAuth is the only login method. The OAuth flow exchanges a code for a GitHub access token, upserts the user, stores the `accessToken` in the database, and redirects back to the frontend with a JWT in the URL. Scopes requested: `read:user user:email repo`.
 
-**Email/Password** — register with name, email, and password. Passwords are hashed with bcrypt. On login, a JWT is issued with `{ userId, username }`, signed with `JWT_SECRET`, 7-day expiry.
-
-**GitHub OAuth** — sign in with GitHub (scopes: `read:user user:email repo`). The OAuth flow exchanges a code for a GitHub access token, upserts the user, stores the `accessToken` in the database, and redirects back to the frontend with a JWT in the URL.
+After login, all AI provider keys (OpenAI, Anthropic, etc.) are managed by OpenCode itself on the user's machine, not by OpenLinear.
 
 ### Token Flow
 
@@ -281,7 +279,7 @@ Tag push (`v*`) triggers desktop distribution:
 ```
 User
   ├── id, githubId, username, email, avatarUrl
-  ├── accessToken (GitHub OAuth), passwordHash (email/password)
+  ├── accessToken (GitHub OAuth)
   └── teams, settings
 
 Project

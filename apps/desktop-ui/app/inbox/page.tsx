@@ -12,10 +12,8 @@ import {
   fetchInboxTasks, fetchInboxCount, markInboxRead, markAllInboxRead, refreshTaskPr,
   type InboxTask
 } from "@/lib/api"
-import { useSSE, SSEEventType, SSEEventData } from "@/hooks/use-sse"
-import { API_URL } from "@/lib/api/client"
-
-const SSE_URL = `${API_URL}/api/events`
+import { useSSESubscription } from "@/providers/sse-provider"
+import type { SSEEventType, SSEEventData } from "@/hooks/use-sse"
 
 interface InboxGroup {
   type: "batch" | "single"
@@ -229,7 +227,7 @@ export default function InboxPage() {
     }
   }, [loadData])
 
-  useSSE(SSE_URL, handleSSEEvent)
+  useSSESubscription(handleSSEEvent)
 
   const handleMarkRead = async (taskId: string) => {
     setTasks((prev: InboxTask[]) => prev.map(t => t.id === taskId ? { ...t, inboxRead: true } : t))

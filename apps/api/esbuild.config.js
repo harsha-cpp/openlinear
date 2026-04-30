@@ -16,7 +16,6 @@ await build({
     'cors',
     'cookie-parser',
     'jsonwebtoken',
-    'bcryptjs',
     'dotenv',
     'zod',
   ],

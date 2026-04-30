@@ -1,85 +1,78 @@
 import { Router, Response, NextFunction } from 'express';
 import { prisma } from '@openlinear/db';
-import { z } from 'zod';
 import { broadcast } from '../sse';
 import { requireAuth, AuthRequest } from '../middleware/auth';
+import { validateBody, validateQuery, ValidatedRequest } from '../middleware/validate';
 import { getUserTeamIds } from '../services/team-scope';
 import {
   assertTaskOwned,
   assertTeamRole,
   OwnershipError,
 } from '../services/ownership';
+import {
+  createLabelBodySchema,
+  updateLabelBodySchema,
+  assignLabelBodySchema,
+  listLabelsQuerySchema,
+  CreateLabelBody,
+  UpdateLabelBody,
+  AssignLabelBody,
+  ListLabelsQuery,
+} from '../schemas/labels';
 
 const router: Router = Router();
 
-const createLabelSchema = z.object({
-  name: z.string().min(1).max(50),
-  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Color must be a valid hex color'),
-  priority: z.number().int().min(0).default(0),
-  teamId: z.string().uuid().optional(),
-});
+router.get(
+  '/',
+  requireAuth,
+  validateQuery(listLabelsQuerySchema),
+  async (req: AuthRequest & ValidatedRequest<unknown, ListLabelsQuery>, res: Response, next: NextFunction) => {
+    try {
+      const teamIdParam = req.validQuery?.teamId;
+      const userTeamIds = await getUserTeamIds(req.userId!);
 
-const updateLabelSchema = z.object({
-  name: z.string().min(1).max(50).optional(),
-  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Color must be a valid hex color').optional(),
-  priority: z.number().int().min(0).optional(),
-});
+      const teamFilter = teamIdParam
+        ? userTeamIds.includes(teamIdParam) ? [teamIdParam] : []
+        : userTeamIds;
 
-const assignLabelSchema = z.object({
-  labelId: z.string().uuid(),
-});
-
-router.get('/', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const teamIdParam = req.query.teamId as string | undefined;
-    const userTeamIds = await getUserTeamIds(req.userId!);
-
-    const teamFilter = teamIdParam
-      ? userTeamIds.includes(teamIdParam) ? [teamIdParam] : []
-      : userTeamIds;
-
-    const labels = await prisma.label.findMany({
-      where: {
-        OR: [
-          { teamId: { in: teamFilter } },
-          { teamId: null },
-        ],
-      },
-      orderBy: { priority: 'desc' },
-    });
-    res.json(labels);
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const parsed = createLabelSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: 'Validation failed', details: parsed.error.errors });
-      return;
+      const labels = await prisma.label.findMany({
+        where: {
+          OR: [
+            { teamId: { in: teamFilter } },
+            { teamId: null },
+          ],
+        },
+        orderBy: { priority: 'desc' },
+      });
+      res.json(labels);
+    } catch (error) {
+      next(error);
     }
+  },
+);
 
-    const { teamId, ...rest } = parsed.data;
-    if (teamId) {
-      await assertTeamRole(teamId, req.userId!, ['owner', 'admin', 'member']);
+router.post(
+  '/',
+  requireAuth,
+  validateBody(createLabelBodySchema),
+  async (req: AuthRequest & ValidatedRequest<CreateLabelBody>, res: Response, next: NextFunction) => {
+    try {
+      const { teamId, ...rest } = req.validBody!;
+      if (teamId) {
+        await assertTeamRole(teamId, req.userId!, ['owner', 'admin', 'member']);
+      }
+
+      const label = await prisma.label.create({
+        data: { ...rest, teamId: teamId ?? null },
+      });
+
+      broadcast('label:created', label);
+      res.status(201).json(label);
+    } catch (error) {
+      next(error);
     }
-
-    const label = await prisma.label.create({
-      data: { ...rest, teamId: teamId ?? null },
-    });
-
-    broadcast('label:created', label);
-    res.status(201).json(label);
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes('Unique constraint')) {
-      res.status(409).json({ error: 'Label with this name already exists' });
-      return;
-    }
-    next(error);
-  }
-});
+  },
+);
 
 async function assertLabelAccess(labelId: string, userId: string): Promise<void> {
   const label = await prisma.label.findUnique({
@@ -94,32 +87,27 @@ async function assertLabelAccess(labelId: string, userId: string): Promise<void>
   }
 }
 
-router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const id = req.params.id as string;
-    const parsed = updateLabelSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: 'Validation failed', details: parsed.error.errors });
-      return;
+router.patch(
+  '/:id',
+  requireAuth,
+  validateBody(updateLabelBodySchema),
+  async (req: AuthRequest & ValidatedRequest<UpdateLabelBody>, res: Response, next: NextFunction) => {
+    try {
+      const id = req.params.id as string;
+      await assertLabelAccess(id, req.userId!);
+
+      const label = await prisma.label.update({
+        where: { id },
+        data: req.validBody!,
+      });
+
+      broadcast('label:updated', label);
+      res.json(label);
+    } catch (error) {
+      next(error);
     }
-
-    await assertLabelAccess(id, req.userId!);
-
-    const label = await prisma.label.update({
-      where: { id },
-      data: parsed.data,
-    });
-
-    broadcast('label:updated', label);
-    res.json(label);
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes('Unique constraint')) {
-      res.status(409).json({ error: 'Label with this name already exists' });
-      return;
-    }
-    next(error);
-  }
-});
+  },
+);
 
 router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -135,35 +123,30 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response, next:
   }
 });
 
-router.post('/tasks/:id/labels', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const taskId = req.params.id as string;
-    const parsed = assignLabelSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: 'Validation failed', details: parsed.error.errors });
-      return;
+router.post(
+  '/tasks/:id/labels',
+  requireAuth,
+  validateBody(assignLabelBodySchema),
+  async (req: AuthRequest & ValidatedRequest<AssignLabelBody>, res: Response, next: NextFunction) => {
+    try {
+      const taskId = req.params.id as string;
+      const { labelId } = req.validBody!;
+
+      await assertTaskOwned(taskId, req.userId!);
+      await assertLabelAccess(labelId, req.userId!);
+
+      const taskLabel = await prisma.taskLabel.create({
+        data: { taskId, labelId },
+        include: { label: true },
+      });
+
+      broadcast('task:label:assigned', { taskId, label: taskLabel.label });
+      res.status(201).json(taskLabel);
+    } catch (error) {
+      next(error);
     }
-
-    const { labelId } = parsed.data;
-
-    await assertTaskOwned(taskId, req.userId!);
-    await assertLabelAccess(labelId, req.userId!);
-
-    const taskLabel = await prisma.taskLabel.create({
-      data: { taskId, labelId },
-      include: { label: true },
-    });
-
-    broadcast('task:label:assigned', { taskId, label: taskLabel.label });
-    res.status(201).json(taskLabel);
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes('Unique constraint')) {
-      res.status(409).json({ error: 'Label already assigned to this task' });
-      return;
-    }
-    next(error);
-  }
-});
+  },
+);
 
 router.delete('/tasks/:id/labels/:labelId', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -180,11 +163,7 @@ router.delete('/tasks/:id/labels/:labelId', requireAuth, async (req: AuthRequest
 
     broadcast('task:label:removed', { taskId, labelId });
     res.status(204).send();
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes('Record to delete does not exist')) {
-      res.status(404).json({ error: 'Label assignment not found' });
-      return;
-    }
+  } catch (error) {
     next(error);
   }
 });

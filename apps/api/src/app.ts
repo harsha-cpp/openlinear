@@ -21,6 +21,7 @@ import projectsRouter from './routes/projects';
 import inboxRouter from './routes/inbox';
 import searchRouter from './routes/search';
 import commentsRouter from './routes/comments';
+import agentRunsRouter from './routes/agent-runs';
 import jwt from 'jsonwebtoken';
 import { clients, SSEClient } from './sse';
 import { logger } from './logger';
@@ -140,6 +141,7 @@ export function createApp(): Application {
   app.use('/api/inbox', inboxRouter);
   app.use('/api', commentsRouter);
   app.use('/api/search', searchRouter);
+  app.use('/api/agent-runs', agentRunsRouter);
 
   app.get('/health', (_req: Request, res: Response) => {
     res.json({
@@ -297,17 +299,18 @@ export function createApp(): Application {
     }
 
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
-      if (err.code === 'P2002') {
+      const prismaErr = err as Prisma.PrismaClientKnownRequestError;
+      if (prismaErr.code === 'P2002') {
         res.status(409).json({
           error: 'conflict',
           code: 'P2002',
           message: 'Unique constraint violation',
-          ...(err.meta ? { details: err.meta } : {}),
+          ...(prismaErr.meta ? { details: prismaErr.meta } : {}),
           requestId,
         });
         return;
       }
-      if (err.code === 'P2025') {
+      if (prismaErr.code === 'P2025') {
         res.status(404).json({
           error: 'not_found',
           code: 'P2025',
@@ -316,12 +319,12 @@ export function createApp(): Application {
         });
         return;
       }
-      if (err.code === 'P2003') {
+      if (prismaErr.code === 'P2003') {
         res.status(409).json({
           error: 'conflict',
           code: 'P2003',
           message: 'Foreign key constraint violation',
-          ...(err.meta ? { details: err.meta } : {}),
+          ...(prismaErr.meta ? { details: prismaErr.meta } : {}),
           requestId,
         });
         return;

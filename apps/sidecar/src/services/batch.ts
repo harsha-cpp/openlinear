@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { prisma } from '@openlinear/db';
-import { broadcast } from '@openlinear/api/sse';
+import { broadcastToTask, broadcastToTaskById, broadcastToUser } from '@openlinear/api/sse';
 import { getClientForUser } from './opencode';
 import { ensureMainRepo, createWorktree, cleanupBatch, mergeBranch, createBatchBranch, pushBranch } from './worktree';
 import type { BatchState, BatchTask, BatchSettings, CreateBatchParams, BatchEventType } from '../types/batch';
@@ -24,7 +24,11 @@ interface BatchLogEntry {
 const batchTaskLogs = new Map<string, BatchLogEntry[]>();
 
 function broadcastBatchEvent(type: BatchEventType, batchId: string, data: Record<string, unknown> = {}): void {
-  broadcast(type, { batchId, ...data, timestamp: new Date().toISOString() });
+  const batch = activeBatches.get(batchId);
+  const payload = { batchId, ...data, timestamp: new Date().toISOString() };
+  if (batch?.userId) {
+    broadcastToUser(batch.userId, type, payload);
+  }
 }
 
 export async function createBatch(params: CreateBatchParams): Promise<BatchState> {
@@ -228,7 +232,7 @@ function emitBatchLog(taskId: string, type: 'info' | 'agent' | 'tool' | 'error' 
   }
   batchTaskLogs.get(taskId)!.push(entry);
 
-  broadcast('execution:log', { taskId, entry });
+  broadcastToTaskById(taskId, 'execution:log', { taskId, entry }).catch(() => {});
 }
 
 function subscribeToTaskEvents(
@@ -368,7 +372,7 @@ async function updateTaskInDb(
       labels: (task.labels as Array<{ label: { id: string; name: string; color: string } }>).map(tl => tl.label),
     };
 
-    broadcast('task:updated', flatTask);
+    broadcastToTask('task:updated', flatTask);
   } catch (err) {
     console.error(`[Batch] Failed to update task ${taskId} in DB:`, err);
   }

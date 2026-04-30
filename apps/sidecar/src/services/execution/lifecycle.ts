@@ -5,6 +5,7 @@ import { getOrCreateBuffer } from '../delta-buffer';
 
 import { cloneRepository, createBranch } from './git';
 import { subscribeToSessionEvents } from './events';
+import { createAgentRun, finalizeAgentRun } from './agent-run';
 import {
   activeExecutions,
   sessionToTask,
@@ -122,6 +123,30 @@ export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promis
 
     console.log(`[Execution] Session ${sessionId} created for task ${taskId.slice(0, 8)}`);
 
+    let modelOverride: { providerID: string; modelID: string } | undefined;
+    let modelLabel = 'unknown';
+    try {
+      const config = await client.config.get();
+      const modelStr = config.data?.model;
+      if (modelStr && modelStr.includes('/')) {
+        const slashIdx = modelStr.indexOf('/');
+        modelOverride = {
+          providerID: modelStr.slice(0, slashIdx),
+          modelID: modelStr.slice(slashIdx + 1),
+        };
+        modelLabel = modelStr;
+      }
+    } catch (err) {
+      console.debug(`[Execution] Could not read model config for task ${taskId.slice(0, 8)}:`, err);
+    }
+
+    const agentRunId = await createAgentRun({
+      taskId,
+      userId: userId ?? null,
+      agent: 'opencode',
+      model: modelLabel,
+    });
+
     // Set up timeout
     const timeoutId = setTimeout(async () => {
       console.log(`[Execution] Task ${taskId} timed out`);
@@ -146,6 +171,10 @@ export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promis
       toolsExecuted: 0,
       promptSent: false,
       cancelled: false,
+      agentRunId,
+      cost: { input: 0, output: 0, total: 0 },
+      tokens: { input: 0, output: 0 },
+      messageUsage: new Map(),
     };
 
     activeExecutions.set(taskId, executionState);
@@ -185,20 +214,8 @@ export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promis
 
     subscribeToSessionEvents(taskId, client, sessionId);
 
-    let modelOverride: { providerID: string; modelID: string } | undefined;
-    try {
-      const config = await client.config.get();
-      const modelStr = config.data?.model;
-      if (modelStr && modelStr.includes('/')) {
-        const slashIdx = modelStr.indexOf('/');
-        modelOverride = {
-          providerID: modelStr.slice(0, slashIdx),
-          modelID: modelStr.slice(slashIdx + 1),
-        };
-        addLogEntry(taskId, 'info', `Using model: ${modelStr}`);
-      }
-    } catch (err) {
-      console.debug(`[Execution] Could not read model config for task ${taskId.slice(0, 8)}:`, err);
+    if (modelOverride) {
+      addLogEntry(taskId, 'info', `Using model: ${modelLabel}`);
     }
 
     client.session.prompt({
@@ -220,6 +237,7 @@ export async function executeTask({ taskId, userId }: ExecuteTaskParams): Promis
         : 'Failed to send prompt to agent';
       addLogEntry(taskId, 'error', headline, msg);
       broadcastProgress(taskId, 'error', headline);
+      await finalizeAgentRun(executionState, 'failed', { errorMessage: msg });
       await updateTaskStatus(taskId, 'cancelled', null);
       await persistLogs(taskId);
       await cleanupExecution(taskId);
@@ -265,6 +283,7 @@ export async function cancelTask(taskId: string): Promise<{ success: boolean; er
     console.error(`[Execution] Abort call failed for task ${taskId}:`, error);
   }
 
+  await finalizeAgentRun(execution, 'cancelled', { errorMessage: 'cancelled by user' });
   await persistLogs(taskId);
   await cleanupExecution(taskId);
   return { success: true };

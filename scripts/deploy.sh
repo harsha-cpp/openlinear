@@ -18,10 +18,11 @@ fail() { echo -e "${RED}  ✗${NC} $1"; exit 1; }
 
 # ── Pull latest code ──────────────────────────────────────────────
 step "Pulling latest code..."
-# Discard build-generated file changes (e.g. next-env.d.ts) that block ff-only pull
 git reset --hard HEAD
-git pull origin main --ff-only
-ok "Code updated"
+DEPLOY_BRANCH="${DEPLOY_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
+git fetch origin "$DEPLOY_BRANCH"
+git reset --hard "origin/$DEPLOY_BRANCH"
+ok "Code updated to origin/$DEPLOY_BRANCH"
 
 # ── Install dependencies ─────────────────────────────────────────
 step "Installing dependencies..."
@@ -79,16 +80,16 @@ step "Generating Prisma client..."
 pnpm --filter @openlinear/db db:generate
 ok "Prisma client generated"
 
-step "Pushing database schema..."
-pnpm --filter @openlinear/db db:push
-ok "Schema synced"
+step "Applying database migrations..."
+if [ -d packages/db/prisma/migrations ] && [ "$(ls -A packages/db/prisma/migrations 2>/dev/null)" ]; then
+  pnpm --filter @openlinear/db db:migrate:deploy
+  ok "Migrations applied"
+else
+  echo "  ! No migrations folder yet — falling back to db:push"
+  pnpm --filter @openlinear/db db:push
+  ok "Schema synced (db:push fallback)"
+fi
 
-# ── Build worker Docker image ────────────────────────────────────
-step "Building worker Docker image..."
-docker build -t opencode-worker:latest docker/opencode-worker/
-ok "Worker image built"
-
-# ── Build applications ───────────────────────────────────────────
 step "Building API..."
 pnpm --filter @openlinear/api build
 ok "API built"

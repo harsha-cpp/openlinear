@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import { Loader2, Check, AlertCircle, Brain, RefreshCw, Settings } from "lucide-react"
 import {
   getSetupStatus,
-  getConfiguredProviderIds,
   getModelConfig,
   ProviderInfo,
   SetupStatus,
@@ -32,11 +31,7 @@ export function ProviderSetupDialog({ open, onOpenChange, onSetupComplete }: Pro
   const pollRef = useRef(false)
 
   const applyProviderData = useCallback((status: SetupStatus) => {
-    const cachedIds = new Set(getConfiguredProviderIds())
-    const merged = status.providers.map((p) =>
-      cachedIds.has(p.id) ? { ...p, authenticated: true } : p
-    )
-    const sorted = [...merged].sort((a, b) => {
+    const sorted = [...status.providers].sort((a, b) => {
       if (a.authenticated === b.authenticated) return 0
       return a.authenticated ? -1 : 1
     })

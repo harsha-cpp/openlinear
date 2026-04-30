@@ -1,6 +1,15 @@
 /** @type {import('next').NextConfig} */
+const isTauriBuild = process.env.BUILD_FOR_TAURI === "1"
+
 const nextConfig = {
   reactStrictMode: true,
+  ...(isTauriBuild
+    ? {
+        output: "export",
+        images: { unoptimized: true },
+        trailingSlash: true,
+      }
+    : {}),
   typescript: {
     ignoreBuildErrors: process.env.NEXT_IGNORE_BUILD_ERRORS === "1",
   },
@@ -9,7 +18,6 @@ const nextConfig = {
   },
   turbopack: {},
   webpack: (config) => {
-    // Increase chunk loading timeout for Tauri webview cold starts
     config.output.chunkLoadTimeout = 120000
     return config
   },

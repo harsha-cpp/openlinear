@@ -9,10 +9,8 @@ import { AppShell } from "@/components/layout/app-shell"
 import { cn, openExternal } from "@/lib/utils"
 import { formatDuration } from "@/types/task"
 import { fetchMyIssues, type MyIssueTask } from "@/lib/api"
-import { useSSE, SSEEventType, SSEEventData } from "@/hooks/use-sse"
-import { API_URL } from "@/lib/api/client"
-
-const SSE_URL = `${API_URL}/api/events`
+import { useSSESubscription } from "@/providers/sse-provider"
+import type { SSEEventType, SSEEventData } from "@/hooks/use-sse"
 
 type StatusGroup = 'in_progress' | 'todo' | 'done' | 'cancelled'
 
@@ -140,7 +138,7 @@ export default function MyIssuesPage() {
     }
   }, [loadData])
 
-  useSSE(SSE_URL, handleSSEEvent)
+  useSSESubscription(handleSSEEvent)
 
   const grouped = (['in_progress', 'todo', 'done', 'cancelled'] as StatusGroup[]).map(status => ({
     status,

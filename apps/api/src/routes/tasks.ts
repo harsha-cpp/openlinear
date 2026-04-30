@@ -1,8 +1,8 @@
 import { Router, Response, NextFunction } from 'express';
 import { prisma } from '@openlinear/db';
-import { z } from 'zod';
 import { broadcast } from '../sse';
 import { requireAuth, AuthRequest } from '../middleware/auth';
+import { validateBody, validateQuery, ValidatedRequest } from '../middleware/validate';
 import { getUserTeamIds } from '../services/team-scope';
 import {
   assertTaskOwned,
@@ -10,31 +10,15 @@ import {
   assertTeamRole,
   OwnershipError,
 } from '../services/ownership';
-
-const PriorityEnum = z.enum(['low', 'medium', 'high']);
-const StatusEnum = z.enum(['todo', 'in_progress', 'done', 'cancelled']);
-
-const CreateTaskSchema = z.object({
-  title: z.string().min(1, 'Title is required'),
-  description: z.string().optional(),
-  priority: PriorityEnum.optional().default('medium'),
-  status: StatusEnum.optional().default('todo'),
-  labelIds: z.array(z.string().uuid()).optional().default([]),
-  teamId: z.string().uuid().optional(),
-  projectId: z.string().uuid().optional(),
-  dueDate: z.string().datetime().nullable().optional(),
-});
-
-const UpdateTaskSchema = z.object({
-  title: z.string().min(1).optional(),
-  description: z.string().nullable().optional(),
-  priority: PriorityEnum.optional(),
-  status: StatusEnum.optional(),
-  labelIds: z.array(z.string().uuid()).optional(),
-  teamId: z.string().uuid().nullable().optional(),
-  projectId: z.string().uuid().nullable().optional(),
-  dueDate: z.string().datetime().nullable().optional(),
-});
+import { ValidationError } from '../errors';
+import {
+  createTaskBodySchema,
+  updateTaskBodySchema,
+  listTasksQuerySchema,
+  CreateTaskBody,
+  UpdateTaskBody,
+  ListTasksQuery,
+} from '../schemas/tasks';
 
 interface Label {
   id: string;
@@ -77,22 +61,22 @@ function flattenLabels(task: any) {
   };
 }
 
-async function resolveProjectTeamId(projectId: string): Promise<{ teamId: string } | { error: string }> {
+async function resolveProjectTeamId(projectId: string): Promise<{ teamId: string }> {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: { projectTeams: { select: { teamId: true } } },
   });
 
   if (!project) {
-    return { error: 'Project not found' };
+    throw new OwnershipError('project', projectId, 'not_found');
   }
 
   if (project.projectTeams.length === 0) {
-    return { error: 'Project must have a team' };
+    throw new ValidationError('Project must have a team');
   }
 
   if (project.projectTeams.length > 1) {
-    return { error: 'Project must have exactly one team' };
+    throw new ValidationError('Project must have exactly one team');
   }
 
   return { teamId: project.projectTeams[0].teamId };
@@ -146,65 +130,64 @@ router.delete('/archived/:id', requireAuth, async (req: AuthRequest, res: Respon
   }
 });
 
-router.get('/', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const { teamId, projectId } = req.query;
+router.get(
+  '/',
+  requireAuth,
+  validateQuery(listTasksQuerySchema),
+  async (req: AuthRequest & ValidatedRequest<unknown, ListTasksQuery>, res: Response, next: NextFunction) => {
+    try {
+      const { teamId, projectId } = req.validQuery!;
 
-    const userTeamIds = await getUserTeamIds(req.userId!);
-    const where: Record<string, unknown> = { archived: false };
+      const userTeamIds = await getUserTeamIds(req.userId!);
+      const where: Record<string, unknown> = { archived: false };
 
-    if (teamId) {
-      if (!userTeamIds.includes(teamId as string)) {
-        throw new OwnershipError('team', teamId as string, 'forbidden');
+      if (teamId) {
+        if (!userTeamIds.includes(teamId)) {
+          throw new OwnershipError('team', teamId, 'forbidden');
+        }
+        where.teamId = teamId;
+      } else {
+        where.teamId = { in: userTeamIds };
       }
-      where.teamId = teamId as string;
-    } else {
-      where.teamId = { in: userTeamIds };
+      if (projectId) where.projectId = projectId;
+
+      const tasks = await prisma.task.findMany({
+        where,
+        include: taskInclude,
+        orderBy: { createdAt: 'desc' },
+      });
+
+      res.json(tasks.map(flattenLabels));
+    } catch (error) {
+      next(error);
     }
-    if (projectId) where.projectId = projectId as string;
+  },
+);
 
-    const tasks = await prisma.task.findMany({
-      where,
-      include: taskInclude,
-      orderBy: { createdAt: 'desc' },
-    });
+router.post(
+  '/',
+  requireAuth,
+  validateBody(createTaskBodySchema),
+  async (req: AuthRequest & ValidatedRequest<CreateTaskBody>, res: Response, next: NextFunction) => {
+    try {
+      const { title, description, priority, status, labelIds, teamId, projectId, dueDate } =
+        req.validBody!;
 
-    res.json(tasks.map(flattenLabels));
-  } catch (error) {
-    next(error);
-  }
-});
+      let resolvedTeamId = teamId;
 
-router.post('/', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const parsed = CreateTaskSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
-      return;
-    }
-
-    const { title, description, priority, status, labelIds, teamId, projectId, dueDate } = parsed.data;
-
-    let resolvedTeamId = teamId;
-
-    if (projectId) {
-      await assertProjectOwned(projectId, req.userId!);
-      const projectTeam = await resolveProjectTeamId(projectId);
-      if ('error' in projectTeam) {
-        res.status(400).json({ error: projectTeam.error });
-        return;
+      if (projectId) {
+        await assertProjectOwned(projectId, req.userId!);
+        const projectTeam = await resolveProjectTeamId(projectId);
+        resolvedTeamId = projectTeam.teamId;
       }
-      resolvedTeamId = projectTeam.teamId;
-    }
 
-    if (resolvedTeamId) {
+      if (!resolvedTeamId) {
+        throw new ValidationError('Task must belong to a team or a project');
+      }
+
       await assertTeamRole(resolvedTeamId, req.userId!, ['owner', 'admin', 'member']);
-    }
 
-    let task: TaskWithLabels;
-
-    if (resolvedTeamId) {
-      task = await prisma.$transaction(async (tx) => {
+      const task: TaskWithLabels = await prisma.$transaction(async (tx) => {
         const team = await tx.team.update({
           where: { id: resolvedTeamId },
           data: { nextIssueNumber: { increment: 1 } },
@@ -233,31 +216,15 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response, next: Next
         });
         return created;
       }, { timeout: 15000, maxWait: 5000 });
-    } else {
-      task = await prisma.task.create({
-        data: {
-          title,
-          description,
-          priority,
-          status,
-          projectId: projectId || undefined,
-          dueDate: dueDate ? new Date(dueDate) : undefined,
-          creatorId: req.userId!,
-          labels: {
-            create: labelIds.map((labelId) => ({ labelId })),
-          },
-        },
-        include: taskInclude,
-      });
-    }
 
-    const transformedTask = flattenLabels(task);
-    broadcast('task:created', transformedTask);
-    res.status(201).json(transformedTask);
-  } catch (error) {
-    next(error);
-  }
-});
+      const transformedTask = flattenLabels(task);
+      broadcast('task:created', transformedTask);
+      res.status(201).json(transformedTask);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 router.get('/:id', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -279,71 +246,66 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response, next: Ne
   }
 });
 
-router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const id = req.params.id as string;
-    const parsed = UpdateTaskSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
-      return;
-    }
+router.patch(
+  '/:id',
+  requireAuth,
+  validateBody(updateTaskBodySchema),
+  async (req: AuthRequest & ValidatedRequest<UpdateTaskBody>, res: Response, next: NextFunction) => {
+    try {
+      const id = req.params.id as string;
+      const existing = await assertTaskOwned(id, req.userId!);
 
-    const existing = await assertTaskOwned(id, req.userId!);
+      const { labelIds, teamId, projectId, dueDate, ...updateData } = req.validBody!;
 
-    const { labelIds, teamId, projectId, dueDate, ...updateData } = parsed.data;
+      const data: Record<string, unknown> = { ...updateData };
 
-    const data: Record<string, unknown> = { ...updateData };
+      if (dueDate !== undefined) {
+        data.dueDate = dueDate ? new Date(dueDate) : null;
+      }
 
-    if (dueDate !== undefined) {
-      data.dueDate = dueDate ? new Date(dueDate) : null;
-    }
+      if (updateData.status === 'in_progress' && existing.status !== 'in_progress') {
+        data.executionStartedAt = null;
+        data.executionPausedAt = null;
+        data.executionElapsedMs = 0;
+      }
 
-    if (updateData.status === 'in_progress' && existing.status !== 'in_progress') {
-      data.executionStartedAt = null;
-      data.executionPausedAt = null;
-      data.executionElapsedMs = 0;
-    }
-
-    if (projectId !== undefined) {
-      if (projectId) {
-        await assertProjectOwned(projectId, req.userId!);
-        const projectTeam = await resolveProjectTeamId(projectId);
-        if ('error' in projectTeam) {
-          res.status(400).json({ error: projectTeam.error });
-          return;
+      if (projectId !== undefined) {
+        if (projectId) {
+          await assertProjectOwned(projectId, req.userId!);
+          const projectTeam = await resolveProjectTeamId(projectId);
+          data.projectId = projectId;
+          data.teamId = projectTeam.teamId;
+        } else {
+          data.projectId = null;
+          data.teamId = null;
         }
-        data.projectId = projectId;
-        data.teamId = projectTeam.teamId;
-      } else {
-        data.projectId = null;
-        data.teamId = null;
+      } else if (teamId !== undefined) {
+        if (teamId) {
+          await assertTeamRole(teamId, req.userId!, ['owner', 'admin', 'member']);
+        }
+        data.teamId = teamId;
       }
-    } else if (teamId !== undefined) {
-      if (teamId) {
-        await assertTeamRole(teamId, req.userId!, ['owner', 'admin', 'member']);
+      if (labelIds !== undefined) {
+        data.labels = {
+          deleteMany: {},
+          create: labelIds.map((labelId) => ({ labelId })),
+        };
       }
-      data.teamId = teamId;
-    }
-    if (labelIds !== undefined) {
-      data.labels = {
-        deleteMany: {},
-        create: labelIds.map((labelId) => ({ labelId })),
-      };
-    }
 
-    const task = await prisma.task.update({
-      where: { id },
-      data,
-      include: taskInclude,
-    });
+      const task = await prisma.task.update({
+        where: { id },
+        data,
+        include: taskInclude,
+      });
 
-    const transformedTask = flattenLabels(task);
-    broadcast('task:updated', transformedTask);
-    res.json(transformedTask);
-  } catch (error) {
-    next(error);
-  }
-});
+      const transformedTask = flattenLabels(task);
+      broadcast('task:updated', transformedTask);
+      res.json(transformedTask);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {

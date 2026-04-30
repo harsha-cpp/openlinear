@@ -1,6 +1,6 @@
 import { Router, Response, NextFunction } from 'express';
 import { prisma } from '@openlinear/db';
-import { broadcast } from '@openlinear/api/sse';
+import { broadcastToTask } from '@openlinear/api/sse';
 import { optionalAuth, AuthRequest } from '@openlinear/api/middleware';
 import { assertTaskOwned } from '@openlinear/api/ownership';
 import { executeTask, cancelTask, isTaskRunning, getExecutionLogs } from '../services/execution';
@@ -123,7 +123,7 @@ router.post('/:id/refresh-pr', optionalAuth, async (req: AuthRequest, res: Respo
         });
       }
 
-      broadcast('task:updated', flattenLabels(updated));
+      broadcastToTask('task:updated', flattenLabels(updated));
       res.json({ prUrl: newPrUrl, refreshed: true });
       return;
     }

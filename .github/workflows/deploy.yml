@@ -59,7 +59,7 @@ jobs:
         run: pnpm --filter @openlinear/desktop-ui build
         continue-on-error: true
         env:
-          NEXT_PUBLIC_API_URL: https://rixie.in
+          NEXT_PUBLIC_API_URL: https://openlinear.tech
 
       - name: Build Landing
         run: pnpm --filter @openlinear/landing build
@@ -112,7 +112,7 @@ jobs:
       - name: Verify deployment
         run: |
           sleep 30
-          HTTP_STATUS=$(curl -s -o /dev/null -w '%{http_code}' https://rixie.in/health)
+          HTTP_STATUS=$(curl -s -o /dev/null -w '%{http_code}' https://openlinear.tech/health)
           if [ "$HTTP_STATUS" = "200" ]; then
             echo "✓ Deployment verified — health check returned $HTTP_STATUS"
           else

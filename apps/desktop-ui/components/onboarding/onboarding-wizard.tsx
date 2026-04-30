@@ -20,7 +20,6 @@ import {
   createTeam,
   createProject,
   fetchGitHubRepos,
-  getGitHubConnectUrl,
   type Team,
   type GitHubRepo,
 } from "@/lib/api"
@@ -138,7 +137,6 @@ function GitHubRepoTab({
   const { user, refreshUser } = useAuth()
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [isLoadingRepos, setIsLoadingRepos] = useState(false)
-  const [isConnecting, setIsConnecting] = useState(false)
   const [search, setSearch] = useState("")
 
   const hasGitHub = !!user?.githubId
@@ -164,17 +162,6 @@ function GitHubRepoTab({
     )
   }, [repos, search])
 
-  const handleConnect = useCallback(async () => {
-    setIsConnecting(true)
-    try {
-      const url = await getGitHubConnectUrl()
-      window.location.href = url
-    } catch {
-      toast.error("Failed to start GitHub connection")
-      setIsConnecting(false)
-    }
-  }, [])
-
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     if (params.get("connected") === "true") {
@@ -192,25 +179,12 @@ function GitHubRepoTab({
         </div>
         <div className="text-center space-y-1">
           <p className="text-sm font-medium text-linear-text">
-            Connect your GitHub account
+            GitHub account not detected
           </p>
           <p className="text-xs text-linear-text-tertiary max-w-[240px]">
-            Link GitHub to import your repositories and start managing projects.
+            Sign out and sign in again to refresh your GitHub session.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleConnect}
-          disabled={isConnecting}
-          className="bg-[#24292f] hover:bg-[#32383f] text-white rounded-md h-9 px-4 text-sm font-medium transition-colors inline-flex items-center gap-2 disabled:opacity-50"
-        >
-          {isConnecting ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Github className="w-4 h-4" />
-          )}
-          Connect to GitHub
-        </button>
       </div>
     )
   }

@@ -1,232 +1,133 @@
 import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { prisma } from '@openlinear/db';
 import {
   getAuthorizationUrl,
   exchangeCodeForToken,
   getGitHubUser,
   createOrUpdateUser,
-  connectGitHubToUser,
   getUserById,
 } from '../services/github';
-import { z } from 'zod';
 
 const router: Router = Router();
 
-function getJwtSecret() {
-  return process.env.JWT_SECRET || 'openlinear-dev-secret-change-in-production';
+const STATE_TTL_MS = 10 * 60 * 1000;
+const DESKTOP_CALLBACK_SCHEME = 'openlinear://callback';
+
+type OAuthClient = 'web' | 'desktop';
+
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('[Auth] JWT_SECRET is required in production');
+    }
+    return 'openlinear-dev-secret-change-in-production';
+  }
+  return secret;
 }
 
 function getFrontendUrl() {
   return process.env.FRONTEND_URL || 'http://localhost:3000';
 }
 
-function generateInviteCode(key: string): string {
-  const random = crypto.randomBytes(4).toString('hex').toUpperCase();
-  return `${key}-${random}`;
+function signState(payload: { client: OAuthClient; nonce: string; issuedAt: number }): string {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto
+    .createHmac('sha256', getJwtSecret())
+    .update(body)
+    .digest('base64url');
+  return `${body}.${sig}`;
 }
 
-async function generateUniqueTeamKey(username: string): Promise<string> {
-  const base = username.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5) || 'USR';
-  let key = base;
-  let attempt = 0;
-  while (await prisma.team.findUnique({ where: { key } })) {
-    attempt++;
-    key = `${base}${attempt}`;
-  }
-  return key;
-}
-
-function generateState(): string {
-  return crypto.randomUUID();
-}
-
-// --- Email/Password Auth ---
-
-const registerSchema = z.object({
-  username: z.string().min(2).max(50).regex(/^[a-zA-Z0-9_-]+$/, 'Username can only contain letters, numbers, hyphens, and underscores'),
-  password: z.string().min(3).max(100),
-  email: z.string().email().optional(),
-});
-
-const loginSchema = z.object({
-  username: z.string().min(1),
-  password: z.string().min(1),
-});
-
-router.post('/register', async (req: Request, res: Response) => {
+function verifyState(state: string): { client: OAuthClient; nonce: string; issuedAt: number } | null {
+  const [body, sig] = state.split('.');
+  if (!body || !sig) return null;
+  const expected = crypto
+    .createHmac('sha256', getJwtSecret())
+    .update(body)
+    .digest('base64url');
+  const sigBuf = Buffer.from(sig);
+  const expectedBuf = Buffer.from(expected);
+  if (sigBuf.length !== expectedBuf.length) return null;
+  if (!crypto.timingSafeEqual(sigBuf, expectedBuf)) return null;
   try {
-    const parsed = registerSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: 'Validation failed', details: parsed.error.errors });
-      return;
-    }
-
-    const { username, password, email } = parsed.data;
-
-    const existing = await prisma.user.findUnique({ where: { username } });
-    if (existing) {
-      res.status(409).json({ error: 'Username already taken' });
-      return;
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-    const teamKey = await generateUniqueTeamKey(username);
-
-    const user = await prisma.$transaction(async (tx) => {
-      const newUser = await tx.user.create({
-        data: {
-          username,
-          passwordHash,
-          email: email || null,
-        },
-      });
-
-      const team = await tx.team.create({
-        data: {
-          name: `${username}'s Team`,
-          key: teamKey,
-          inviteCode: generateInviteCode(teamKey),
-        },
-      });
-
-      await tx.teamMember.create({
-        data: {
-          teamId: team.id,
-          userId: newUser.id,
-          role: 'owner',
-        },
-      });
-
-      return newUser;
-    });
-
-    const token = jwt.sign(
-      { userId: user.id, username: user.username },
-      getJwtSecret(),
-      { expiresIn: '7d' }
-    );
-
-    res.status(201).json({ token, user: { id: user.id, username: user.username, email: user.email } });
-  } catch (error) {
-    console.error('[Auth] Register error:', error);
-    res.status(500).json({ error: 'Registration failed' });
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString());
+    if (typeof payload.issuedAt !== 'number') return null;
+    if (Date.now() - payload.issuedAt > STATE_TTL_MS) return null;
+    if (payload.client !== 'web' && payload.client !== 'desktop') return null;
+    if (typeof payload.nonce !== 'string') return null;
+    return payload;
+  } catch {
+    return null;
   }
-});
+}
 
-router.post('/login', async (req: Request, res: Response) => {
-  try {
-    const parsed = loginSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: 'Validation failed', details: parsed.error.errors });
-      return;
-    }
-
-    const { username, password } = parsed.data;
-
-    const user = await prisma.user.findUnique({ where: { username } });
-    if (!user || !user.passwordHash) {
-      res.status(401).json({ error: 'Invalid username or password' });
-      return;
-    }
-
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) {
-      res.status(401).json({ error: 'Invalid username or password' });
-      return;
-    }
-
-    const token = jwt.sign(
-      { userId: user.id, username: user.username },
-      getJwtSecret(),
-      { expiresIn: '7d' }
-    );
-
-    res.json({ token, user: { id: user.id, username: user.username, email: user.email, avatarUrl: user.avatarUrl } });
-  } catch (error) {
-    console.error('[Auth] Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+function buildSuccessRedirect(client: OAuthClient, token: string): string {
+  if (client === 'desktop') {
+    return `${DESKTOP_CALLBACK_SCHEME}?token=${encodeURIComponent(token)}`;
   }
-});
+  return `${getFrontendUrl()}?token=${encodeURIComponent(token)}`;
+}
 
-// --- GitHub OAuth ---
+function buildErrorRedirect(client: OAuthClient, error: string): string {
+  const encoded = encodeURIComponent(error);
+  if (client === 'desktop') {
+    return `${DESKTOP_CALLBACK_SCHEME}?error=${encoded}`;
+  }
+  return `${getFrontendUrl()}?error=${encoded}`;
+}
 
-router.get('/github', (_req: Request, res: Response) => {
-  const state = generateState();
+router.get('/github', (req: Request, res: Response) => {
+  const requestedClient = req.query.client === 'desktop' ? 'desktop' : 'web';
+  const state = signState({
+    client: requestedClient,
+    nonce: crypto.randomUUID(),
+    issuedAt: Date.now(),
+  });
   const authUrl = getAuthorizationUrl(state);
   res.redirect(authUrl);
 });
 
-// GitHub connect — links GitHub to an existing email/password user
-router.get('/github/connect', async (req: Request, res: Response) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-
-  try {
-    const decoded = jwt.verify(authHeader.substring(7), getJwtSecret()) as { userId: string };
-    const state = `connect:${decoded.userId}`;
-    const authUrl = getAuthorizationUrl(state);
-    res.json({ url: authUrl });
-  } catch {
-    res.status(401).json({ error: 'Invalid token' });
-  }
-});
-
 router.get('/github/callback', async (req: Request, res: Response) => {
   const { code, error, error_description, state } = req.query;
+  const stateStr = typeof state === 'string' ? state : '';
+  const verified = verifyState(stateStr);
+  const client: OAuthClient = verified?.client ?? 'web';
 
   if (error) {
     console.error('[Auth] GitHub OAuth error:', error, error_description);
-    res.redirect(`${getFrontendUrl()}?error=${encodeURIComponent(String(error_description || error))}`);
+    res.redirect(buildErrorRedirect(client, String(error_description || error)));
     return;
   }
 
   if (!code || typeof code !== 'string') {
-    res.redirect(`${getFrontendUrl()}?error=missing_code`);
+    res.redirect(buildErrorRedirect(client, 'missing_code'));
     return;
   }
 
-  const stateStr = typeof state === 'string' ? state : '';
-  const isConnect = stateStr.startsWith('connect:');
+  if (!verified) {
+    console.warn('[Auth] OAuth callback received with invalid or expired state');
+    res.redirect(buildErrorRedirect(client, 'invalid_state'));
+    return;
+  }
 
   try {
     const accessToken = await exchangeCodeForToken(code);
     const githubUser = await getGitHubUser(accessToken);
+    const user = await createOrUpdateUser(githubUser, accessToken);
 
-    if (isConnect) {
-      // Connect flow — link GitHub to existing user
-      const userId = stateStr.replace('connect:', '');
-      await connectGitHubToUser(userId, githubUser, accessToken);
-      const user = await getUserById(userId);
+    const token = jwt.sign(
+      { userId: user.id, username: user.username },
+      getJwtSecret(),
+      { expiresIn: '7d' }
+    );
 
-      const token = jwt.sign(
-        { userId: user!.id, username: user!.username },
-        getJwtSecret(),
-        { expiresIn: '7d' }
-      );
-
-      res.redirect(`${getFrontendUrl()}?token=${token}&connected=true`);
-    } else {
-      // Normal login/signup flow
-      const user = await createOrUpdateUser(githubUser, accessToken);
-
-      const token = jwt.sign(
-        { userId: user.id, username: user.username },
-        getJwtSecret(),
-        { expiresIn: '7d' }
-      );
-
-      res.redirect(`${getFrontendUrl()}?token=${token}`);
-    }
+    res.redirect(buildSuccessRedirect(client, token));
   } catch (err) {
     console.error('[Auth] OAuth callback error:', err);
     const errorMsg = err instanceof Error ? err.message : 'auth_failed';
-    res.redirect(`${getFrontendUrl()}?error=${encodeURIComponent(errorMsg)}`);
+    res.redirect(buildErrorRedirect(client, errorMsg));
   }
 });
 
@@ -249,7 +150,7 @@ router.get('/me', async (req: Request, res: Response) => {
       return;
     }
 
-    const { accessToken: _, passwordHash: __, ...safeUser } = user;
+    const { accessToken: _, ...safeUser } = user;
     res.json(safeUser);
   } catch {
     res.status(401).json({ error: 'Invalid token' });

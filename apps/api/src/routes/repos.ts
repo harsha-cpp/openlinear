@@ -1,7 +1,16 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '@openlinear/db';
-import { z } from 'zod';
 import { requireAuth, AuthRequest } from '../middleware/auth';
+import { validateBody, ValidatedRequest } from '../middleware/validate';
+import { HttpError } from '../errors';
+import {
+  repoUrlBodySchema,
+  importRepoBodySchema,
+  updateBaseBranchBodySchema,
+  RepoUrlBody,
+  ImportRepoBody,
+  UpdateBaseBranchBody,
+} from '../schemas/repos';
 import {
   getGitHubRepos,
   addRepository,
@@ -14,48 +23,32 @@ import {
 
 const router: Router = Router();
 
-const updateBaseBranchSchema = z.object({
-  baseBranch: z
-    .string()
-    .trim()
-    .min(1)
-    .max(255)
-    .regex(/^(?![/.])(?!.*\.\.)(?!.*\/\.)(?!.*\.$)(?!.*\/$)[A-Za-z0-9._/-]+$/),
-});
+router.post(
+  '/url',
+  validateBody(repoUrlBodySchema),
+  async (req: ValidatedRequest<RepoUrlBody>, res: Response, next: NextFunction) => {
+    try {
+      const project = await addRepositoryByUrl(req.validBody!.url);
+      res.status(201).json(project);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to add repository';
+      return next(new HttpError(400, 'REPOSITORY_CONNECT_FAILED', message));
+    }
+  },
+);
 
-// --- Public routes (no auth) ---
-
-router.post('/url', async (req: Request, res: Response) => {
-  const { url } = req.body as { url?: string };
-  
-  if (!url) {
-    res.status(400).json({ error: 'URL is required' });
-    return;
-  }
-
-  try {
-    const project = await addRepositoryByUrl(url);
-    res.json(project);
-  } catch (err) {
-    console.error('[Repos] Failed to add repo by URL:', err);
-    const message = err instanceof Error ? err.message : 'Failed to add repository';
-    res.status(400).json({ error: message });
-  }
-});
-
-router.get('/active/public', async (_req: Request, res: Response) => {
+router.get('/active/public', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const project = await prisma.repository.findFirst({
       where: { userId: null, isActive: true },
     });
     res.json(project);
   } catch (err) {
-    console.error('[Repos] Failed to get active public project:', err);
-    res.status(500).json({ error: 'Failed to get active project' });
+    next(err);
   }
 });
 
-router.get('/public', async (_req: Request, res: Response) => {
+router.get('/public', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const projects = await prisma.repository.findMany({
       where: { userId: null },
@@ -63,18 +56,17 @@ router.get('/public', async (_req: Request, res: Response) => {
     });
     res.json(projects);
   } catch (err) {
-    console.error('[Repos] Failed to get public projects:', err);
-    res.status(500).json({ error: 'Failed to get projects' });
+    next(err);
   }
 });
 
-router.post('/:id/activate/public', async (req: Request, res: Response) => {
+router.post('/:id/activate/public', async (req: Request, res: Response, next: NextFunction) => {
   try {
     await prisma.repository.updateMany({
       where: { userId: null },
       data: { isActive: false },
     });
-    
+
     const id = req.params.id as string;
     const project = await prisma.repository.update({
       where: { id },
@@ -82,24 +74,20 @@ router.post('/:id/activate/public', async (req: Request, res: Response) => {
     });
     res.json(project);
   } catch (err) {
-    console.error('[Repos] Failed to activate public project:', err);
-    res.status(500).json({ error: 'Failed to activate project' });
+    next(err);
   }
 });
 
-// --- Authenticated routes (use shared requireAuth middleware) ---
-
-router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
+router.get('/', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const projects = await getUserRepositories(req.userId!);
     res.json(projects);
   } catch (err) {
-    console.error('[Repos] Failed to get projects:', err);
-    res.status(500).json({ error: 'Failed to get projects' });
+    next(err);
   }
 });
 
-router.get('/github', requireAuth, async (req: AuthRequest, res: Response) => {
+router.get('/github', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.userId! },
@@ -107,83 +95,77 @@ router.get('/github', requireAuth, async (req: AuthRequest, res: Response) => {
     });
 
     if (!user?.accessToken) {
-      res.status(403).json({ error: 'GitHub account not linked. Please sign in with GitHub first.' });
-      return;
+      return next(
+        new HttpError(403, 'GITHUB_NOT_LINKED', 'GitHub account not linked. Please sign in with GitHub first.'),
+      );
     }
 
     const repos = await getGitHubRepos(user.accessToken);
     res.json(repos);
   } catch (err) {
-    console.error('[Repos] Failed to fetch GitHub repos:', err);
-    res.status(500).json({ error: 'Failed to fetch repositories' });
+    next(err);
   }
 });
 
-router.post('/import', requireAuth, async (req: AuthRequest, res: Response) => {
-  const { repo } = req.body as { repo: GitHubRepo };
-  if (!repo?.id || !repo?.full_name) {
-    res.status(400).json({ error: 'Invalid repository data' });
-    return;
-  }
+router.post(
+  '/import',
+  requireAuth,
+  validateBody(importRepoBodySchema),
+  async (req: AuthRequest & ValidatedRequest<ImportRepoBody>, res: Response, next: NextFunction) => {
+    try {
+      const repo = req.validBody!.repo as unknown as GitHubRepo;
+      const project = await addRepository(req.userId!, repo, true);
+      res.status(201).json(project);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
-  try {
-    const project = await addRepository(req.userId!, repo, true);
-    res.json(project);
-  } catch (err) {
-    console.error('[Repos] Failed to import repo:', err);
-    res.status(500).json({ error: 'Failed to import repository' });
-  }
-});
-
-router.post('/:id/activate', requireAuth, async (req: AuthRequest, res: Response) => {
+router.post('/:id/activate', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
     const project = await setActiveRepository(req.userId!, id);
     res.json(project);
   } catch (err) {
-    console.error('[Repos] Failed to activate project:', err);
-    res.status(500).json({ error: 'Failed to activate project' });
+    next(err);
   }
 });
 
-router.get('/active', requireAuth, async (req: AuthRequest, res: Response) => {
+router.get('/active', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const project = await getActiveRepository(req.userId!);
     res.json(project);
   } catch (err) {
-    console.error('[Repos] Failed to get active project:', err);
-    res.status(500).json({ error: 'Failed to get active project' });
+    next(err);
   }
 });
 
-router.patch('/active/base-branch', requireAuth, async (req: AuthRequest, res: Response) => {
-  const parsed = updateBaseBranchSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: 'Invalid base branch' });
-    return;
-  }
+router.patch(
+  '/active/base-branch',
+  requireAuth,
+  validateBody(updateBaseBranchBodySchema),
+  async (req: AuthRequest & ValidatedRequest<UpdateBaseBranchBody>, res: Response, next: NextFunction) => {
+    try {
+      const activeRepository = await prisma.repository.findFirst({
+        where: { userId: req.userId!, isActive: true },
+        select: { id: true },
+      });
 
-  try {
-    const activeRepository = await prisma.repository.findFirst({
-      where: { userId: req.userId!, isActive: true },
-      select: { id: true },
-    });
+      if (!activeRepository) {
+        return next(new HttpError(404, 'NO_ACTIVE_REPO', 'No active repository selected'));
+      }
 
-    if (!activeRepository) {
-      res.status(404).json({ error: 'No active repository selected' });
-      return;
+      const updated = await prisma.repository.update({
+        where: { id: activeRepository.id },
+        data: { defaultBranch: req.validBody!.baseBranch },
+      });
+
+      res.json(updated);
+    } catch (err) {
+      next(err);
     }
-
-    const updated = await prisma.repository.update({
-      where: { id: activeRepository.id },
-      data: { defaultBranch: parsed.data.baseBranch },
-    });
-
-    res.json(updated);
-  } catch (err) {
-    console.error('[Repos] Failed to update active repository base branch:', err);
-    res.status(500).json({ error: 'Failed to update base branch' });
-  }
-});
+  },
+);
 
 export default router;

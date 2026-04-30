@@ -12,14 +12,28 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .setup(|app| {
             deeplink::setup_deep_link_handler(app);
+
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(err) = sidecar::launch_sidecar(app_handle).await {
+                    eprintln!("[Setup] Failed to auto-start sidecar: {}", err);
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             opencode::check_opencode,
             opencode::pick_local_folder,
             sidecar::start_api_server,
-            sidecar::stop_api_server
+            sidecar::stop_api_server,
+            sidecar::get_api_server_port,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                sidecar::shutdown_sidecar();
+            }
+        });
 }

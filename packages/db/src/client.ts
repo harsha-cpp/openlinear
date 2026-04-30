@@ -5,27 +5,30 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-function createPrismaClient(): PrismaClient {
-  if (globalForPrisma.prisma) return globalForPrisma.prisma;
+let cached: PrismaClient | undefined;
 
+function getClient(): PrismaClient {
+  if (cached) return cached;
+  if (globalForPrisma.prisma) {
+    cached = globalForPrisma.prisma;
+    return cached;
+  }
   const adapter = new PrismaPg({
     connectionString: process.env.DATABASE_URL,
   });
-
-  const client = new PrismaClient({ adapter });
-
+  cached = new PrismaClient({ adapter });
   if (process.env.NODE_ENV !== "production") {
-    globalForPrisma.prisma = client;
+    globalForPrisma.prisma = cached;
   }
-
-  return client;
+  return cached;
 }
 
-export const prisma = new Proxy({} as PrismaClient, {
+export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
   get(_target, prop) {
-    const client = createPrismaClient();
-    return (client as any)[prop];
+    const client = getClient();
+    const value = Reflect.get(client as unknown as object, prop, client);
+    return typeof value === "function" ? value.bind(client) : value;
   },
-});
+}) as PrismaClient;
 
 export default prisma;

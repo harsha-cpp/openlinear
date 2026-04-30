@@ -3,9 +3,8 @@
 import { createContext, useContext, useEffect, useRef, useCallback, useState, type ReactNode } from "react"
 import type { SSEEventType, SSEEventData } from "@/hooks/use-sse"
 import { useAuth } from "@/hooks/use-auth"
-import { API_URL } from "@/lib/api/client"
+import { getApiUrl, getSidecarApiUrl } from "@/lib/api/client"
 
-const SSE_URL = `${API_URL}/api/events`
 const SSE_RECONNECT_DELAY = 3000
 const SSE_MAX_RETRIES = 10
 
@@ -47,13 +46,17 @@ const ALL_EVENT_TYPES: SSEEventType[] = [
   'project:deleted',
 ]
 
+interface SSEStream {
+  source: EventSource
+  retries: number
+  reconnectTimer: NodeJS.Timeout | null
+}
+
 export function SSEProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth()
   const listenersRef = useRef<Set<SSEListener>>(new Set())
-  const eventSourceRef = useRef<EventSource | null>(null)
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const retryCountRef = useRef(0)
-  const [isConnected, setIsConnected] = useState(false)
+  const streamsRef = useRef<Map<string, SSEStream>>(new Map())
+  const [connectedCount, setConnectedCount] = useState(0)
 
   const broadcast = useCallback((eventType: SSEEventType, data: SSEEventData) => {
     listenersRef.current.forEach((listener) => {
@@ -65,24 +68,29 @@ export function SSEProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const connect = useCallback(() => {
+  const closeStream = useCallback((url: string) => {
+    const stream = streamsRef.current.get(url)
+    if (!stream) return
+    stream.source.close()
+    if (stream.reconnectTimer) clearTimeout(stream.reconnectTimer)
+    streamsRef.current.delete(url)
+  }, [])
+
+  const connectStream = useCallback((url: string) => {
     if (typeof window === 'undefined') return
-    if (!isAuthenticated) return
+    closeStream(url)
 
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
+    const source = new EventSource(url)
+    const stream: SSEStream = { source, retries: 0, reconnectTimer: null }
+    streamsRef.current.set(url, stream)
+
+    source.onopen = () => {
+      console.log("[SSE Provider] Connected to", url)
+      setConnectedCount(streamsRef.current.size)
+      stream.retries = 0
     }
 
-    const eventSource = new EventSource(SSE_URL)
-    eventSourceRef.current = eventSource
-
-    eventSource.onopen = () => {
-      console.log("[SSE Provider] Connected to", SSE_URL)
-      setIsConnected(true)
-      retryCountRef.current = 0
-    }
-
-    eventSource.onmessage = (event) => {
+    source.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data) as SSEEventData
         if (data.type === 'connected') {
@@ -94,7 +102,7 @@ export function SSEProvider({ children }: { children: ReactNode }) {
     }
 
     for (const eventType of ALL_EVENT_TYPES) {
-      eventSource.addEventListener(eventType, (event) => {
+      source.addEventListener(eventType, (event) => {
         try {
           const data = JSON.parse((event as MessageEvent).data)
           broadcast(eventType, data)
@@ -104,44 +112,35 @@ export function SSEProvider({ children }: { children: ReactNode }) {
       })
     }
 
-    eventSource.onerror = () => {
-      eventSource.close()
-      eventSourceRef.current = null
-      setIsConnected(false)
+    source.onerror = () => {
+      source.close()
+      setConnectedCount(Math.max(0, streamsRef.current.size - 1))
 
-      if (retryCountRef.current >= SSE_MAX_RETRIES) {
-        console.warn("[SSE Provider] Max retries reached, stopping reconnect")
+      if (stream.retries >= SSE_MAX_RETRIES) {
+        console.warn("[SSE Provider] Max retries reached for", url)
+        streamsRef.current.delete(url)
         return
       }
 
-      retryCountRef.current++
-      console.log(`[SSE Provider] Connection error, retry ${retryCountRef.current}/${SSE_MAX_RETRIES} in ${SSE_RECONNECT_DELAY}ms`)
-
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-      }
-
-      reconnectTimeoutRef.current = setTimeout(() => {
-        connect()
-      }, SSE_RECONNECT_DELAY)
+      stream.retries++
+      console.log(`[SSE Provider] ${url} retry ${stream.retries}/${SSE_MAX_RETRIES} in ${SSE_RECONNECT_DELAY}ms`)
+      stream.reconnectTimer = setTimeout(() => connectStream(url), SSE_RECONNECT_DELAY)
     }
-  }, [broadcast, isAuthenticated])
+  }, [broadcast, closeStream])
 
   useEffect(() => {
-    connect()
+    if (!isAuthenticated) return
+
+    const cloud = `${getApiUrl()}/api/events`
+    const sidecar = `${getSidecarApiUrl()}/api/events`
+    const urls = new Set<string>([cloud, sidecar])
+
+    urls.forEach((url) => connectStream(url))
 
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-        eventSourceRef.current = null
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-        reconnectTimeoutRef.current = null
-      }
-      retryCountRef.current = 0
+      urls.forEach((url) => closeStream(url))
     }
-  }, [connect])
+  }, [isAuthenticated, connectStream, closeStream])
 
   const subscribe = useCallback((listener: SSEListener) => {
     listenersRef.current.add(listener)
@@ -151,7 +150,7 @@ export function SSEProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <SSEContext.Provider value={{ subscribe, isConnected }}>
+    <SSEContext.Provider value={{ subscribe, isConnected: connectedCount > 0 }}>
       {children}
     </SSEContext.Provider>
   )

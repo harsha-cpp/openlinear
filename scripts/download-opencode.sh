@@ -10,11 +10,12 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 BINARIES_DIR="$ROOT_DIR/apps/desktop/src-tauri/binaries"
 
 REPO="opencode-ai/opencode"
+OPENCODE_VERSION="${OPENCODE_VERSION:-latest}"
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 
-echo "==> Downloading opencode binary for $OS / $ARCH"
+echo "==> Downloading opencode binary for $OS / $ARCH (version: $OPENCODE_VERSION)"
 
 # Resolve GitHub asset name + Tauri target triple
 case "$OS" in
@@ -65,19 +66,23 @@ if [ -f "$DEST" ]; then
   exit 0
 fi
 
-# Get latest release download URL
-echo "  - Fetching latest release from $REPO..."
-DOWNLOAD_URL=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" \
-  | grep "browser_download_url.*$ASSET_NAME" \
-  | cut -d '"' -f 4)
+if [ "$OPENCODE_VERSION" = "latest" ]; then
+  RELEASE_URL="https://api.github.com/repos/$REPO/releases/latest"
+else
+  RELEASE_URL="https://api.github.com/repos/$REPO/releases/tags/$OPENCODE_VERSION"
+fi
+
+echo "  - Fetching release metadata from $RELEASE_URL..."
+RELEASE_JSON=$(curl -sL "$RELEASE_URL")
+DOWNLOAD_URL=$(echo "$RELEASE_JSON" | grep "browser_download_url.*$ASSET_NAME" | cut -d '"' -f 4)
 
 if [ -z "$DOWNLOAD_URL" ]; then
-  echo "  ! Failed to find download URL for $ASSET_NAME"
+  echo "  ! Failed to find download URL for $ASSET_NAME (version: $OPENCODE_VERSION)"
   exit 1
 fi
 
-TAG=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name"' | cut -d '"' -f 4)
-echo "  - Latest version: $TAG"
+TAG=$(echo "$RELEASE_JSON" | grep '"tag_name"' | head -1 | cut -d '"' -f 4)
+echo "  - Resolved version: $TAG"
 echo "  - Downloading $ASSET_NAME..."
 
 # Download and extract
