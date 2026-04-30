@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useDeferredValue, useMemo } from "react"
 import { DropResult } from "@hello-pangea/dnd"
 import { toast } from "sonner"
 import { SSEEventType, SSEEventData } from "@/hooks/use-sse"
@@ -33,6 +33,7 @@ export interface KanbanBoardProps {
   projectId?: string | null
   teamId?: string | null
   projects?: Project[]
+  searchQuery?: string
 }
 
 export interface UseKanbanBoardReturn {
@@ -85,7 +86,7 @@ export interface UseKanbanBoardReturn {
   handleProviderSetupComplete: () => void
 }
 
-export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoardProps): UseKanbanBoardReturn {
+export function useKanbanBoard({ projectId, teamId, projects = [], searchQuery = "" }: KanbanBoardProps): UseKanbanBoardReturn {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -748,8 +749,19 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
 
   const selectedTask = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) || null : null
 
+  const deferredSearchQuery = useDeferredValue(searchQuery)
+  const filteredTasks = useMemo(() => {
+    const q = deferredSearchQuery.trim().toLowerCase()
+    if (q.length < 1) return tasks
+    return tasks.filter((task) => {
+      const title = (task.title || "").toLowerCase()
+      const identifier = (task.identifier || "").toLowerCase()
+      return title.includes(q) || identifier.includes(q)
+    })
+  }, [tasks, deferredSearchQuery])
+
   const getTasksByStatus = (status: Task['status']) => {
-    return tasks.filter((task) => task.status === status)
+    return filteredTasks.filter((task) => task.status === status)
   }
 
   return {

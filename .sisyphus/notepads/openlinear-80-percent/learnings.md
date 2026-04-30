@@ -512,3 +512,77 @@ class HttpError extends Error {        // escape hatch when neither ValidationEr
 **Coordination gotcha (BURNED ON THIS)**: Multiple agents running in parallel on Wave 2 had conflicting versions of `apps/api/src/sse.ts` (one renamed `broadcast` → `broadcastToAll/broadcastToTeam/broadcastToUser`). Routes I touched were checked in by another agent already importing `validate` and `errors` (commit e96261b) BUT those modules didn't exist on disk — that's why typecheck baseline mid-session showed phantom errors. Resolution: kept `broadcastToAll` rename, added `export const broadcast = broadcastToAll;` alias in `sse.ts` for backward compat. **Lesson**: when stash/pop after parallel-wave coordinated work, prefer `git checkout HEAD -- <files>` over `git stash pop` to avoid 3-way merge garbage.
 
 **QA evidence**: `.sisyphus/evidence/task-9-validation.txt` (8 scenarios, all pass), `.sisyphus/evidence/task-9-201.txt` (code-level proof + wire envelope shape; 201/409 wire test deferred — Postgres + Docker daemon down at QA time).
+
+## [2026-05-01] Task: T8 — SSE per-user filtering + auth + jittered reconnect
+
+### New SSE helper API (consumed by T10 comments + T13 notifications + T29 status badge)
+
+`apps/api/src/sse.ts` — old `broadcast()` is GONE. Migrate to:
+
+- **`broadcastToAll(event, data)`** — system-wide only (e.g. `opencode:status`). Avoid for any tenant data.
+- **`broadcastToUser(userId, event, data)`** — per-user routing. Use for: settings:updated, batch:* events (batch.userId is canonical), notification:created (T13).
+- **`broadcastToTeam(teamId, event, data)`** — per-team. Use for: team:*, label:* (when teamId set), project:* (per projectTeam membership).
+- **`broadcastToTask(event, taskWithOwnership[, payload])`** — sync helper. Reads `task.teamId` then falls back to `task.creatorId`. Pass the flattened task; if you need a different payload, pass it as third arg.
+- **`broadcastToTaskById(taskId, event, data)`** — async (Promise<void>). Use when you only have a taskId. Internally does `prisma.task.findUnique({ select: { teamId, creatorId } })` then routes via `broadcastToTask`. Fire-and-forget with `.catch(()=>{})` if you don't want to await.
+- **`sendToClient(clientId, ...)`** — unchanged, kept for direct-targeted sends.
+
+### Auth on /api/events
+
+EventSource cannot set headers, so the handler accepts `?token=<jwt>` query param. Verification path matches `middleware/auth.ts` exactly:
+1. If `OPENLINEAR_TRUST_PROXY_AUTH=1` → `jwt.decode` (unsigned)
+2. Else → `jwt.verify` with `JWT_SECRET` (or dev fallback in non-prod)
+
+T9 callers (validation middleware) and T13 (notifications) should NOT need to construct SSE URLs — frontend handles that.
+
+### SSEClient shape change (BREAKING)
+
+Was `{ id, res }`, now `{ id, res, userId, teamIds: string[] }`. T29 (status badge) and any future SSE management endpoints reading `clients` map must handle the new fields.
+
+### Cleanup hardening
+
+- `clientId` is server-generated UUID — query param ignored. No collision risk.
+- Cleanup attached to BOTH `req.on('close'|'error')` AND `res.on('close'|'error')` with a `cleaned` latch so heartbeat-failed cleanup doesn't double-fire.
+- `safeWrite()` wraps every `res.write` in try/catch; failures drop the client from the map immediately.
+
+### Frontend reconnect (sse-provider.tsx)
+
+- Backoff: `min(30000, 1000 * 2^min(attempt-1,5) + Math.random()*1000)` — caps exponent at 2^5=32 to avoid integer overflow concerns; jitter prevents thundering-herd
+- NO max-retries cap — retries forever (matches plan spec)
+- New context value: `isReconnecting: boolean` (true when no streams open AND at least one is in retry state). Exposed via `useSSEStatus()` hook for T29 badge.
+- URL constructed via `URL` builder so other query params can be appended later without quoting issues.
+
+### Task ownership routing rules (when migrating future broadcasts)
+
+- **Has teamId** → `broadcastToTeam(teamId, ...)` 
+- **No teamId, has creatorId** → `broadcastToUser(creatorId, ...)` (per T1, all new tasks have creatorId)
+- **Neither** → drop the event (logged at warn). Don't fall through to `broadcastToAll`.
+
+### task:deleted needs ownership lookup BEFORE archive
+
+`assertTaskOwned` returns `OwnedTask` with teamId but NOT creatorId. For deletes, do an extra `findUnique({ select: { teamId, creatorId } })` BEFORE the update to capture both. After the update the task still exists (archived=true), but doing the read upfront is cleaner than re-reading.
+
+### team:deleted needs member capture BEFORE delete
+
+Once `teamMember.deleteMany` runs, the connected EventSource clients still have the OLD teamIds in memory but the team is gone. Since `broadcastToTeam` filters on `client.teamIds.includes(teamId)`, the message would still reach them — but to be explicit and forward-safe, capture `members.map(m=>m.userId)` inside the transaction and `broadcastToUser(uid, 'team:deleted', ...)` for each.
+
+### Sidecar broadcast routing (state.ts, batch.ts)
+
+- `broadcastProgress(taskId, ...)` and `addLogEntry(taskId, ...)` now use `broadcastToTaskById(taskId, ...)` — they're sync APIs (don't await) but fire-and-forget the underlying Promise via `void` or `.catch(()=>{})`.
+- `broadcastBatchEvent` in batch.ts looks up `activeBatches.get(batchId).userId` and uses `broadcastToUser(batch.userId)`. Falls silently if batch not found (defensive, since batches can be cleaned up mid-event).
+
+### Live curl test deferred — preview container does NOT bind-mount source
+
+`docker-compose.preview.yml` builds source into the image; restart picks up old code. To live-test: `bash scripts/openlinear.sh rebuild` (~5min) or run API outside docker. Unit-level verification (typecheck + grep -c "broadcast(" = 0) is the canonical proof for now. Future tasks should rebuild the container if they need live SSE testing.
+
+## T20 — use-kanban-board apiFetch migration (NO-OP)
+- Verified: `grep "localStorage.getItem('token')" apps/desktop-ui/components/board/use-kanban-board.ts` → 0 matches.
+- File already uses `apiFetch` in 11 sites (migrated as part of T3 scope).
+- No code changes required. Evidence: `.sisyphus/evidence/task-20-grep-clean.txt`.
+- No commit needed.
+
+## T21 — focus-visible + prefers-reduced-motion (2026-05-01)
+- desktop-ui uses `var(--linear-accent)` (raw color), landing uses `hsl(var(--ring))` (HSL triplet) — different token systems, must use each app's convention
+- desktop-ui had `outline: none` on inputs/textareas/selects (a11y violation) — replaced with 2px ring
+- Reduced-motion override uses `0.01ms` (not `0`) to preserve transition end events firing
+- Used `*,*::before,*::after` selector to catch pseudo-element animations
+- landing/app/globals.css had NO focus styles at all — added `:focus-visible` for the entire page

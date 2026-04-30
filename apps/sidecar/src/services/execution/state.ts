@@ -142,7 +142,7 @@ export async function updateTaskStatus(
       labels: task.labels.map((tl: TaskLabelRelation) => tl.label),
     };
     
-    broadcast('task:updated', flatTask);
+    broadcastToTask('task:updated', flatTask);
   } catch (error) {
     console.error(`[Execution] Failed to update task ${taskId}:`, error);
   }

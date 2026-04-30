@@ -238,6 +238,7 @@ function HomeContent() {
         projectId={selectedProjectId}
         teamId={selectedTeamId}
         projects={projects}
+        searchQuery={searchQuery}
       />
       <TaskFormDialog
         open={isTaskFormOpen}

@@ -37,3 +37,20 @@
 - **Labels gain `teamId` (nullable)**: enables per-team labels + shared global labels. Existing labels migrate as global (teamId=null). Composite `@@unique([teamId, name])` allows same name in different teams.
 - **Sidecar uses optionalAuth + conditional ownership**: matches T7 spec; allows legacy unauth local-dev to keep working but enforces ownership when token IS present. Production deployments should set `requireAuth` upstream via reverse proxy if needed.
 - **Removed `optionalAuth` from team mutation routes**: PATCH/DELETE/member-add/member-remove all switched to `requireAuth`. The previous `optionalAuth` was the most critical bug — anyone could rename/delete teams.
+
+## [2026-05-01] T15 — OpenCode isolation: Path B (document + enforce)
+
+**Decision**: Document single-tenant constraint instead of implementing per-user spawn.
+
+**Why not Path A (per-user OpenCode subprocess)**:
+- @opencode-ai/sdk@1.2.5 has no in-process auth namespacing. Auth state lives in `$XDG_DATA_HOME/opencode/auth.json` at process scope.
+- Per-user spawn requires THREE coordinated changes: (1) per-user XDG_DATA_HOME directories, (2) port pool, (3) concurrent-process cap (each subprocess ~150–250 MB RAM).
+- Primary deployment is Tauri desktop sidecar (one user per machine). Multi-tenant cloud is secondary.
+- Out of scope for T15 brief; deserves its own deep task.
+
+**What shipped**:
+1. `docs/limitations.md` — full constraint write-up + operator mitigations.
+2. `apps/sidecar/src/index.ts` — boot banner (stdout + structured warn) on every start; multi-user DB guard that exits with code 2 unless `OPENLINEAR_ALLOW_SHARED_OPENCODE=1`.
+3. `apps/sidecar/src/services/opencode.ts` — `_userId` → `userId` (the param now carries semantic intent for future isolation; `void userId;` marker + comment prevent future maintainers from deleting it under `noUnusedParameters`).
+
+**Failure mode the guard prevents**: Operator deploys a multi-tenant sidecar without realizing User A's OpenAI key is visible to User B via shared `auth.json`.
