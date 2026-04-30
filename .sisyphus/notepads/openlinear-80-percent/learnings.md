@@ -313,3 +313,35 @@ created on someone's behalf):
 
 Inbox UI (T28) renders `<actor.username> mentioned you in <task.title>` — the
 recipient is implicit (it's "you") so it's NOT shown.
+
+## [2026-05-01] Task: T11 — AgentRun capture in execution lifecycle
+
+**OpenCode SDK cost/token shape (@opencode-ai/sdk@1.2.5)**:
+- `AssistantMessage` type at `node_modules/.pnpm/@opencode-ai+sdk@1.2.5/node_modules/@opencode-ai/sdk/dist/gen/types.gen.d.ts:98-127`
+- Fields: `cost: number` (USD), `tokens: { input, output, reasoning, cache: { read, write } }`
+- These are **TOTALS PER ASSISTANT MESSAGE**, not deltas. Event `message.updated` carries `properties.info: Message` and the SDK keeps re-emitting the message with growing usage as it streams.
+
+**Accumulation pattern (anti-double-count)**:
+- Use `Map<messageId, { cost, inputTokens, outputTokens }>` keyed by `info.id`
+- Replace (not add) on each `message.updated` for that id
+- Sum across the Map at finalize time
+- Implemented in `apps/sidecar/src/services/execution/agent-run.ts:recordMessageUsage`
+
+**Schema gotcha**: `AgentRunStatus` enum values are `pending|running|succeeded|failed|cancelled` (NOT `completed` as the plan T11 spec section says). Use `succeeded` for the success terminal state.
+
+**Status transitions for AgentRun**:
+- create → status='running' (default 'pending' overridden in createAgentRun)
+- session.idle/completed + commit/push success → 'succeeded' (with prUrl)
+- session.error / prompt-error / commit failure → 'failed' (with errorMessage)
+- cancelTask user-initiated → 'cancelled'
+
+**Decimal handling**: Use `new Prisma.Decimal(value.toFixed(6))` to construct the `@db.Decimal(12,6)` value. Float→Decimal coercion via string is the only safe path.
+
+**Failure isolation**: All AgentRun writes wrapped in try/catch with `logger.error` (pino from `@openlinear/api/logger`). NEVER throw out of these helpers — execution must continue if the analytics row fails to write.
+
+**Route scoping (`/api/agent-runs`)**:
+- `?taskId=X` → `assertTaskOwned` (T7 seam) → list runs for that task
+- `?userId=me` → restrict to `req.userId` AND filter `task.teamId IN getUserTeamIds(req.userId)` to prevent enumeration of runs from teams the user has left
+- `?userId=<other>` → 403 (no cross-user reads)
+
+**Refactor in lifecycle.ts**: Moved the `client.config.get()` model-fetch block from after `subscribeToSessionEvents` to BEFORE the `ExecutionState` construction so we can stamp the model name onto the AgentRun row. Side effect: `addLogEntry('Using model: …')` had to move down (and is now guarded by `if (modelOverride)`).
