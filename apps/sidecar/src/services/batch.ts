@@ -15,6 +15,17 @@ const execAsync = promisify(exec);
 const activeBatches = new Map<string, BatchState>();
 const sessionToBatch = new Map<string, { batchId: string; taskId: string }>();
 
+/**
+ * T14 — On sidecar restart, `activeBatches` is empty (in-memory only). Any
+ * task that was mid-batch is recovered via `recoverInFlightExecutions()` in
+ * `services/execution/recovery.ts`. This export exists so the boot sequence
+ * has a symmetric API surface and to give future Batch persistence work a
+ * stable hook to extend without changing call sites.
+ */
+export function getInMemoryBatchCount(): number {
+  return activeBatches.size;
+}
+
 interface BatchLogEntry {
   timestamp: string;
   type: 'info' | 'agent' | 'tool' | 'error' | 'success';

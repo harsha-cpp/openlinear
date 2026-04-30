@@ -3,6 +3,10 @@ import { prisma } from '@openlinear/db';
 import { logger } from '@openlinear/api/logger';
 import { createSidecarApp } from './app';
 import { initOpenCode, registerShutdownHandlers } from './services/opencode';
+import {
+  recoverInFlightExecutions,
+  recoverActiveBatches,
+} from './services/execution/recovery';
 
 const PORT = Number(process.env.API_PORT ?? 3001);
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -22,11 +26,60 @@ async function loadDotenvIfPresent() {
   }
 }
 
+function printOpenCodeSingleTenantBanner() {
+  const banner = [
+    '================================================================',
+    '  OpenCode runs in SINGLE-TENANT mode.',
+    '  All authenticated OpenLinear users share one OpenCode process,',
+    '  one provider auth store, and one session namespace.',
+    '  See docs/limitations.md for details.',
+    '================================================================',
+  ].join('\n');
+  process.stdout.write(banner + '\n');
+  logger.warn('[Sidecar] OpenCode runs in single-tenant mode — see docs/limitations.md');
+}
+
 async function start() {
   await loadDotenvIfPresent();
-
   const app = createSidecarApp();
   registerShutdownHandlers();
+
+  try {
+    await prisma.$connect();
+    await recoverInFlightExecutions();
+    await recoverActiveBatches();
+  } catch (err) {
+    logger.error({ err }, '[Sidecar] recovery sweep failed (continuing boot)');
+  }
+
+  // OpenCode runs in single-tenant mode (one shared subprocess for all users).
+  // See docs/limitations.md. Refuse to boot in obvious multi-user setups unless
+  // the operator has explicitly acknowledged the shared-state risk.
+  printOpenCodeSingleTenantBanner();
+  try {
+    const userCount = await prisma.user.count();
+    const allowShared = process.env.OPENLINEAR_ALLOW_SHARED_OPENCODE === '1';
+    if (userCount > 1 && !allowShared) {
+      logger.fatal(
+        { userCount },
+        '[Sidecar] Multi-user database detected but OpenCode runs in single-tenant mode. ' +
+          'All users would share OpenCode provider credentials and sessions. ' +
+          'Set OPENLINEAR_ALLOW_SHARED_OPENCODE=1 to acknowledge and proceed, ' +
+          'or run one sidecar instance per user. See docs/limitations.md.',
+      );
+      await prisma.$disconnect().catch(() => undefined);
+      process.exit(2);
+    }
+    if (userCount > 1 && allowShared) {
+      logger.warn(
+        { userCount },
+        '[Sidecar] Multi-user database with OPENLINEAR_ALLOW_SHARED_OPENCODE=1 — ' +
+          'users WILL share OpenCode auth state. See docs/limitations.md.',
+      );
+    }
+  } catch (err) {
+    logger.error({ err }, '[Sidecar] Failed to count users for single-tenant guard (continuing)');
+  }
 
   try {
     await initOpenCode();

@@ -345,3 +345,83 @@ recipient is implicit (it's "you") so it's NOT shown.
 - `?userId=<other>` → 403 (no cross-user reads)
 
 **Refactor in lifecycle.ts**: Moved the `client.config.get()` model-fetch block from after `subscribeToSessionEvents` to BEFORE the `ExecutionState` construction so we can stamp the model name onto the AgentRun row. Side effect: `addLogEntry('Using model: …')` had to move down (and is now guarded by `if (modelOverride)`).
+
+## [2026-05-01] Task: T15 — OpenCode single-tenant constraint
+
+**SDK shape (@opencode-ai/sdk@1.2.5)**:
+- `createOpencodeServer(opts)` accepts only `{ hostname, port, signal, timeout, config }` — no auth-store override (`node_modules/@opencode-ai/sdk/dist/server.d.ts:2-8`).
+- Auth lives on disk at `$XDG_DATA_HOME/opencode/auth.json` — global to the process.
+- Implication: per-user isolation requires per-user `XDG_DATA_HOME` env override on subprocess spawn, not just a port-per-user map.
+
+**Multi-tenant guard pattern**:
+- `prisma.user.count()` at boot is a cheap, race-free way to detect "this DB has accumulated multiple users". Pair with an opt-in env var (`OPENLINEAR_ALLOW_SHARED_OPENCODE=1`) so single-machine devs aren't affected (they have 0–1 users) while accidental multi-tenant deploys fail loudly.
+- Exit code 2 (not 1) signals "configuration refused boot" vs "crashed" — useful for orchestrators / systemd `RestartPreventExitStatus=2`.
+
+**Comment-as-contract pattern**:
+- When a parameter exists for future use (`getClientForUser(userId, ...)` where `userId` is currently unused), use `void userId;` + a short comment pointing to the docs file. This satisfies `noUnusedParameters` without the underscore prefix that signals "intentionally throwaway" — the param IS the API contract.
+
+**Banner pattern**:
+- For limitations operators must see, write to `process.stdout` directly (bypasses pino log levels) AND emit a structured `logger.warn` (so it lands in shipped logs). One mechanism is not enough.
+
+## [2026-05-01] Task: T14 — Execution state recovery on sidecar restart
+
+**Schema constraint**: `enum Status { todo | in_progress | done | cancelled }`
+has NO `failed` value. The plan T14 spec says "mark task as failed", but the
+only failure-shaped terminal state available is `cancelled`. Convention used:
+
+- `Task.status = 'cancelled'`
+- `Task.outcome = 'sidecar_restart_orphan'` ← machine-readable orphan marker
+- `Task.sessionId = null` (clear stale OpenCode session ref)
+- `AgentRun.status = 'failed'` (this enum DOES support failed)
+- `AgentRun.errorMessage = 'sidecar_restart_orphan'` (matching string)
+- `AgentRun.endedAt = now()`
+
+The string `'sidecar_restart_orphan'` is the canonical marker for queries
+like `SELECT count(*) FROM tasks WHERE outcome='sidecar_restart_orphan'`.
+
+**Threshold**: 1 hour. Tasks `in_progress` whose latest AgentRun has
+`endedAt IS NULL` AND `startedAt < now() - 1h` are orphaned. Within the 1h
+window they get a `[Recovery] task in_progress within 1h window — leaving
+for potential reconnect (T15)` warn log and are left alone — T15 OpenCode
+per-user reconnect work may rehydrate them later. Never re-execute orphan
+tasks automatically (would risk duplicate PRs).
+
+**Edge case**: If the latest AgentRun is closed (`endedAt IS NOT NULL`) but
+the task is still `in_progress`, that's also an orphan — execution lifecycle
+crashed between `finalizeAgentRun` and `updateTaskStatus`. We mark it
+orphaned regardless of age in this branch.
+
+**Boot sequence** (`apps/sidecar/src/index.ts`):
+```
+createSidecarApp()
+registerShutdownHandlers()
+prisma.$connect()
+recoverInFlightExecutions()      ← T14
+recoverActiveBatches()           ← T14
+initOpenCode()                   ← can fail without aborting boot
+app.listen(...)
+```
+Recovery wrapped in outer try/catch with `logger.error({err}, '...')` so a
+failed sweep never blocks boot. Order matters: must run AFTER prisma connect
+(needs the client) but BEFORE listen (clean state before serving requests).
+
+**Batch recovery shape**: `BatchState` is in-memory only (no Batch table).
+On restart `activeBatches` is empty by definition. Per-task batch orphans
+are handled by the same `recoverInFlightExecutions` scan since orphan tasks
+also have `batchId` set. `recoverActiveBatches()` is therefore mostly an
+observability pass that uses `prisma.task.groupBy({by:['batchId']...})` to
+log how many stale batches were observed. A `getInMemoryBatchCount()`
+helper was added to `batch.ts` for symmetry / future Batch persistence.
+
+**Logger context**: Use `logger` from `@openlinear/api/logger` (the root
+pino instance). No request context exists during boot — never use the
+request-scoped `req.log`. This matches the pattern in `services/opencode.ts`
+and `services/execution/agent-run.ts`.
+
+**Container test gotcha**: The OpenLinear preview container bakes
+`/app/apps/sidecar/dist/index.js` into the image. To test recovery code
+changes locally without a full rebuild:
+1. `pnpm --filter @openlinear/sidecar build` (esbuild)
+2. `docker cp apps/sidecar/dist/index.js openlinear:/app/apps/sidecar/dist/index.js`
+3. `docker restart openlinear` OR `docker exec openlinear sh -c 'kill -TERM <sidecar PID>'` then `docker exec -d openlinear sh -c 'node /app/apps/sidecar/dist/index.js > /var/log/openlinear/api.log 2>&1'`
+4. `docker exec openlinear grep Recovery /var/log/openlinear/api.log`
