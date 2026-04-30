@@ -1,9 +1,15 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { prisma } from '@openlinear/db';
 import { z } from 'zod';
 import { broadcast } from '../sse';
-import { optionalAuth, AuthRequest } from '../middleware/auth';
+import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getUserTeamIds } from '../services/team-scope';
+import {
+  assertTaskOwned,
+  assertProjectOwned,
+  assertTeamRole,
+  OwnershipError,
+} from '../services/ownership';
 
 const PriorityEnum = z.enum(['low', 'medium', 'high']);
 const StatusEnum = z.enum(['todo', 'in_progress', 'done', 'cancelled']);
@@ -100,75 +106,60 @@ const taskInclude = {
 
 const router: Router = Router();
 
-// --- Archived endpoints (must be before /:id routes) ---
-
-router.get('/archived', optionalAuth, async (req: AuthRequest, res: Response) => {
+router.get('/archived', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    if (!req.userId) {
-      res.json([]);
-      return;
-    }
-
-    const where: Record<string, unknown> = { archived: true };
-    const teamIds = await getUserTeamIds(req.userId);
-    where.teamId = { in: teamIds };
-
+    const teamIds = await getUserTeamIds(req.userId!);
     const tasks = await prisma.task.findMany({
-      where,
+      where: { archived: true, teamId: { in: teamIds } },
       include: taskInclude,
       orderBy: { updatedAt: 'desc' },
     });
-
     res.json(tasks.map(flattenLabels));
   } catch (error) {
-    console.error('[Tasks] Error listing archived tasks:', error);
-    res.status(500).json({ error: 'Failed to list archived tasks' });
+    next(error);
   }
 });
 
-router.delete('/archived', async (_req: Request, res: Response) => {
+router.delete('/archived', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    await prisma.task.deleteMany({ where: { archived: true } });
+    const teamIds = await getUserTeamIds(req.userId!);
+    await prisma.task.deleteMany({
+      where: { archived: true, teamId: { in: teamIds } },
+    });
     res.status(204).send();
   } catch (error) {
-    console.error('[Tasks] Error deleting all archived tasks:', error);
-    res.status(500).json({ error: 'Failed to delete archived tasks' });
+    next(error);
   }
 });
 
-router.delete('/archived/:id', async (req: Request, res: Response) => {
+router.delete('/archived/:id', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-
-    const existing = await prisma.task.findUnique({ where: { id } });
-    if (!existing || !existing.archived) {
-      res.status(404).json({ error: 'Archived task not found' });
-      return;
+    const owned = await assertTaskOwned(id, req.userId!);
+    if (!owned.archived) {
+      throw new OwnershipError('task', id, 'not_found');
     }
-
     await prisma.task.delete({ where: { id } });
     res.status(204).send();
   } catch (error) {
-    console.error('[Tasks] Error permanently deleting task:', error);
-    res.status(500).json({ error: 'Failed to permanently delete task' });
+    next(error);
   }
 });
 
-router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
+router.get('/', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { teamId, projectId } = req.query;
 
-    if (!teamId && !req.userId) {
-      res.json([]);
-      return;
-    }
-
+    const userTeamIds = await getUserTeamIds(req.userId!);
     const where: Record<string, unknown> = { archived: false };
+
     if (teamId) {
+      if (!userTeamIds.includes(teamId as string)) {
+        throw new OwnershipError('team', teamId as string, 'forbidden');
+      }
       where.teamId = teamId as string;
-    } else if (req.userId) {
-      const teamIds = await getUserTeamIds(req.userId);
-      where.teamId = { in: teamIds };
+    } else {
+      where.teamId = { in: userTeamIds };
     }
     if (projectId) where.projectId = projectId as string;
 
@@ -180,12 +171,11 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
 
     res.json(tasks.map(flattenLabels));
   } catch (error) {
-    console.error('[Tasks] Error listing tasks:', error);
-    res.status(500).json({ error: 'Failed to list tasks' });
+    next(error);
   }
 });
 
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const parsed = CreateTaskSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -198,6 +188,7 @@ router.post('/', async (req: Request, res: Response) => {
     let resolvedTeamId = teamId;
 
     if (projectId) {
+      await assertProjectOwned(projectId, req.userId!);
       const projectTeam = await resolveProjectTeamId(projectId);
       if ('error' in projectTeam) {
         res.status(400).json({ error: projectTeam.error });
@@ -206,12 +197,8 @@ router.post('/', async (req: Request, res: Response) => {
       resolvedTeamId = projectTeam.teamId;
     }
 
-    if (resolvedTeamId && !projectId) {
-      const team = await prisma.team.findUnique({ where: { id: resolvedTeamId } });
-      if (!team) {
-        res.status(400).json({ error: 'Team not found' });
-        return;
-      }
+    if (resolvedTeamId) {
+      await assertTeamRole(resolvedTeamId, req.userId!, ['owner', 'admin', 'member']);
     }
 
     let task: TaskWithLabels;
@@ -237,6 +224,7 @@ router.post('/', async (req: Request, res: Response) => {
             number,
             identifier,
             dueDate: dueDate ? new Date(dueDate) : undefined,
+            creatorId: req.userId!,
             labels: {
               create: labelIds.map((labelId) => ({ labelId })),
             },
@@ -244,7 +232,7 @@ router.post('/', async (req: Request, res: Response) => {
           include: taskInclude,
         });
         return created;
-      });
+      }, { timeout: 15000, maxWait: 5000 });
     } else {
       task = await prisma.task.create({
         data: {
@@ -254,6 +242,7 @@ router.post('/', async (req: Request, res: Response) => {
           status,
           projectId: projectId || undefined,
           dueDate: dueDate ? new Date(dueDate) : undefined,
+          creatorId: req.userId!,
           labels: {
             create: labelIds.map((labelId) => ({ labelId })),
           },
@@ -266,14 +255,14 @@ router.post('/', async (req: Request, res: Response) => {
     broadcast('task:created', transformedTask);
     res.status(201).json(transformedTask);
   } catch (error) {
-    console.error('[Tasks] Error creating task:', error);
-    res.status(500).json({ error: 'Failed to create task' });
+    next(error);
   }
 });
 
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
+    await assertTaskOwned(id, req.userId!);
 
     const task = await prisma.task.findUnique({
       where: { id },
@@ -281,18 +270,16 @@ router.get('/:id', async (req: Request, res: Response) => {
     });
 
     if (!task) {
-      res.status(404).json({ error: 'Task not found' });
-      return;
+      throw new OwnershipError('task', id, 'not_found');
     }
 
     res.json(flattenLabels(task));
   } catch (error) {
-    console.error('[Tasks] Error getting task:', error);
-    res.status(500).json({ error: 'Failed to get task' });
+    next(error);
   }
 });
 
-router.patch('/:id', async (req: Request, res: Response) => {
+router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
     const parsed = UpdateTaskSchema.safeParse(req.body);
@@ -301,13 +288,9 @@ router.patch('/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const { labelIds, teamId, projectId, dueDate, ...updateData } = parsed.data;
+    const existing = await assertTaskOwned(id, req.userId!);
 
-    const existing = await prisma.task.findUnique({ where: { id } });
-    if (!existing) {
-      res.status(404).json({ error: 'Task not found' });
-      return;
-    }
+    const { labelIds, teamId, projectId, dueDate, ...updateData } = parsed.data;
 
     const data: Record<string, unknown> = { ...updateData };
 
@@ -323,6 +306,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
     if (projectId !== undefined) {
       if (projectId) {
+        await assertProjectOwned(projectId, req.userId!);
         const projectTeam = await resolveProjectTeamId(projectId);
         if ('error' in projectTeam) {
           res.status(400).json({ error: projectTeam.error });
@@ -336,11 +320,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
       }
     } else if (teamId !== undefined) {
       if (teamId) {
-        const team = await prisma.team.findUnique({ where: { id: teamId } });
-        if (!team) {
-          res.status(400).json({ error: 'Team not found' });
-          return;
-        }
+        await assertTeamRole(teamId, req.userId!, ['owner', 'admin', 'member']);
       }
       data.teamId = teamId;
     }
@@ -361,20 +341,14 @@ router.patch('/:id', async (req: Request, res: Response) => {
     broadcast('task:updated', transformedTask);
     res.json(transformedTask);
   } catch (error) {
-    console.error('[Tasks] Error updating task:', error);
-    res.status(500).json({ error: 'Failed to update task' });
+    next(error);
   }
 });
 
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-
-    const existing = await prisma.task.findUnique({ where: { id } });
-    if (!existing) {
-      res.status(404).json({ error: 'Task not found' });
-      return;
-    }
+    await assertTaskOwned(id, req.userId!);
 
     await prisma.task.update({
       where: { id },
@@ -384,8 +358,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     broadcast('task:deleted', { id });
     res.status(204).send();
   } catch (error) {
-    console.error('[Tasks] Error archiving task:', error);
-    res.status(500).json({ error: 'Failed to archive task' });
+    next(error);
   }
 });
 

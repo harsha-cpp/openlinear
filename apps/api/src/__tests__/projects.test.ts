@@ -51,10 +51,9 @@ describe('Projects API', () => {
   }, 30000);
 
   describe('GET /api/projects', () => {
-    it('returns empty array when no projects exist', async () => {
+    it('returns 401 without auth', async () => {
       const res = await request(app).get('/api/projects');
-      expect(res.status).toBe(200);
-      expect(res.body).toEqual([]);
+      expect(res.status).toBe(401);
     });
 
     it('returns projects with teams array', async () => {
@@ -105,6 +104,7 @@ describe('Projects API', () => {
       const team = await prisma.team.create({
         data: { name: 'Design', key: 'PRJDSN' },
       });
+      await prisma.teamMember.create({ data: { teamId: team.id, userId: testUserId, role: 'member' } });
 
       const res = await request(app)
         .post('/api/projects')
@@ -136,12 +136,16 @@ describe('Projects API', () => {
   });
 
   describe('GET /api/projects/:id', () => {
-    it('returns project with teams and task count', async () => {
+    it('returns project with teams and task count when caller is a member', async () => {
+      const team = await prisma.team.create({ data: { name: 'GetByIdTeam', key: 'GBI' } });
+      await prisma.teamMember.create({ data: { teamId: team.id, userId: testUserId, role: 'member' } });
       const project = await prisma.project.create({
-        data: { name: 'Find Me' },
+        data: { name: 'Find Me', projectTeams: { create: [{ teamId: team.id }] } },
       });
 
-      const res = await request(app).get(`/api/projects/${project.id}`);
+      const res = await request(app)
+        .get(`/api/projects/${project.id}`)
+        .set('Authorization', `Bearer ${authToken}`);
       expect(res.status).toBe(200);
       expect(res.body.name).toBe('Find Me');
       expect(res.body.teams).toBeDefined();
@@ -149,15 +153,24 @@ describe('Projects API', () => {
     });
 
     it('returns 404 for non-existent project', async () => {
-      const res = await request(app).get('/api/projects/00000000-0000-0000-0000-000000000000');
+      const res = await request(app)
+        .get('/api/projects/00000000-0000-0000-0000-000000000000')
+        .set('Authorization', `Bearer ${authToken}`);
       expect(res.status).toBe(404);
+    });
+
+    it('returns 401 without auth', async () => {
+      const res = await request(app).get('/api/projects/00000000-0000-0000-0000-000000000000');
+      expect(res.status).toBe(401);
     });
   });
 
   describe('PATCH /api/projects/:id', () => {
     it('updates project fields', async () => {
+      const team = await prisma.team.create({ data: { name: 'PatchTeam', key: 'PCH' } });
+      await prisma.teamMember.create({ data: { teamId: team.id, userId: testUserId, role: 'member' } });
       const project = await prisma.project.create({
-        data: { name: 'Old Name' },
+        data: { name: 'Old Name', projectTeams: { create: [{ teamId: team.id }] } },
       });
 
       const res = await request(app)
@@ -173,6 +186,8 @@ describe('Projects API', () => {
     it('replaces team associations when teamIds provided', async () => {
       const teamA = await prisma.team.create({ data: { name: 'Team A', key: 'PRJA' } });
       const teamB = await prisma.team.create({ data: { name: 'Team B', key: 'PRJB' } });
+      await prisma.teamMember.create({ data: { teamId: teamA.id, userId: testUserId, role: 'member' } });
+      await prisma.teamMember.create({ data: { teamId: teamB.id, userId: testUserId, role: 'member' } });
 
       const project = await prisma.project.create({
         data: {
@@ -202,9 +217,11 @@ describe('Projects API', () => {
   });
 
   describe('DELETE /api/projects/:id', () => {
-    it('deletes project and unassigns tasks', async () => {
+    it('deletes project and unassigns tasks when caller is owner', async () => {
+      const team = await prisma.team.create({ data: { name: 'DelTeam', key: 'DLT' } });
+      await prisma.teamMember.create({ data: { teamId: team.id, userId: testUserId, role: 'owner' } });
       const project = await prisma.project.create({
-        data: { name: 'To Delete' },
+        data: { name: 'To Delete', projectTeams: { create: [{ teamId: team.id }] } },
       });
 
       const task = await prisma.task.create({

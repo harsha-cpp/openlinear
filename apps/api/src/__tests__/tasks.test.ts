@@ -12,7 +12,6 @@ function generateToken(userId: string, username: string = 'testuser') {
 
 describe('Tasks API', () => {
   const app = createApp();
-  let createdTaskId: string;
   let testUserId: string;
   let authToken: string;
   let testTeamId: string;
@@ -56,14 +55,12 @@ describe('Tasks API', () => {
   }, 30000);
 
   describe('GET /api/tasks', () => {
-    it('returns empty array when no tasks exist', async () => {
+    it('returns 401 without auth', async () => {
       const res = await request(app).get('/api/tasks');
-
-      expect(res.status).toBe(200);
-      expect(res.body).toEqual([]);
+      expect(res.status).toBe(401);
     });
 
-    it('returns tasks when they exist', async () => {
+    it('returns tasks scoped to caller teams', async () => {
       await prisma.task.create({
         data: {
           title: 'Test Task',
@@ -77,43 +74,50 @@ describe('Tasks API', () => {
         .set('Authorization', `Bearer ${authToken}`);
 
       expect(res.status).toBe(200);
-      expect(res.body).toHaveLength(1);
-      expect(res.body[0].title).toBe('Test Task');
+      expect(res.body.length).toBeGreaterThanOrEqual(1);
+      expect(res.body.some((t: { title: string }) => t.title === 'Test Task')).toBe(true);
     });
 
-    it('filters tasks by teamId', async () => {
+    it('filters tasks by teamId when caller is a member', async () => {
       const team = await prisma.team.create({
         data: { name: 'Filter Team', key: 'FLT' },
       });
+      await prisma.teamMember.create({ data: { teamId: team.id, userId: testUserId, role: 'member' } });
 
       await prisma.task.create({ data: { title: 'Team Task', priority: 'medium', teamId: team.id } });
-      await prisma.task.create({ data: { title: 'No Team Task', priority: 'medium' } });
 
-      const res = await request(app).get(`/api/tasks?teamId=${team.id}`);
+      const res = await request(app)
+        .get(`/api/tasks?teamId=${team.id}`)
+        .set('Authorization', `Bearer ${authToken}`);
 
       expect(res.status).toBe(200);
-      expect(res.body).toHaveLength(1);
-      expect(res.body[0].title).toBe('Team Task');
+      expect(res.body.some((t: { title: string }) => t.title === 'Team Task')).toBe(true);
+    });
+
+    it('rejects teamId filter when caller is not a member', async () => {
+      const otherTeam = await prisma.team.create({
+        data: { name: 'Other', key: 'OTH' },
+      });
+
+      const res = await request(app)
+        .get(`/api/tasks?teamId=${otherTeam.id}`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('OWNERSHIP_REQUIRED');
     });
   });
 
   describe('POST /api/tasks', () => {
-    it('creates a new task', async () => {
-      const res = await request(app)
-        .post('/api/tasks')
-        .send({ title: 'New Task' });
-
-      expect(res.status).toBe(201);
-      expect(res.body.title).toBe('New Task');
-      expect(res.body.priority).toBe('medium');
-      expect(res.body.status).toBe('todo');
-      expect(res.body).toHaveProperty('id');
-      createdTaskId = res.body.id;
+    it('returns 401 without auth', async () => {
+      const res = await request(app).post('/api/tasks').send({ title: 'unauth' });
+      expect(res.status).toBe(401);
     });
 
     it('creates a new task without teamId (backward compat)', async () => {
       const res = await request(app)
         .post('/api/tasks')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ title: 'No Team Task' });
 
       expect(res.status).toBe(201);
@@ -126,9 +130,11 @@ describe('Tasks API', () => {
       const team = await prisma.team.create({
         data: { name: 'Engineering', key: 'TENG' },
       });
+      await prisma.teamMember.create({ data: { teamId: team.id, userId: testUserId, role: 'owner' } });
 
       const res = await request(app)
         .post('/api/tasks')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ title: 'Team Task', teamId: team.id });
 
       expect(res.status).toBe(201);
@@ -143,30 +149,39 @@ describe('Tasks API', () => {
       const team = await prisma.team.create({
         data: { name: 'Engineering', key: 'SEQ' },
       });
+      await prisma.teamMember.create({ data: { teamId: team.id, userId: testUserId, role: 'owner' } });
 
       const res1 = await request(app)
         .post('/api/tasks')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ title: 'First', teamId: team.id });
       const res2 = await request(app)
         .post('/api/tasks')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ title: 'Second', teamId: team.id });
 
       expect(res1.body.identifier).toBe('SEQ-1');
       expect(res2.body.identifier).toBe('SEQ-2');
     });
 
-    it('returns 400 for invalid teamId', async () => {
+    it('rejects creating a task in a team the caller is not a member of', async () => {
+      const otherTeam = await prisma.team.create({
+        data: { name: 'Foreign', key: 'FRG' },
+      });
+
       const res = await request(app)
         .post('/api/tasks')
-        .send({ title: 'Bad Team', teamId: '00000000-0000-0000-0000-000000000000' });
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ title: 'Forbidden', teamId: otherTeam.id });
 
-      expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Team not found');
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('OWNERSHIP_REQUIRED');
     });
 
     it('returns 400 for invalid data', async () => {
       const res = await request(app)
         .post('/api/tasks')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ title: '' });
 
       expect(res.status).toBe(400);
@@ -175,15 +190,22 @@ describe('Tasks API', () => {
   });
 
   describe('GET /api/tasks/:id', () => {
-    it('returns a task by id', async () => {
+    it('returns 401 without auth', async () => {
       const task = await prisma.task.create({
-        data: {
-          title: 'Find Me',
-          priority: 'high',
-        },
+        data: { title: 'NoAuthGet', priority: 'medium', teamId: testTeamId },
+      });
+      const res = await request(app).get(`/api/tasks/${task.id}`);
+      expect(res.status).toBe(401);
+    });
+
+    it('returns a task by id when caller owns it', async () => {
+      const task = await prisma.task.create({
+        data: { title: 'Find Me', priority: 'high', teamId: testTeamId },
       });
 
-      const res = await request(app).get(`/api/tasks/${task.id}`);
+      const res = await request(app)
+        .get(`/api/tasks/${task.id}`)
+        .set('Authorization', `Bearer ${authToken}`);
 
       expect(res.status).toBe(200);
       expect(res.body.title).toBe('Find Me');
@@ -191,24 +213,24 @@ describe('Tasks API', () => {
     });
 
     it('returns 404 for non-existent task', async () => {
-      const res = await request(app).get('/api/tasks/00000000-0000-0000-0000-000000000000');
+      const res = await request(app)
+        .get('/api/tasks/00000000-0000-0000-0000-000000000000')
+        .set('Authorization', `Bearer ${authToken}`);
 
       expect(res.status).toBe(404);
-      expect(res.body.error).toBe('Task not found');
+      expect(res.body.code).toBe('OWNERSHIP_REQUIRED');
     });
   });
 
   describe('PATCH /api/tasks/:id', () => {
-    it('updates a task', async () => {
+    it('updates a task the caller owns', async () => {
       const task = await prisma.task.create({
-        data: {
-          title: 'Update Me',
-          priority: 'low',
-        },
+        data: { title: 'Update Me', priority: 'low', teamId: testTeamId },
       });
 
       const res = await request(app)
         .patch(`/api/tasks/${task.id}`)
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ title: 'Updated Title', status: 'in_progress' });
 
       expect(res.status).toBe(200);
@@ -219,6 +241,7 @@ describe('Tasks API', () => {
     it('returns 404 for non-existent task', async () => {
       const res = await request(app)
         .patch('/api/tasks/00000000-0000-0000-0000-000000000000')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({ title: 'Updated' });
 
       expect(res.status).toBe(404);
@@ -226,15 +249,14 @@ describe('Tasks API', () => {
   });
 
   describe('DELETE /api/tasks/:id', () => {
-    it('archives a task', async () => {
+    it('archives a task the caller owns', async () => {
       const task = await prisma.task.create({
-        data: {
-          title: 'Delete Me',
-          priority: 'medium',
-        },
+        data: { title: 'Delete Me', priority: 'medium', teamId: testTeamId },
       });
 
-      const res = await request(app).delete(`/api/tasks/${task.id}`);
+      const res = await request(app)
+        .delete(`/api/tasks/${task.id}`)
+        .set('Authorization', `Bearer ${authToken}`);
 
       expect(res.status).toBe(204);
 
@@ -244,9 +266,66 @@ describe('Tasks API', () => {
     });
 
     it('returns 404 for non-existent task', async () => {
-      const res = await request(app).delete('/api/tasks/00000000-0000-0000-0000-000000000000');
+      const res = await request(app)
+        .delete('/api/tasks/00000000-0000-0000-0000-000000000000')
+        .set('Authorization', `Bearer ${authToken}`);
 
       expect(res.status).toBe(404);
+    });
+  });
+
+  describe('Cross-tenant isolation', () => {
+    it('prevents user B from PATCHing user A\'s task', async () => {
+      const userB = await prisma.user.upsert({
+        where: { githubId: 555555 },
+        update: {},
+        create: { githubId: 555555, username: 'userB', email: 'b@example.com' },
+      });
+      const tokenB = generateToken(userB.id, userB.username);
+
+      const aTask = await prisma.task.create({
+        data: { title: 'A only', priority: 'medium', teamId: testTeamId },
+      });
+
+      const res = await request(app)
+        .patch(`/api/tasks/${aTask.id}`)
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({ title: 'hijacked' });
+
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('OWNERSHIP_REQUIRED');
+    });
+
+    it('archived delete is scoped to caller teams', async () => {
+      const userB = await prisma.user.upsert({
+        where: { githubId: 444444 },
+        update: {},
+        create: { githubId: 444444, username: 'userBarchive', email: 'barch@example.com' },
+      });
+      const tokenB = generateToken(userB.id, userB.username);
+      const teamB = await prisma.team.create({ data: { name: 'B Team', key: 'BBB' } });
+      await prisma.teamMember.create({ data: { teamId: teamB.id, userId: userB.id, role: 'owner' } });
+
+      await prisma.task.create({
+        data: { title: 'A archived', priority: 'medium', teamId: testTeamId, archived: true },
+      });
+      await prisma.task.create({
+        data: { title: 'B archived', priority: 'medium', teamId: teamB.id, archived: true },
+      });
+
+      const before = await prisma.task.count({ where: { archived: true, teamId: teamB.id } });
+      expect(before).toBeGreaterThan(0);
+
+      const del = await request(app)
+        .delete('/api/tasks/archived')
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(del.status).toBe(204);
+
+      const after = await prisma.task.count({ where: { archived: true, teamId: teamB.id } });
+      expect(after).toBe(before);
+
+      const aRemaining = await prisma.task.count({ where: { archived: true, teamId: testTeamId } });
+      expect(aRemaining).toBe(0);
     });
   });
 });

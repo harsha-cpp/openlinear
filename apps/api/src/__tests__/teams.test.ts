@@ -238,15 +238,25 @@ describe('Teams API', () => {
   });
 
   describe('DELETE /api/teams/:id/members/:userId', () => {
-    it('removes member', async () => {
+    it('removes member when owner', async () => {
       const createRes = await request(app)
         .post('/api/teams')
         .set('Authorization', `Bearer ${authToken}`)
         .send({ name: 'Remove Member Team', key: 'RMV' });
       expect(createRes.status).toBe(201);
 
+      const secondUser = await prisma.user.upsert({
+        where: { githubId: 333333 },
+        update: {},
+        create: { githubId: 333333, username: 'rmuser', email: 'rm@example.com' },
+      });
+      await request(app)
+        .post(`/api/teams/${createRes.body.id}/members`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ userId: secondUser.id, role: 'member' });
+
       const res = await request(app)
-        .delete(`/api/teams/${createRes.body.id}/members/${testUserId}`)
+        .delete(`/api/teams/${createRes.body.id}/members/${secondUser.id}`)
         .set('Authorization', `Bearer ${authToken}`);
 
       expect(res.status).toBe(204);

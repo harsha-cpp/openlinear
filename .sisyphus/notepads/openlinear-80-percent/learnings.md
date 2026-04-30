@@ -169,3 +169,38 @@ Subagents must APPEND (never overwrite). Format: `## [TIMESTAMP] Task: T## — {
 - `next dev` generates `.next/types/validator.ts` referencing stale routes → must `rm -rf .next` before clean tsc
 - `getActiveRepository()` and `fetchCurrentUser()` use `allowUnauthenticated: true` to silently no-op when no token — bootstrap flow on cold start
 - `addRepoByUrl`, `getActivePublicRepository`, `activatePublicRepository` are public endpoints (no auth) — use `allowUnauthenticated: true`
+
+## [2026-05-01] Task: T7 — AUTH + ownership seam
+
+**OwnershipError contract** (consumed by T9 fetch.ts validation, T10 comments, T13 notifications):
+
+```ts
+class OwnershipError extends Error {
+  readonly code = 'OWNERSHIP_REQUIRED';
+  resourceType: 'task' | 'project' | 'team' | 'comment' | 'label';
+  resourceId: string;
+  reason: 'not_found' | 'forbidden' | 'role_required';
+  requiredRoles?: string[];   // only on 'role_required'
+}
+```
+
+**Wire format** (set by `apps/api/src/app.ts` errorHandler — pattern-matches `isOwnershipError`):
+- `reason='not_found'`         → HTTP 404 + `{ error:'not_found',  code:'OWNERSHIP_REQUIRED', resourceType, resourceId, requestId }`
+- `reason='forbidden'`         → HTTP 403 + `{ error:'forbidden',  code:'OWNERSHIP_REQUIRED', resourceType, resourceId, requestId }`
+- `reason='role_required'`     → HTTP 403 + `{ error:'forbidden',  code:'OWNERSHIP_REQUIRED', resourceType, resourceId, requiredRoles, requestId }`
+
+**Existence-leak collapse**: `assertTeamRole` returns `not_found` (404) when the user has no membership at all. This is intentional — distinguishing "team doesn't exist" from "you're not a member" would let attackers enumerate team IDs. The downstream UI should treat 404 with code=OWNERSHIP_REQUIRED as "you don't have access" not "the resource was deleted".
+
+**Backward-compat exception**: `assertTaskOwned` allows ANY authenticated user to access tasks where `teamId IS NULL` (legacy/personal tasks). Tightening this would break the "no team backward compat" tests and the inbox ungrouped flow. T11 may revisit if we add per-user task ownership.
+
+**Single seam discipline**: ALL ownership checks go through `apps/api/src/services/ownership.ts`. Routes do NOT inline `await getUserTeamIds().includes(...)` — they call the typed helper so the OwnershipError → wire format mapping stays consistent.
+
+**Sidecar consumption**: `@openlinear/api/ownership` is exported in apps/api/package.json so `apps/sidecar/src/routes/{execution,batches}.ts` can call `assertTaskOwned()` directly. Sidecar uses `optionalAuth` (not `requireAuth`) because some legacy local-dev flows call without a token; when a userId IS present we enforce ownership, when it's absent we allow (matches T7 spec wording "optionalAuth + ownership").
+
+**Schema changes shipped here (coordinate with T1)**:
+- `Settings`: dropped `id="default"` singleton, added `userId String? @unique` (per-user settings)
+- `Label`: dropped global `name @unique`, added `teamId String?` + composite `@@unique([teamId, name])` (per-team labels, with shared global labels when teamId is null)
+
+**Test data drift**: Existing vitest suites assumed unauthenticated routes worked. Updated `tasks.test.ts`, `teams.test.ts`, `projects.test.ts` to use `Authorization: Bearer <token>` + `TeamMember` rows for the test user. Tests run against a real Postgres so they're skipped in environments without one — manual QA via curl is canonical (see `.sisyphus/evidence/task-7-*.txt`).
+
+**N+1 risk**: `assertTeamRole` is one Prisma query (TeamMember lookup by composite unique). `assertTaskOwned` is one query for the task + one `getUserTeamIds()` call (which is one query). Routes that loop (e.g. project create with multiple teamIds, batch create with multiple taskIds) intentionally iterate sequentially — small N (≤20 enforced by zod) and clearer error messages than `Promise.all` rejection.

@@ -134,11 +134,15 @@ model Task {
 
 model Label {
   id       String      @id @default(uuid())
-  name     String      @unique
+  name     String
   color    String
   priority Int         @default(0)
+  teamId   String?
+  team     Team?       @relation(fields: [teamId], references: [id], onDelete: Cascade)
   tasks    TaskLabel[]
 
+  @@unique([teamId, name])
+  @@index([teamId])
   @@map("labels")
 }
 
@@ -153,8 +157,10 @@ model TaskLabel {
 }
 
 model Settings {
-  id            String @id @default("default")
-  parallelLimit Int    @default(3)
+  id            String  @id @default(uuid())
+  userId        String? @unique
+  user          User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parallelLimit Int     @default(3)
 
   // Batch execution settings
   maxBatchSize     Int     @default(3)
@@ -185,6 +191,7 @@ model User {
   notifications    Notification[] @relation("notificationRecipient")
   notifyActions    Notification[] @relation("notificationActor")
   activityLogs     ActivityLog[]
+  settings         Settings?
 
   @@map("users")
 }
@@ -222,6 +229,7 @@ model Team {
   members         TeamMember[]
   projectTeams    ProjectTeam[]
   tasks           Task[]
+  labels          Label[]
   activityLogs    ActivityLog[]
 
   @@map("teams")

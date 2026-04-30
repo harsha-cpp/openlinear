@@ -1,10 +1,11 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '@openlinear/db';
 import { z } from 'zod';
 import { broadcast } from '../sse';
 import { requireAuth, optionalAuth, AuthRequest } from '../middleware/auth';
 import { addRepositoryByUrl } from '../services/github';
 import { getUserTeamIds } from '../services/team-scope';
+import { assertProjectOwned, assertTeamRole } from '../services/ownership';
 
 const router: Router = Router();
 
@@ -105,6 +106,12 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    if (teamIds?.length) {
+      for (const tid of teamIds) {
+        await assertTeamRole(tid, req.userId!, ['owner', 'admin', 'member']);
+      }
+    }
+
     let repositoryId: string | undefined;
 
     if (repoUrl) {
@@ -148,9 +155,16 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
+
+    if (!req.userId) {
+      res.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    await assertProjectOwned(id, req.userId);
 
     const project = await prisma.project.findUnique({
       where: { id },
@@ -164,12 +178,11 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     res.json(transformProject(project));
   } catch (error) {
-    console.error('[Projects] Error fetching project:', error);
-    res.status(500).json({ error: 'Failed to fetch project' });
+    next(error);
   }
 });
 
-router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
+router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
     const parsed = updateProjectSchema.safeParse(req.body);
@@ -178,10 +191,9 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const existing = await prisma.project.findUnique({ where: { id } });
-    if (!existing) {
-      res.status(404).json({ error: 'Project not found' });
-      return;
+    const owned = await assertProjectOwned(id, req.userId!);
+    for (const tid of owned.teamIds) {
+      await assertTeamRole(tid, req.userId!, ['owner', 'admin', 'member']);
     }
 
     const { teamIds, startDate, targetDate, repoUrl, localPath, ...updateData } = parsed.data;
@@ -234,25 +246,23 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
         },
         include: projectInclude,
       });
-    });
+    }, { timeout: 15000, maxWait: 5000 });
 
     const result = transformProject(project);
     broadcast('project:updated', result);
     res.json(result);
   } catch (error) {
-    console.error('[Projects] Error updating project:', error);
-    res.status(500).json({ error: 'Failed to update project' });
+    next(error);
   }
 });
 
-router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
 
-    const existing = await prisma.project.findUnique({ where: { id } });
-    if (!existing) {
-      res.status(404).json({ error: 'Project not found' });
-      return;
+    const owned = await assertProjectOwned(id, req.userId!);
+    for (const tid of owned.teamIds) {
+      await assertTeamRole(tid, req.userId!, ['owner', 'admin']);
     }
 
     await prisma.task.updateMany({
@@ -265,8 +275,7 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
     broadcast('project:deleted', { id });
     res.status(204).send();
   } catch (error) {
-    console.error('[Projects] Error deleting project:', error);
-    res.status(500).json({ error: 'Failed to delete project' });
+    next(error);
   }
 });
 

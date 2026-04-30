@@ -1,10 +1,10 @@
-import { Router, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { prisma } from '@openlinear/db';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { broadcast } from '../sse';
 import { requireAuth, optionalAuth, AuthRequest } from '../middleware/auth';
-import { getUserTeamIds } from '../services/team-scope';
+import { assertTeamRole, OwnershipError } from '../services/ownership';
 
 const router: Router = Router();
 
@@ -165,7 +165,7 @@ router.post('/join', requireAuth, async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.patch('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
+router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
     const parsed = updateTeamSchema.safeParse(req.body);
@@ -174,11 +174,7 @@ router.patch('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const existing = await prisma.team.findUnique({ where: { id } });
-    if (!existing) {
-      res.status(404).json({ error: 'Team not found' });
-      return;
-    }
+    await assertTeamRole(id, req.userId!, ['owner', 'admin']);
 
     const team = await prisma.team.update({
       where: { id },
@@ -201,31 +197,30 @@ router.patch('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
       res.status(409).json({ error: 'Team with this key already exists' });
       return;
     }
-    console.error('[Teams] Error updating team:', error);
-    res.status(500).json({ error: 'Failed to update team' });
+    next(error);
   }
 });
 
-router.delete('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
+    await assertTeamRole(id, req.userId!, ['owner']);
     await prisma.$transaction(async (tx) => {
       const team = await tx.team.findUnique({ where: { id } });
-      if (!team) throw new Error('NOT_FOUND');
+      if (!team) throw new OwnershipError('team', id, 'not_found');
       await tx.teamMember.deleteMany({ where: { teamId: id } });
       await tx.projectTeam.deleteMany({ where: { teamId: id } });
       await tx.task.updateMany({ where: { teamId: id }, data: { teamId: null } });
       await tx.team.delete({ where: { id } });
-    });
+    }, { timeout: 15000, maxWait: 5000 });
     broadcast('team:deleted', { id });
     res.status(204).send();
   } catch (error: unknown) {
-    if (error instanceof Error && (error.message === 'NOT_FOUND' || error.message.includes('Record to delete does not exist'))) {
+    if (error instanceof Error && error.message.includes('Record to delete does not exist')) {
       res.status(404).json({ error: 'Team not found' });
       return;
     }
-    console.error('[Teams] Error deleting team:', error);
-    res.status(500).json({ error: 'Failed to delete team' });
+    next(error);
   }
 });
 
@@ -277,7 +272,7 @@ router.get('/:id/members', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post('/:id/members', requireAuth, async (req: AuthRequest, res: Response) => {
+router.post('/:id/members', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
     const parsed = addMemberSchema.safeParse(req.body);
@@ -288,11 +283,7 @@ router.post('/:id/members', requireAuth, async (req: AuthRequest, res: Response)
 
     const { email, userId, role } = parsed.data;
 
-    const team = await prisma.team.findUnique({ where: { id } });
-    if (!team) {
-      res.status(404).json({ error: 'Team not found' });
-      return;
-    }
+    await assertTeamRole(id, req.userId!, ['owner', 'admin']);
 
     let user;
     if (userId) {
@@ -321,19 +312,30 @@ router.post('/:id/members', requireAuth, async (req: AuthRequest, res: Response)
       res.status(409).json({ error: 'User is already a member of this team' });
       return;
     }
-    console.error('[Teams] Error adding team member:', error);
-    res.status(500).json({ error: 'Failed to add team member' });
+    next(error);
   }
 });
 
-router.delete('/:id/members/:userId', optionalAuth, async (req: AuthRequest, res: Response) => {
+router.delete('/:id/members/:userId', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    const userId = req.params.userId as string;
+    const targetUserId = req.params.userId as string;
+
+    if (targetUserId !== req.userId) {
+      await assertTeamRole(id, req.userId!, ['owner']);
+    } else {
+      const membership = await prisma.teamMember.findUnique({
+        where: { teamId_userId: { teamId: id, userId: req.userId! } },
+        select: { role: true },
+      });
+      if (!membership) {
+        throw new OwnershipError('team', id, 'not_found');
+      }
+    }
 
     await prisma.teamMember.delete({
       where: {
-        teamId_userId: { teamId: id, userId },
+        teamId_userId: { teamId: id, userId: targetUserId },
       },
     });
 
@@ -343,8 +345,7 @@ router.delete('/:id/members/:userId', optionalAuth, async (req: AuthRequest, res
       res.status(404).json({ error: 'Team member not found' });
       return;
     }
-    console.error('[Teams] Error removing team member:', error);
-    res.status(500).json({ error: 'Failed to remove team member' });
+    next(error);
   }
 });
 

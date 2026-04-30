@@ -10,7 +10,9 @@
     "./app": "./src/app.ts",
     "./sse": "./src/sse.ts",
     "./logger": "./src/logger.ts",
-    "./middleware": "./src/middleware/auth.ts"
+    "./middleware": "./src/middleware/auth.ts",
+    "./ownership": "./src/services/ownership.ts",
+    "./team-scope": "./src/services/team-scope.ts"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",

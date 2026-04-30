@@ -1,7 +1,8 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { prisma } from '@openlinear/db';
 import { z } from 'zod';
 import { broadcast } from '../sse';
+import { requireAuth, AuthRequest } from '../middleware/auth';
 
 const UpdateSettingsSchema = z.object({
   parallelLimit: z.number().int().min(1).max(5).optional(),
@@ -13,26 +14,22 @@ const UpdateSettingsSchema = z.object({
 
 const router: Router = Router();
 
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    let settings = await prisma.settings.findUnique({
-      where: { id: 'default' },
-    });
+    const userId = req.userId!;
+    let settings = await prisma.settings.findUnique({ where: { userId } });
 
     if (!settings) {
-      settings = await prisma.settings.create({
-        data: { id: 'default' },
-      });
+      settings = await prisma.settings.create({ data: { userId } });
     }
 
     res.json(settings);
   } catch (error) {
-    console.error('[Settings] Error getting settings:', error);
-    res.status(500).json({ error: 'Failed to get settings' });
+    next(error);
   }
 });
 
-router.patch('/', async (req: Request, res: Response) => {
+router.patch('/', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const parsed = UpdateSettingsSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -40,17 +37,17 @@ router.patch('/', async (req: Request, res: Response) => {
       return;
     }
 
+    const userId = req.userId!;
     const settings = await prisma.settings.upsert({
-      where: { id: 'default' },
+      where: { userId },
       update: parsed.data,
-      create: { id: 'default', ...parsed.data },
+      create: { userId, ...parsed.data },
     });
 
     broadcast('settings:updated', settings);
     res.json(settings);
   } catch (error) {
-    console.error('[Settings] Error updating settings:', error);
-    res.status(500).json({ error: 'Failed to update settings' });
+    next(error);
   }
 });
 

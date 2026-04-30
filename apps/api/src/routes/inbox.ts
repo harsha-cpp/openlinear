@@ -1,7 +1,8 @@
-import { Router, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { prisma } from '@openlinear/db';
-import { optionalAuth, AuthRequest } from '../middleware/auth';
+import { requireAuth, optionalAuth, AuthRequest } from '../middleware/auth';
 import { getUserTeamIds } from '../services/team-scope';
+import { assertTaskOwned } from '../services/ownership';
 
 const router: Router = Router();
 
@@ -70,17 +71,17 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.patch('/read/:id', async (req: AuthRequest, res: Response) => {
+router.patch('/read/:id', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
+    await assertTaskOwned(id, req.userId!);
     await prisma.task.update({
       where: { id },
       data: { inboxRead: true },
     });
     res.json({ success: true });
   } catch (error) {
-    console.error('[Inbox] Error marking read:', error);
-    res.status(500).json({ error: 'Failed to mark inbox item as read' });
+    next(error);
   }
 });
 

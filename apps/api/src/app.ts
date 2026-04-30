@@ -21,6 +21,7 @@ import projectsRouter from './routes/projects';
 import inboxRouter from './routes/inbox';
 import { clients, SSEClient } from './sse';
 import { logger } from './logger';
+import { isOwnershipError } from './services/ownership';
 
 function buildCorsOrigin(): cors.CorsOptions['origin'] {
   const raw = process.env.CORS_ORIGIN || 'http://localhost:3000';
@@ -194,6 +195,19 @@ export function createApp(): Application {
     logFn.error({ err, requestId, path: req.path, method: req.method }, 'unhandled error');
 
     if (res.headersSent) {
+      return;
+    }
+
+    if (isOwnershipError(err)) {
+      const status = err.reason === 'not_found' ? 404 : 403;
+      res.status(status).json({
+        error: status === 404 ? 'not_found' : 'forbidden',
+        code: err.code,
+        resourceType: err.resourceType,
+        resourceId: err.resourceId,
+        ...(err.requiredRoles ? { requiredRoles: err.requiredRoles } : {}),
+        requestId,
+      });
       return;
     }
 

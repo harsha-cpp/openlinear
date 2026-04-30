@@ -1,7 +1,8 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { prisma } from '@openlinear/db';
 import { broadcast } from '@openlinear/api/sse';
 import { optionalAuth, AuthRequest } from '@openlinear/api/middleware';
+import { assertTaskOwned } from '@openlinear/api/ownership';
 import { executeTask, cancelTask, isTaskRunning, getExecutionLogs } from '../services/execution';
 
 const taskInclude = {
@@ -23,9 +24,12 @@ function flattenLabels(task: any) {
 const router: Router = Router();
 
 // POST /:id/execute
-router.post('/:id/execute', optionalAuth, async (req: AuthRequest, res: Response) => {
+router.post('/:id/execute', optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
+    if (req.userId) {
+      await assertTaskOwned(id, req.userId);
+    }
     console.log(`[Tasks] Execute requested for task ${id.slice(0, 8)} (userId: ${req.userId || 'anonymous'})`);
     const result = await executeTask({ taskId: id, userId: req.userId });
 
@@ -37,15 +41,17 @@ router.post('/:id/execute', optionalAuth, async (req: AuthRequest, res: Response
 
     res.json({ message: 'Task execution started' });
   } catch (error) {
-    console.error('[Tasks] Error executing task:', error);
-    res.status(500).json({ error: 'Failed to execute task' });
+    next(error);
   }
 });
 
 // POST /:id/refresh-pr
-router.post('/:id/refresh-pr', optionalAuth, async (req: AuthRequest, res: Response) => {
+router.post('/:id/refresh-pr', optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
+    if (req.userId) {
+      await assertTaskOwned(id, req.userId);
+    }
     const task = await prisma.task.findUnique({
       where: { id },
       select: { prUrl: true, batchId: true },
@@ -130,19 +136,24 @@ router.post('/:id/refresh-pr', optionalAuth, async (req: AuthRequest, res: Respo
 });
 
 // GET /:id/running
-router.get('/:id/running', async (req: Request, res: Response) => {
+router.get('/:id/running', optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
+    if (req.userId) {
+      await assertTaskOwned(id, req.userId);
+    }
     res.json({ running: isTaskRunning(id) });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to check task status' });
+    next(error);
   }
 });
 
-// GET /:id/logs
-router.get('/:id/logs', async (req: Request, res: Response) => {
+router.get('/:id/logs', optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
+    if (req.userId) {
+      await assertTaskOwned(id, req.userId);
+    }
     let logs = getExecutionLogs(id);
 
     if (logs.length === 0) {
@@ -156,15 +167,16 @@ router.get('/:id/logs', async (req: Request, res: Response) => {
 
     res.json({ logs });
   } catch (error) {
-    console.error('[Tasks] Error getting execution logs:', error);
-    res.status(500).json({ error: 'Failed to get execution logs' });
+    next(error);
   }
 });
 
-// POST /:id/cancel
-router.post('/:id/cancel', async (req: Request, res: Response) => {
+router.post('/:id/cancel', optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
+    if (req.userId) {
+      await assertTaskOwned(id, req.userId);
+    }
     console.log(`[Tasks] Cancel requested for task ${id.slice(0, 8)}`);
 
     if (!isTaskRunning(id)) {
@@ -184,8 +196,7 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
     console.log(`[Tasks] Task ${id.slice(0, 8)} cancelled`);
     res.json({ message: 'Task cancelled' });
   } catch (error) {
-    console.error('[Tasks] Error cancelling task:', error);
-    res.status(500).json({ error: 'Failed to cancel task' });
+    next(error);
   }
 });
 
