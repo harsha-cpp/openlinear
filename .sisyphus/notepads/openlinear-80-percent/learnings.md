@@ -78,3 +78,52 @@ Subagents must APPEND (never overwrite). Format: `## [TIMESTAMP] Task: T## — {
 - `grep -nE 'execAsync\(\`|exec\(\`' apps/sidecar/src/services/execution/git.ts apps/sidecar/src/services/worktree.ts` → 0 matches
 - Injection harness: malicious branch name `'feature; rm /tmp/SHOULD_NOT_EXIST'` → git rejects as invalid ref name; marker file untouched.
 - Token-leak harness: cloned `.git/config` contains plain URL with no `oauth2:` substring.
+
+## [2026-04-30T21:40:22Z] Task: T4 — API hardening (pino, helmet, rate-limit, error mw, graceful shutdown)
+
+- **Logger module added**: `apps/api/src/logger.ts` exported via `@openlinear/api/logger` so sidecar shares the same pino instance + redact paths. Avoid `pino-pretty` transport — not installed and breaks runtime; rely on raw JSON (operators pipe through pretty themselves).
+- **Middleware order in createApp() (must not change)**: helmet → pinoHttp → rate-limiters (default + per-prefix) → cors → json(`256kb`) → cookieParser → routes → SSE handler → errorHandler. Anything after errorHandler silently bypasses error catching.
+- **Rate limit SSE skip**: every limiter checks `req.path === '/api/events' || startsWith('/api/events')`. The default limiter is wrapped in a manual middleware to apply that check; per-prefix limiters use rate-limit's `skip` option.
+- **CORS bug fix**: `callback(null, false)` instead of `callback(new Error())` — throwing inside the origin callback escapes Express's middleware error chain on some versions.
+- **express-rate-limit v8**: use `limit` (not deprecated `max`) and `standardHeaders: 'draft-7'`. Custom `handler` returns JSON body `{error:'rate_limited', scope, retryAfterSeconds}`.
+- **pino-http reqId**: `genReqId` honours incoming `x-request-id`, otherwise mints `randomUUID()`. Same id is set on the response header so the global error handler can read it back via `res.getHeader('x-request-id')`.
+- **Redaction proven**: pino redact paths cover both `req.headers.authorization` and `req.headers.cookie` plus `res.headers["set-cookie"]`. Verified in QA log — both show `[REDACTED]` end-to-end.
+- **Trust-proxy footgun**: import-time guard in `apps/api/src/middleware/auth.ts` calls `process.exit(1)` if `OPENLINEAR_TRUST_PROXY_AUTH=1 && NODE_ENV=production`. Per-request `logger.warn` fires on every `requireAuth`/`optionalAuth` call when the flag is on in non-prod (loud signal in dev logs).
+- **Graceful shutdown pattern**: `server.close(cb)` then `prisma.()` then `process.exit`. 10s force-exit timer is `.unref()`-ed so it doesn't keep the loop alive on its own. Sidecar additionally closes the OAuth interceptor app before `server.close`.
+- **QA evidence**:
+  - `.sisyphus/evidence/task-4-rate-limit.txt` — auth route returns 429 on request 6; SSE survives 12 rapid connects (no rate limit).
+  - `.sisyphus/evidence/task-4-error-middleware.txt` — uncaught throw → 500 JSON `{error:'internal_error', requestId}`; matching reqId across log + response header; auth/cookie redacted.
+  - `.sisyphus/evidence/task-4-graceful-shutdown.txt` — SIGTERM → drain + prisma disconnect in 0.213s.
+  - `.sisyphus/evidence/task-4-trust-proxy-guard.txt` — prod boot with `OPENLINEAR_TRUST_PROXY_AUTH=1` → FATAL log + `exit=1`; dev boot succeeds.
+- **Followups for T8/T9/T13**: they can rely on `req.log` (pino-http auto-attaches), `logger` import from `@openlinear/api/logger`, and the global error middleware to swallow throws — no need for per-route try/catch wrappers around sync errors.
+
+## [2026-04-30T21:40Z] Task: T2 — shadcn primitives + design tokens
+
+- **Next.js underscore-prefix folders are ignored by routing.** `app/_dev/primitives/page.tsx` does NOT register a route (private folder convention). The plan QA spec said `app/_dev/primitives/page.tsx` but Next will return 404. Used `app/dev-primitives/` instead, deleted after QA.
+- **shadcn/ui primitive style template:** use `React.forwardRef<ElementRef<typeof X>, ComponentPropsWithoutRef<typeof X>>` and `cn(...)` from `@/lib/utils`. All 13 existing primitives follow this exact shape — new ones must too for consistency.
+- **components.json**: `style: default`, `baseColor: neutral`, `cssVariables: true` — every new primitive must use semantic tokens (`bg-popover`, `text-foreground`, `border`, `bg-accent`) NOT raw hex or `linear-*` literals (the `linear-*` namespace is reserved for the runtime `--linear-accent` themability — touching it would break that).
+- **Sheet uses `@radix-ui/react-dialog` under the hood** (per shadcn upstream); `cva` from `class-variance-authority` for the `side` variant.
+- **Command (cmdk) wraps Dialog**: `CommandDialog` re-uses `@/components/ui/dialog` to share the overlay/animation, keeping bundle size small.
+- **AlertDialog reuses `buttonVariants`** from `@/components/ui/button` for Action/Cancel — keeps button styling identical across confirm flows.
+- **Design tokens module** (`lib/design-tokens.ts`): exported as `Readonly<Record<...>>` typed constants (`STATUS_COLORS`, `PRIORITY_COLORS`, `SHADOWS`) so consumers get IntelliSense on status keys. Used `bg-{color}-500/10` + `text-{color}-400` + `border-{color}-500/30` triad pattern — works on dark backgrounds and is easy to swap if/when light mode lands (T29 territory).
+- **Tailwind boxShadow extension**: added `card`/`overlay`/`elevation` semantic tokens. Values are tuned for the dark theme (high opacity black). T29/T37 will need to make these CSS-variable-driven if they're reused on light surfaces.
+
+## [2026-05-01] Task: T1 — Schema migration tooling
+
+- **Prisma 7.4 CLI flags renamed**: `--from-url`/`--to-url` are REMOVED. Use `--from-config-datasource` / `--to-config-datasource` (reads `prisma.config.ts`). For schema files use `--from-schema` / `--to-schema` (was `--from-schema-datamodel`/`--to-schema-datamodel`).
+- **Prisma config datasource silent failure**: `prisma migrate diff --from-config-datasource ...` returns empty output (exit 0) if `DATABASE_URL` env is not set, even though `prisma.config.ts` reads `process.env.DATABASE_URL!`. ALWAYS export DATABASE_URL inline before the command.
+- **DB had no migration history** (was bootstrapped via `db:push`). Recovery pattern:
+  1. Generate baseline migration via `migrate diff --from-empty --to-config-datasource --script` → save as `<ts>_init/migration.sql`
+  2. Generate change migration manually (especially when rename is involved — see below)
+  3. Apply change SQL via `psql -f`
+  4. `prisma migrate resolve --applied <name>` for both → registers in `_prisma_migrations` table
+  5. `prisma migrate status` reports "Database schema is up to date!"
+- **Table rename trap**: `prisma migrate diff` cannot detect renames — it always emits DROP + CREATE which is data-destructive. For Repository `@@map("projects")` → `@@map("repositories")`, write the migration MANUALLY with `ALTER TABLE "projects" RENAME TO "repositories"` + `RENAME CONSTRAINT projects_pkey/projects_userId_fkey` + `ALTER INDEX projects_userId_githubRepoId_key RENAME` + drop/re-add the FK in linear_projects (since constraint name embeds old table reference).
+- **`packages/db/.env`** does NOT exist by default. `seed.ts` does `process.loadEnvFile(resolve(import.meta.dirname, "../.env"))` — that's `packages/db/.env`. Created with `DATABASE_URL=postgresql://openlinear:openlinear@127.0.0.1:5432/openlinear` for Prisma CLI.
+- **`pnpm exec prisma`** fails with `Command "prisma" not found` from monorepo root and even from `packages/db`. Direct binary path works: `./node_modules/.bin/prisma` (when CWD = `packages/db`) or `./packages/db/node_modules/.bin/prisma` from root.
+- **Prisma migration.sql section markers** (`-- CreateTable`, `-- CreateIndex`, `-- AddForeignKey`, `-- AlterTable`, `-- CreateEnum`, `-- DropForeignKey`) are CANONICAL Prisma format — keep them despite agent-memo-comment hooks (they are necessary structural markers per Prisma toolchain).
+- **AgentRun decimal**: use `costUsd Decimal? @db.Decimal(12, 6)` — gives 6 decimal places of precision for fractional cents.
+- **Native enum values in Postgres** must be quoted as the type name (`"agent_run_statuses"`, `"notification_types"`, `"activity_actions"`) when declaring columns.
+- **Two opposite-side User relations to Task** require explicit relation names: `assignee   User? @relation("assignedTasks", ...)` + `creator User? @relation("createdTasks", ...)` plus matching back-relations `assignedTasks Task[] @relation("assignedTasks")` + `createdTasks Task[] @relation("createdTasks")` on User.
+- **Self-relation on Task for parentId**: `parent Task? @relation("Subtasks", fields: [parentId], references: [id], onDelete: SetNull)` + `subtasks Task[] @relation("Subtasks")`.
+- **Notification has TWO User FKs** (`userId` recipient, `actorUserId` who did the action) → needs two named relations: `"notificationRecipient"` + `"notificationActor"`.

@@ -1,3 +1,4 @@
+import rateLimit, { RateLimitRequestHandler } from 'express-rate-limit';
 import { createApp } from '@openlinear/api/app';
 import executionRouter from './routes/execution';
 import opencodeRouter from './routes/opencode';
@@ -5,8 +6,28 @@ import batchesRouter from './routes/batches';
 import brainstormRouter from './routes/brainstorm';
 import transcribeRouter from './routes/transcribe';
 
+function makeRateLimiter(windowMs: number, max: number, name: string): RateLimitRequestHandler {
+  return rateLimit({
+    windowMs,
+    limit: max,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    skip: (req) => req.path === '/api/events' || req.path.startsWith('/api/events'),
+    handler: (_req, res) => {
+      res.status(429).json({
+        error: 'rate_limited',
+        scope: name,
+        retryAfterSeconds: Math.ceil(windowMs / 1000),
+      });
+    },
+  });
+}
+
 export function createSidecarApp() {
   const app = createApp();
+
+  app.use('/api/transcribe', makeRateLimiter(60_000, 10, 'transcribe'));
+  app.use('/api/brainstorm', makeRateLimiter(60_000, 10, 'brainstorm'));
 
   // Execution routes (mounted on tasks, override CRUD-only routes with execute/cancel/running/logs/refresh-pr)
   app.use('/api/tasks', executionRouter);

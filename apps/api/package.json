@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./app": "./src/app.ts",
     "./sse": "./src/sse.ts",
+    "./logger": "./src/logger.ts",
     "./middleware": "./src/middleware/auth.ts"
   },
   "scripts": {
@@ -21,16 +22,18 @@
   },
   "dependencies": {
     "@openlinear/db": "workspace:*",
-    "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.4.1",
+    "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0",
     "zod": "^3.25.6"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.6",
