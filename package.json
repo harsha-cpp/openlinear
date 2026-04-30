@@ -9,6 +9,8 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "db:push": "pnpm --filter db db:push",
+    "db:migrate": "pnpm --filter @openlinear/db db:migrate",
+    "db:migrate:deploy": "pnpm --filter @openlinear/db db:migrate:deploy",
     "db:seed": "pnpm --filter @openlinear/api exec tsx ../../packages/db/prisma/seed.ts",
     "db:studio": "pnpm --filter db db:studio",
     "build:sidecar": "./scripts/build-sidecar.sh",
@@ -16,6 +18,8 @@
   },
   "devDependencies": {
     "@opencode-ai/sdk": "^1.2.5",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5",
     "turbo": "^2.8.9",
     "typescript": "^5.9.3"
   },

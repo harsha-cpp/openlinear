@@ -37,9 +37,34 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: "OpenLinear",
-  description: "AI-powered issue tracking and code execution",
+  description: "AI-powered project management that actually writes the code.",
+  metadataBase: new URL("https://openlinear.tech"),
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-32.png", type: "image/png", sizes: "32x32" },
+      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/icon-512.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+    shortcut: ["/favicon.ico"],
+  },
+  openGraph: {
+    title: "OpenLinear",
+    description: "AI-powered project management that actually writes the code.",
+    url: "https://openlinear.tech",
+    siteName: "OpenLinear",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "OpenLinear" }],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "OpenLinear",
+    description: "Drag tasks. Click execute. Get a pull request.",
+    images: ["/twitter-card.png"],
+  },
   other: {
-    "theme-color": "#111111",
+    "theme-color": "#0a0a0a",
     "color-scheme": "dark",
   },
 }
@@ -56,7 +81,6 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        <link rel="icon" href="/logo.png" type="image/png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&display=swap" rel="stylesheet" />
