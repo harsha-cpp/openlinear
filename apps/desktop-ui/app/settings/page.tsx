@@ -47,10 +47,10 @@ import {
 import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import { DatabaseSettings } from "@/components/desktop/database-settings"
-import { getSetupStatus, setProviderApiKey, getProviderAuthMethods, oauthAuthorize, oauthCallback, addConfiguredProvider, getModels, getModelConfig, setModel, SetupStatus, ProviderAuthMethods, ProviderModels } from "@/lib/api/opencode"
+import { getSetupStatus, setProviderApiKey, getProviderAuthMethods, oauthAuthorize, oauthCallback, getModels, getModelConfig, setModel, SetupStatus, ProviderAuthMethods, ProviderModels } from "@/lib/api/opencode"
 import { getActiveRepository, setActiveRepositoryBaseBranch } from "@/lib/api"
 import { AppShell } from "@/components/layout/app-shell"
-import { API_URL } from "@/lib/api/client"
+import { apiFetch } from "@/lib/api/fetch"
 
 type SettingsSection =
   | "general"
@@ -162,18 +162,23 @@ function SettingsContent() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const [settingsResponse, activeRepository] = await Promise.all([
-          fetch(`${API_URL}/api/settings`),
+        const [settingsData, activeRepository] = await Promise.all([
+          apiFetch<{
+            parallelLimit: number
+            maxBatchSize?: number
+            queueAutoApprove?: boolean
+            stopOnFailure?: boolean
+            conflictBehavior?: string
+          }>('/api/settings').catch(() => null),
           getActiveRepository().catch(() => null),
         ])
 
-        if (settingsResponse.ok) {
-          const data = await settingsResponse.json()
-          setParallelLimit(data.parallelLimit)
-          setMaxBatchSize(data.maxBatchSize ?? 3)
-          setQueueAutoApprove(data.queueAutoApprove ?? false)
-          setStopOnFailure(data.stopOnFailure ?? false)
-          setConflictBehavior(data.conflictBehavior ?? "skip")
+        if (settingsData) {
+          setParallelLimit(settingsData.parallelLimit)
+          setMaxBatchSize(settingsData.maxBatchSize ?? 3)
+          setQueueAutoApprove(settingsData.queueAutoApprove ?? false)
+          setStopOnFailure(settingsData.stopOnFailure ?? false)
+          setConflictBehavior(settingsData.conflictBehavior ?? "skip")
         }
 
         if (activeRepository) {
@@ -267,22 +272,19 @@ function SettingsContent() {
 
     setSaving(true)
     try {
-      const settingsResponse = await fetch(`${API_URL}/api/settings`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          parallelLimit,
-          maxBatchSize,
-          queueAutoApprove,
-          stopOnFailure,
-          conflictBehavior,
-        }),
-      })
-
-      if (!settingsResponse.ok) {
-        toast.error("Failed to save settings")
+      try {
+        await apiFetch('/api/settings', {
+          method: "PATCH",
+          body: JSON.stringify({
+            parallelLimit,
+            maxBatchSize,
+            queueAutoApprove,
+            stopOnFailure,
+            conflictBehavior,
+          }),
+        })
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to save settings")
         return
       }
 
@@ -300,7 +302,7 @@ function SettingsContent() {
       toast.success("Settings saved successfully")
     } catch (error) {
       console.error("Failed to save settings:", error)
-      toast.error("Failed to save settings")
+      toast.error(error instanceof Error ? error.message : "Failed to save settings")
     } finally {
       setSaving(false)
     }
@@ -322,7 +324,6 @@ function SettingsContent() {
 
     try {
       await setProviderApiKey(providerId, input.key)
-      addConfiguredProvider(providerId)
 
       setProviderSetupStatus((prev) => {
         if (!prev) return prev
@@ -472,7 +473,6 @@ function SettingsContent() {
         oauthMethodByProvider[providerId] ?? (fallbackOauthMethod >= 0 ? fallbackOauthMethod : 0)
 
       await oauthCallback(providerId, code, resolvedMethod)
-      addConfiguredProvider(providerId)
 
       const status = await getSetupStatus()
       setProviderSetupStatus(status)

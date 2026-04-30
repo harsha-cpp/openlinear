@@ -9,9 +9,8 @@ interface ApiLoadingScreenProps {
   onError?: (error: string) => void
 }
 
-import { API_URL } from "@/lib/api/client"
+import { getSidecarApiUrl } from "@/lib/api/client"
 
-const HEALTH_ENDPOINT = `${API_URL}/health`
 const POLL_INTERVAL = 500
 const TIMEOUT_MS = 30000
 
@@ -45,7 +44,7 @@ export function ApiLoadingScreen({ onReady, onError }: ApiLoadingScreenProps) {
 
   const checkHealth = React.useCallback(async () => {
     try {
-      const response = await fetch(HEALTH_ENDPOINT, {
+      const response = await fetch(`${getSidecarApiUrl()}/health`, {
         method: "GET",
         headers: { Accept: "application/json" },
       })

@@ -51,10 +51,8 @@ interface TaskFormDialogProps {
   projects?: Project[]
 }
 
-import { API_URL, getAuthHeader } from "@/lib/api/client"
+import { apiFetch } from "@/lib/api/fetch"
 import { toast } from "sonner"
-
-const API_BASE_URL = `${API_URL}/api`
 
 const statusColors = {
   todo: "#a0a0a0",
@@ -104,26 +102,17 @@ export function TaskFormDialog({
     try {
       setIsSubmitting(true)
 
-      const response = await fetch(`${API_BASE_URL}/tasks`, {
+      await apiFetch('/api/tasks', {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeader(),
-        },
-         body: JSON.stringify({
-           title: values.title,
-           description: values.description || undefined,
-           status: values.status,
-           labelIds: values.labelIds.length > 0 ? values.labelIds : undefined,
-           projectId: values.projectId || undefined,
-           dueDate: values.dueDate ? new Date(values.dueDate).toISOString() : undefined,
-         }),
+        body: JSON.stringify({
+          title: values.title,
+          description: values.description || undefined,
+          status: values.status,
+          labelIds: values.labelIds.length > 0 ? values.labelIds : undefined,
+          projectId: values.projectId || undefined,
+          dueDate: values.dueDate ? new Date(values.dueDate).toISOString() : undefined,
+        }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: response.statusText }))
-        throw new Error(errorData.error || `Failed to create task: ${response.statusText}`)
-      }
 
       form.reset()
       onOpenChange(false)

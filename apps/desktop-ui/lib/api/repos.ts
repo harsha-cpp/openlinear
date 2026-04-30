@@ -1,107 +1,65 @@
-import { API_URL, getAuthHeader } from './client';
+import { apiFetch, AuthExpiredError } from './fetch';
 import type { GitHubRepo, PublicRepository, Repository } from './types';
 
 export async function fetchUserRepositories(): Promise<Repository[]> {
-  const res = await fetch(`${API_URL}/api/repos`, {
-    headers: getAuthHeader(),
-  });
-
-  if (!res.ok) throw new Error('Failed to fetch projects');
-  return res.json();
+  return apiFetch<Repository[]>('/api/repos');
 }
 
 export async function fetchGitHubRepos(): Promise<GitHubRepo[]> {
-  const res = await fetch(`${API_URL}/api/repos/github`, {
-    headers: getAuthHeader(),
-  });
-
-  if (!res.ok) throw new Error('Failed to fetch GitHub repos');
-  return res.json();
+  return apiFetch<GitHubRepo[]>('/api/repos/github');
 }
 
 export async function importRepo(repo: GitHubRepo): Promise<Repository> {
-  const res = await fetch(`${API_URL}/api/repos/import`, {
+  return apiFetch<Repository>('/api/repos/import', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader(),
-    },
     body: JSON.stringify({ repo }),
   });
-
-  if (!res.ok) throw new Error('Failed to import repository');
-  return res.json();
 }
 
 export async function activateRepository(projectId: string): Promise<Repository> {
-  const res = await fetch(`${API_URL}/api/repos/${projectId}/activate`, {
-    method: 'POST',
-    headers: getAuthHeader(),
-  });
-
-  if (!res.ok) throw new Error('Failed to activate project');
-  return res.json();
+  return apiFetch<Repository>(`/api/repos/${projectId}/activate`, { method: 'POST' });
 }
 
 export async function getActiveRepository(): Promise<Repository | null> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  if (typeof window === 'undefined') return null;
+  const token = localStorage.getItem('token');
   if (!token) return null;
-  
-  const res = await fetch(`${API_URL}/api/repos/active`, {
-    headers: getAuthHeader(),
-  });
-
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    return await apiFetch<Repository>('/api/repos/active');
+  } catch (err) {
+    if (err instanceof AuthExpiredError) return null;
+    return null;
+  }
 }
 
 export async function setActiveRepositoryBaseBranch(baseBranch: string): Promise<Repository> {
-  const res = await fetch(`${API_URL}/api/repos/active/base-branch`, {
+  return apiFetch<Repository>('/api/repos/active/base-branch', {
     method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader(),
-    },
     body: JSON.stringify({ baseBranch }),
   });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Failed to update base branch');
-  }
-
-  return res.json();
 }
 
-// Public repo functions (no auth required)
-
 export async function addRepoByUrl(url: string): Promise<PublicRepository> {
-  const res = await fetch(`${API_URL}/api/repos/url`, {
+  return apiFetch<PublicRepository>('/api/repos/url', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify({ url }),
+    allowUnauthenticated: true,
   });
-
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Failed to add repository' }));
-    throw new Error(error.error || 'Failed to add repository');
-  }
-  return res.json();
 }
 
 export async function getActivePublicRepository(): Promise<PublicRepository | null> {
-  const res = await fetch(`${API_URL}/api/repos/active/public`);
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    return await apiFetch<PublicRepository>('/api/repos/active/public', {
+      allowUnauthenticated: true,
+    });
+  } catch {
+    return null;
+  }
 }
 
 export async function activatePublicRepository(projectId: string): Promise<PublicRepository> {
-  const res = await fetch(`${API_URL}/api/repos/${projectId}/activate/public`, {
+  return apiFetch<PublicRepository>(`/api/repos/${projectId}/activate/public`, {
     method: 'POST',
+    allowUnauthenticated: true,
   });
-
-  if (!res.ok) throw new Error('Failed to activate project');
-  return res.json();
 }

@@ -9,12 +9,11 @@ import {
   Loader2,
   Check,
 } from "lucide-react"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { AppShell } from "@/components/layout/app-shell"
 import { Task } from "@/types/task"
-import { API_URL } from "@/lib/api/client"
-
-const API_BASE_URL = API_URL
+import { apiFetch } from "@/lib/api/fetch"
 
 const PRIORITY_TABS = ["all", "high", "medium", "low"] as const
 type PriorityTab = (typeof PRIORITY_TABS)[number]
@@ -36,12 +35,12 @@ export default function ArchivedPage() {
 
   const fetchArchived = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/tasks/archived`)
-      if (!response.ok) throw new Error("Failed to fetch")
-      const data = await response.json()
+      const data = await apiFetch<Task[]>('/api/tasks/archived')
       setTasks(data)
     } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to fetch archived tasks'
       console.error("Error fetching archived tasks:", err)
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -65,15 +64,10 @@ export default function ArchivedPage() {
     })
 
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/api/tasks/archived/${taskId}`, {
-        method: "DELETE",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-      if (!response.ok) {
-        fetchArchived()
-      }
-    } catch {
+      await apiFetch(`/api/tasks/archived/${taskId}`, { method: 'DELETE' })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete task'
+      toast.error(msg)
       fetchArchived()
     } finally {
       setDeletingIds((prev) => {
@@ -91,15 +85,10 @@ export default function ArchivedPage() {
     setSelectedIds(new Set())
 
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/api/tasks/archived`, {
-        method: "DELETE",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-      if (!response.ok) {
-        setTasks(previousTasks)
-      }
-    } catch {
+      await apiFetch('/api/tasks/archived', { method: 'DELETE' })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete all tasks'
+      toast.error(msg)
       setTasks(previousTasks)
     } finally {
       setDeletingAll(false)
@@ -116,20 +105,20 @@ export default function ArchivedPage() {
     setSelectedIds(new Set())
 
     try {
-      const token = localStorage.getItem("token")
-      const results = await Promise.all(
+      const results = await Promise.allSettled(
         idsToDelete.map((taskId) =>
-          fetch(`${API_BASE_URL}/api/tasks/archived/${taskId}`, {
-            method: "DELETE",
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          })
+          apiFetch(`/api/tasks/archived/${taskId}`, { method: 'DELETE' })
         )
       )
-      if (results.some((r) => !r.ok)) {
+      const failures = results.filter((r) => r.status === 'rejected')
+      if (failures.length > 0) {
+        toast.error(`Failed to delete ${failures.length} task(s)`)
         setTasks(previousTasks)
         fetchArchived()
       }
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete selected tasks'
+      toast.error(msg)
       setTasks(previousTasks)
       fetchArchived()
     } finally {

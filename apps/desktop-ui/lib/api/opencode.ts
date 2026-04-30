@@ -1,4 +1,4 @@
-import { API_URL, getAuthHeader } from './client';
+import { apiFetch, apiFetchRaw, ApiError, type ApiFetchInit } from './fetch';
 
 export interface ProviderInfo {
   id: string;
@@ -17,181 +17,126 @@ export interface ProviderAuthMethod {
 
 export type ProviderAuthMethods = Record<string, ProviderAuthMethod[]>;
 
-export async function getSetupStatus(): Promise<SetupStatus> {
-  const res = await fetch(`${API_URL}/api/opencode/setup-status`, {
-    headers: getAuthHeader(),
-  });
-  if (!res.ok) throw new Error('Failed to get setup status');
-  return res.json();
-}
-
-export async function setProviderApiKey(providerId: string, apiKey: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/opencode/auth`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader(),
-    },
-    body: JSON.stringify({ providerId, apiKey }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Failed to set API key');
+export class OpenCodeUnavailableError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = 'OpenCodeUnavailableError';
   }
 }
 
+async function opencodeFetch<T>(path: string, init: ApiFetchInit, fallbackMsg: string): Promise<T> {
+  try {
+    return await apiFetch<T>(path, { ...init, sidecar: true });
+  } catch (err) {
+    if (err instanceof ApiError && err.status >= 500) {
+      throw new OpenCodeUnavailableError(err.status, err.message || fallbackMsg);
+    }
+    if (err instanceof ApiError) {
+      throw new Error(err.message || fallbackMsg);
+    }
+    throw err;
+  }
+}
+
+export async function getSetupStatus(): Promise<SetupStatus> {
+  return opencodeFetch<SetupStatus>('/api/opencode/setup-status', {}, 'Failed to get setup status');
+}
+
+export async function setProviderApiKey(providerId: string, apiKey: string): Promise<void> {
+  await opencodeFetch<void>(
+    '/api/opencode/auth',
+    { method: 'POST', body: JSON.stringify({ providerId, apiKey }) },
+    'Failed to set API key',
+  );
+}
+
 export async function getProviderAuthMethods(): Promise<ProviderAuthMethods> {
-  const res = await fetch(`${API_URL}/api/opencode/providers/auth`, {
-    headers: getAuthHeader(),
-  });
-  if (!res.ok) throw new Error('Failed to get provider auth methods');
-  return res.json();
+  return opencodeFetch<ProviderAuthMethods>(
+    '/api/opencode/providers/auth',
+    {},
+    'Failed to get provider auth methods',
+  );
 }
 
 export async function oauthAuthorize(
   providerId: string,
-  method?: number
+  method?: number,
 ): Promise<{ url: string }> {
-  const res = await fetch(`${API_URL}/api/opencode/auth/oauth/authorize`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader(),
-    },
-    body: JSON.stringify({ providerId, method: method ?? 0 }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Failed to start OAuth');
-  }
-  return res.json();
-}
-
-// --- Configured providers localStorage cache ---
-// The container's provider.list().data.connected is slow to update after auth.set().
-// We persist confirmed saves here so the execute flow doesn't show a false "not configured" state.
-const CONFIGURED_PROVIDERS_KEY = 'openlinear-configured-providers';
-
-export function addConfiguredProvider(providerId: string): void {
-  try {
-    const existing = JSON.parse(localStorage.getItem(CONFIGURED_PROVIDERS_KEY) || '[]') as string[];
-    if (!existing.includes(providerId)) {
-      existing.push(providerId);
-      localStorage.setItem(CONFIGURED_PROVIDERS_KEY, JSON.stringify(existing));
-    }
-  } catch {
-    localStorage.setItem(CONFIGURED_PROVIDERS_KEY, JSON.stringify([providerId]));
-  }
-}
-
-export function getConfiguredProviderIds(): string[] {
-  try {
-    return JSON.parse(localStorage.getItem(CONFIGURED_PROVIDERS_KEY) || '[]') as string[];
-  } catch {
-    return [];
-  }
-}
-
-export function hasConfiguredProviders(): boolean {
-  return getConfiguredProviderIds().length > 0;
+  return opencodeFetch<{ url: string }>(
+    '/api/opencode/auth/oauth/authorize',
+    { method: 'POST', body: JSON.stringify({ providerId, method: method ?? 0 }) },
+    'Failed to start OAuth',
+  );
 }
 
 export interface ModelInfo {
-  id: string
-  provider: string
-  name: string
-  status: string
-  reasoning: boolean
-  toolCall: boolean
-  limit?: { context: number; output: number }
-  cost: { input: number; output: number }
+  id: string;
+  provider: string;
+  name: string;
+  status: string;
+  reasoning: boolean;
+  toolCall: boolean;
+  limit?: { context: number; output: number };
+  cost: { input: number; output: number };
 }
 
 export interface ProviderModels {
-  id: string
-  name: string
-  models: ModelInfo[]
+  id: string;
+  name: string;
+  models: ModelInfo[];
 }
 
 export interface ModelConfig {
-  model: string | null
-  small_model: string | null
+  model: string | null;
+  small_model: string | null;
 }
 
 export async function getModels(): Promise<{ providers: ProviderModels[] }> {
-  const res = await fetch(`${API_URL}/api/opencode/models`, {
-    headers: getAuthHeader(),
-  })
-  if (!res.ok) {
-    if (res.status === 401 || res.status === 500) {
-      return { providers: [] }
-    }
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Failed to get models')
-  }
-  return res.json()
+  return opencodeFetch<{ providers: ProviderModels[] }>(
+    '/api/opencode/models',
+    {},
+    'Failed to get models',
+  );
 }
 
 export async function getModelConfig(): Promise<ModelConfig> {
-  const res = await fetch(`${API_URL}/api/opencode/config`, {
-    headers: getAuthHeader(),
-  })
-  if (!res.ok) {
-    if (res.status === 401 || res.status === 500) {
-      // The container might not be fully initialized or missing creds, return default
-      return { model: null, small_model: null }
-    }
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Failed to get model config')
-  }
-  return res.json()
+  return opencodeFetch<ModelConfig>('/api/opencode/config', {}, 'Failed to get model config');
 }
 
 export async function setModel(model: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/opencode/config/model`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader(),
-    },
-    body: JSON.stringify({ model }),
-  })
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}))
-    throw new Error(data.error || 'Failed to set model')
-  }
+  await opencodeFetch<void>(
+    '/api/opencode/config/model',
+    { method: 'POST', body: JSON.stringify({ model }) },
+    'Failed to set model',
+  );
 }
 
 export async function oauthCallback(
   providerId: string,
   code: string,
-  method?: number
+  method?: number,
 ): Promise<void> {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 40000);
+  const timeout = window.setTimeout(() => controller.abort(), 60000);
 
-  let res: Response;
   try {
-    res = await fetch(`${API_URL}/api/opencode/auth/oauth/callback`, {
+    await apiFetchRaw('/api/opencode/auth/oauth/callback', {
       method: 'POST',
+      sidecar: true,
       signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeader(),
-      },
       body: JSON.stringify({ providerId, code, method: method ?? 0 }),
     });
-  } catch (error) {
-    if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
-      throw new Error('OAuth callback timed out after 40 seconds. The server might still be processing your request. Please check back in a minute.');
+  } catch (err) {
+    if (controller.signal.aborted || (err instanceof Error && err.name === 'AbortError')) {
+      throw new Error(
+        'OAuth callback timed out after 60 seconds. The provider might still be processing your request — refresh the Settings page in a minute to check.',
+      );
     }
-    throw error;
+    if (err instanceof ApiError) {
+      throw new Error(err.message || 'Failed to complete OAuth');
+    }
+    throw err;
   } finally {
     window.clearTimeout(timeout);
-  }
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Failed to complete OAuth');
   }
 }

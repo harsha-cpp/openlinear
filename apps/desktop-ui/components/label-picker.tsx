@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { X, ChevronDown, Tag } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
   Popover,
@@ -25,9 +26,7 @@ interface LabelPickerProps {
   triggerClassName?: string
 }
 
-import { API_URL } from "@/lib/api/client"
-
-const API_BASE_URL = `${API_URL}/api`
+import { apiFetch } from "@/lib/api/fetch"
 
 export function LabelPicker({ selectedIds, onChange, triggerClassName }: LabelPickerProps) {
   const [labels, setLabels] = useState<Label[]>([])
@@ -41,16 +40,13 @@ export function LabelPicker({ selectedIds, onChange, triggerClassName }: LabelPi
   const fetchLabels = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_BASE_URL}/labels`)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch labels: ${response.statusText}`)
-      }
-      const data = await response.json()
-      // Sort by priority
-      const sortedLabels = data.sort((a: Label, b: Label) => a.priority - b.priority)
+      const data = await apiFetch<Label[]>('/api/labels')
+      const sortedLabels = [...data].sort((a, b) => a.priority - b.priority)
       setLabels(sortedLabels)
     } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to fetch labels'
       console.error("Error fetching labels:", err)
+      toast.error(msg)
     } finally {
       setLoading(false)
     }

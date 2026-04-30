@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { DropResult } from "@hello-pangea/dnd"
+import { toast } from "sonner"
 import { SSEEventType, SSEEventData } from "@/hooks/use-sse"
 import { useSSESubscription } from "@/providers/sse-provider"
 import { useAuth } from "@/hooks/use-auth"
 import { Project } from "@/lib/api"
 import type { Repository } from "@/lib/api"
 import { Task, ExecutionProgress, ExecutionLogEntry } from "@/types/task"
-import { API_URL, getAuthHeader } from "@/lib/api/client"
-import { getSetupStatus, hasConfiguredProviders } from "@/lib/api/opencode"
+import { apiFetch, ApiError, NetworkError } from "@/lib/api/fetch"
+import { getSetupStatus, OpenCodeUnavailableError } from "@/lib/api/opencode"
 
 export const COLUMNS = [
   { id: 'todo', title: 'All Issues', status: 'todo' as const },
@@ -27,8 +28,6 @@ export interface ActiveBatch {
   }>
   prUrl: string | null
 }
-
-export const API_BASE_URL = API_URL
 
 export interface KanbanBoardProps {
   projectId?: string | null
@@ -187,38 +186,33 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
 
   const handleBatchExecute = async (mode: 'parallel' | 'queue') => {
     try {
-      const token = localStorage.getItem('token')
       const nonDoneTaskIds = Array.from(selectedTaskIds).filter(
         id => tasks.find(t => t.id === id)?.status !== 'done'
       )
       if (nonDoneTaskIds.length === 0) return
-      const response = await fetch(`${API_BASE_URL}/api/batches`, {
+      await apiFetch('/api/batches', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          taskIds: nonDoneTaskIds,
-          mode,
-        }),
+        sidecar: true,
+        body: JSON.stringify({ taskIds: nonDoneTaskIds, mode }),
       })
-      if (!response.ok) throw new Error('Failed to create batch')
       clearSelection()
     } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to create batch'
       console.error('Error creating batch:', err)
+      toast.error(msg)
     }
   }
 
   const handleCancelBatch = async (batchId: string) => {
     try {
-      const token = localStorage.getItem('token')
-      await fetch(`${API_BASE_URL}/api/batches/${batchId}/cancel`, {
+      await apiFetch(`/api/batches/${batchId}/cancel`, {
         method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        sidecar: true,
       })
     } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to cancel batch'
       console.error('Error cancelling batch:', err)
+      toast.error(msg)
     }
   }
 
@@ -285,14 +279,8 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
       if (projectId) params.set('projectId', projectId)
       if (teamId) params.set('teamId', teamId)
       const qs = params.toString()
-      const url = qs
-        ? `${API_BASE_URL}/api/tasks?${qs}`
-        : `${API_BASE_URL}/api/tasks`
-      const response = await fetch(url, { headers: getAuthHeader() })
-      if (!response.ok) {
-        throw new Error(`Failed to fetch tasks: ${response.statusText}`)
-      }
-      const data = await response.json()
+      const path = qs ? `/api/tasks?${qs}` : `/api/tasks`
+      const data = await apiFetch<Task[]>(path)
       setTasks(data)
       setError(null)
       retryAttemptRef.current = 0
@@ -302,7 +290,7 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
         retryTimeoutRef.current = null
       }
     } catch (err) {
-      if (allowRetry && retryAttemptRef.current < 5) {
+      if (allowRetry && retryAttemptRef.current < 5 && (err instanceof NetworkError || (err instanceof ApiError && err.status >= 500))) {
         retryAttemptRef.current += 1
         if (showLoading) {
           shouldStopLoading = false
@@ -317,7 +305,11 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
       }
 
       if (!silent) {
-        setError(err instanceof Error ? err.message : "Failed to fetch tasks")
+        const msg = err instanceof Error ? err.message : 'Failed to fetch tasks'
+        setError(msg)
+        if (!(err instanceof ApiError && err.status === 401)) {
+          toast.error(msg)
+        }
       }
     } finally {
       if (shouldStopLoading) {
@@ -571,21 +563,14 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
 
   const updateTaskStatus = async (taskId: string, newStatus: Task['status']) => {
     try {
-      const token = localStorage.getItem('token')
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      }
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
-        method: "PATCH",
-        headers,
+      await apiFetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
         body: JSON.stringify({ status: newStatus }),
       })
-      if (!response.ok) {
-        throw new Error(`Failed to update task: ${response.statusText}`)
-      }
     } catch (err) {
-      console.error("Error updating task:", err)
+      const msg = err instanceof Error ? err.message : 'Failed to update task'
+      console.error('Error updating task:', err)
+      toast.error(msg)
       fetchTasks({ silent: true })
     }
   }
@@ -652,33 +637,34 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
 
   const handleExecute = async (taskId: string) => {
     if (!canExecute) {
-      console.error("No active project - connect a repo first")
+      const msg = "No active project — connect a repo first"
+      console.error(msg)
+      toast.error(msg)
       return
     }
 
     try {
       const status = await getSetupStatus();
-      if (!status.ready && !hasConfiguredProviders()) {
+      if (!status.ready) {
         setPendingExecuteTaskId(taskId);
         setShowProviderSetup(true);
         return;
       }
-    } catch {
+    } catch (err) {
+      if (!(err instanceof OpenCodeUnavailableError)) {
+        console.warn('Could not check provider setup, proceeding anyway:', err)
+      }
     }
 
     try {
-      const token = localStorage.getItem('token')
-      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/execute`, {
-        method: "POST",
-        headers,
+      await apiFetch(`/api/tasks/${taskId}/execute`, {
+        method: 'POST',
+        sidecar: true,
       })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || `Failed to execute task: ${response.statusText}`)
-      }
     } catch (err) {
-      console.error("Error executing task:", err)
+      const msg = err instanceof Error ? err.message : 'Failed to execute task'
+      console.error('Error executing task:', err)
+      toast.error(msg)
     }
   }
 
@@ -687,47 +673,44 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
     if (pendingExecuteTaskId) {
       const taskId = pendingExecuteTaskId;
       setPendingExecuteTaskId(null);
-      // Retry execution
       try {
-        const token = localStorage.getItem('token');
-        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-        await fetch(`${API_BASE_URL}/api/tasks/${taskId}/execute`, {
-          method: "POST",
-          headers,
+        await apiFetch(`/api/tasks/${taskId}/execute`, {
+          method: 'POST',
+          sidecar: true,
         });
       } catch (err) {
-        console.error("Error executing task:", err);
+        const msg = err instanceof Error ? err.message : 'Failed to execute task'
+        console.error('Error executing task:', err);
+        toast.error(msg)
       }
     }
   }, [pendingExecuteTaskId]);
 
   const handleCancel = async (taskId: string) => {
     try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/cancel`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      await apiFetch(`/api/tasks/${taskId}/cancel`, {
+        method: 'POST',
+        sidecar: true,
       })
-      if (!response.ok) {
-        throw new Error(`Failed to cancel task: ${response.statusText}`)
-      }
     } catch (err) {
-      console.error("Error cancelling task:", err)
+      const msg = err instanceof Error ? err.message : 'Failed to cancel task'
+      console.error('Error cancelling task:', err)
+      toast.error(msg)
     }
   }
 
   const handleTaskClick = async (taskId: string) => {
     setSelectedTaskId(taskId)
-    
+
     if (!taskLogs[taskId]) {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/logs`, { headers: getAuthHeader() })
-        if (response.ok) {
-          const data = await response.json()
-          setTaskLogs((prev) => ({ ...prev, [taskId]: data.logs || [] }))
-        }
+        const data = await apiFetch<{ logs?: ExecutionLogEntry[] }>(
+          `/api/tasks/${taskId}/logs`,
+          { sidecar: true },
+        )
+        setTaskLogs((prev) => ({ ...prev, [taskId]: data.logs || [] }))
       } catch (err) {
-        console.error("Error fetching task logs:", err)
+        console.error('Error fetching task logs:', err)
       }
     }
   }
@@ -741,35 +724,25 @@ export function useKanbanBoard({ projectId, teamId, projects = [] }: KanbanBoard
     setTasks((prev) => prev.filter((t) => t.id !== taskId))
     setSelectedTaskId(null)
     try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
-        method: "DELETE",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-      if (!response.ok) {
-        setTasks(previousTasks)
-      }
-    } catch {
+      await apiFetch(`/api/tasks/${taskId}`, { method: 'DELETE' })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete task'
+      console.error('Error deleting task:', err)
+      toast.error(msg)
       setTasks(previousTasks)
     }
   }
 
   const handleUpdateTask = async (taskId: string, data: { title?: string; description?: string | null }) => {
     try {
-      const token = localStorage.getItem('token')
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+      await apiFetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
         body: JSON.stringify(data),
       })
-      if (!response.ok) {
-        throw new Error(`Failed to update task: ${response.statusText}`)
-      }
     } catch (err) {
-      console.error("Error updating task:", err)
+      const msg = err instanceof Error ? err.message : 'Failed to update task'
+      console.error('Error updating task:', err)
+      toast.error(msg)
     }
   }
 

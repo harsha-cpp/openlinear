@@ -127,3 +127,45 @@ Subagents must APPEND (never overwrite). Format: `## [TIMESTAMP] Task: T## — {
 - **Two opposite-side User relations to Task** require explicit relation names: `assignee   User? @relation("assignedTasks", ...)` + `creator User? @relation("createdTasks", ...)` plus matching back-relations `assignedTasks Task[] @relation("assignedTasks")` + `createdTasks Task[] @relation("createdTasks")` on User.
 - **Self-relation on Task for parentId**: `parent Task? @relation("Subtasks", fields: [parentId], references: [id], onDelete: SetNull)` + `subtasks Task[] @relation("Subtasks")`.
 - **Notification has TWO User FKs** (`userId` recipient, `actorUserId` who did the action) → needs two named relations: `"notificationRecipient"` + `"notificationActor"`.
+
+## [2026-05-01] Task: T3 — apiFetch wrapper + 401 handler + lazy URL resolution
+
+### Pattern: Single HTTP seam
+- Created `apps/desktop-ui/lib/api/fetch.ts` exporting `apiFetch<T>(path, init?: RequestInit & { sidecar?: boolean })`
+- Auto Content-Type for JSON bodies (skips FormData/Blob/ArrayBuffer/URLSearchParams)
+- Auto Authorization + x-openlinear-client headers via existing `getAuthHeader()`
+- 401 → `AuthExpiredError` (subclass of `ApiError`) + dispatches `auth:expired` window event
+- non-2xx → `ApiError` with parsed `{ error, code, details }` envelope
+- network failure → `NetworkError` ("Could not reach OpenLinear server")
+- AbortError propagates as-is (callers detect cancellation)
+- Latch on `auth:expired` dispatch (1s) prevents N concurrent 401s firing N events
+
+### Pattern: apiFetchRaw for streaming
+- `apiFetchRaw()` returns `Response` after auth/error handling — used by `streamBrainstormTasks()` (NDJSON) and `oauthCallback()` (uses AbortController)
+- Same 401/NetworkError envelope as `apiFetch` but caller reads `response.body` manually
+
+### Pattern: OpenCode error class re-mapping
+- `opencodeFetch()` wrapper translates `ApiError(status>=500)` → `OpenCodeUnavailableError`
+- Other ApiError → plain `Error` with envelope message (preserves call-site behavior)
+- All opencode.ts functions go through this wrapper now
+
+### Bug class fixed: module-level URL captures
+- 5 sites had `const X = getApiUrl()` at module top — broke Tauri sidecar URL discovery (URL is only known after `sidecar:ready` event fires)
+- Fixed by either moving to `apiFetch` calls (lazy) or moving `getSidecarApiUrl()` inside callbacks (api-loading-screen)
+- Verified zero remaining via `grep -rEn "^(const|let|var) [A-Z_]+ ?= ?(getApiUrl|getSidecarApiUrl)\("`
+
+### Auth listener wiring
+- `hooks/use-auth.tsx` adds `window.addEventListener('auth:expired')` → `setUser(null)`, `setActiveRepository(null)`, `toast.error("Session expired...")`, `router.push('/login')` (skip if already on /login or /)
+- Imported `useRouter`, `usePathname` from `next/navigation`, `toast` from `sonner` (both already in dep tree)
+
+### Migration count
+- 7 lib/api/*.ts files rewritten (auth, tasks, projects, teams, repos, brainstorm, opencode)
+- use-kanban-board.ts: 8 hand-rolled token sites + 2 module captures + 2 silent error swallows fixed
+- archived/page.tsx: 4 fetches migrated, all with toast on error, deleteSelected uses Promise.allSettled
+- task-form.tsx, label-picker.tsx, api-loading-screen.tsx: module captures eliminated
+- teams/manage/page.tsx + settings/page.tsx: untyped fetches replaced with apiFetch
+
+### Gotchas
+- `next dev` generates `.next/types/validator.ts` referencing stale routes → must `rm -rf .next` before clean tsc
+- `getActiveRepository()` and `fetchCurrentUser()` use `allowUnauthenticated: true` to silently no-op when no token — bootstrap flow on cold start
+- `addRepoByUrl`, `getActivePublicRepository`, `activatePublicRepository` are public endpoints (no auth) — use `allowUnauthenticated: true`

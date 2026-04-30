@@ -1,4 +1,4 @@
-import { API_URL, getAuthHeader } from './client';
+import { apiFetch, apiFetchRaw, ApiError, NetworkError } from './fetch';
 
 export interface BrainstormTask {
   title: string;
@@ -14,24 +14,24 @@ export interface BrainstormAvailability {
 }
 
 export async function checkBrainstormAvailability(): Promise<BrainstormAvailability> {
-  const res = await fetch(`${API_URL}/api/brainstorm/availability`, {
-    headers: getAuthHeader(),
-  });
-  if (!res.ok) return { available: false, error: 'Failed to check availability' };
-  return res.json();
+  try {
+    return await apiFetch<BrainstormAvailability>('/api/brainstorm/availability', {
+      sidecar: true,
+    });
+  } catch {
+    return { available: false, error: 'Failed to check availability' };
+  }
 }
 
-export async function generateBrainstormQuestions(prompt: string, webSearch: boolean = false): Promise<string[]> {
-  const res = await fetch(`${API_URL}/api/brainstorm/questions`, {
+export async function generateBrainstormQuestions(
+  prompt: string,
+  webSearch: boolean = false,
+): Promise<string[]> {
+  const data = await apiFetch<{ questions: string[] }>('/api/brainstorm/questions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+    sidecar: true,
     body: JSON.stringify({ prompt, webSearch }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Failed to generate questions' }));
-    throw new Error(err.error || 'Failed to generate questions');
-  }
-  const data = await res.json();
   return data.questions;
 }
 
@@ -43,19 +43,23 @@ export async function streamBrainstormTasks(
   onError: (message: string) => void,
   webSearch: boolean = false,
 ): Promise<void> {
+  let res: Response;
   try {
-    const res = await fetch(`${API_URL}/api/brainstorm/generate`, {
+    res = await apiFetchRaw('/api/brainstorm/generate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      sidecar: true,
       body: JSON.stringify({ prompt, answers, webSearch }),
     });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Failed to generate tasks' }));
-      onError(err.error || 'Failed to generate tasks');
+  } catch (err) {
+    if (err instanceof ApiError || err instanceof NetworkError) {
+      onError(err.message);
       return;
     }
+    onError(err instanceof Error ? err.message : 'Stream failed');
+    return;
+  }
 
+  try {
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -92,14 +96,10 @@ export async function streamBrainstormTasks(
 }
 
 export async function transcribeAudio(audioBlob: Blob): Promise<{ text: string }> {
-  const res = await fetch(`${API_URL}/api/transcribe`, {
+  return apiFetch<{ text: string }>('/api/transcribe', {
     method: 'POST',
-    headers: { 'Content-Type': audioBlob.type, ...getAuthHeader() },
+    sidecar: true,
+    headers: { 'Content-Type': audioBlob.type },
     body: audioBlob,
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Failed to transcribe audio' }));
-    throw new Error(err.error || 'Failed to transcribe audio');
-  }
-  return res.json();
 }
