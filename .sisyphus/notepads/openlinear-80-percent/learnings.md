@@ -586,3 +586,23 @@ Once `teamMember.deleteMany` runs, the connected EventSource clients still have 
 - Reduced-motion override uses `0.01ms` (not `0`) to preserve transition end events firing
 - Used `*,*::before,*::after` selector to catch pseudo-element animations
 - landing/app/globals.css had NO focus styles at all — added `:focus-visible` for the entire page
+
+## [2026-05-01] Task: T16 — Header search → KanbanBoard client-side filter
+
+### Pattern: useDeferredValue for free debouncing
+- React's `useDeferredValue(searchQuery)` defers the value during high-priority renders (keystroke → input update) and serves the new value during low-priority renders (the expensive filter+map of N tasks).
+- No `setTimeout`, no `useDebounce` library, no manual `useEffect` cleanup — React's concurrent scheduler handles it. Smoother than a fixed 200ms debounce because urgent updates (typing) stay snappy regardless of filter cost.
+
+### Pattern: Filter derivation, NOT state
+- `filteredTasks` is a `useMemo` over `tasks` + `deferredSearchQuery`. NEVER mirror filtered list into state — would desync on SSE task:created/updated.
+- Only `getTasksByStatus()` consumes `filteredTasks`. Selection state, batch state, drag handlers all keep operating on raw `tasks` (correct: search is a presentation filter, not a data scope).
+
+### Pattern: Empty-query short circuit
+- `q.length < 1 → return tasks` (identity). Saves the per-task allocations on the common case (empty search). Guard with `.trim()` so a single-space query still returns full set.
+
+### Wiring discipline
+- `KanbanBoard(props)` already spreads to `useKanbanBoard(props)` — adding optional prop to `KanbanBoardProps` auto-propagates without touching the component file. Keep this seam tight: any new prop is one edit in `use-kanban-board.ts`, one in the parent.
+
+### What this does NOT do
+- No backend fetch with `q` param. T12 owns the search API (Cmd+K palette territory). The board filter is purely about narrowing what's already loaded — it does NOT broaden beyond the current `projectId` / `teamId` scope.
+- No fuzzy match. Plain `String.includes()` against title + identifier. If users complain, T25 (Cmd+K) is the right place to add fuzzy/Fuse.js.

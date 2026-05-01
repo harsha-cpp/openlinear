@@ -186,19 +186,25 @@ export function useKanbanBoard({ projectId, teamId, projects = [], searchQuery =
   }, [batchTaskIds.length, completedBatchTaskIds.length, clearColumnSelection])
 
   const handleBatchExecute = async (mode: 'parallel' | 'queue') => {
+    const nonDoneTaskIds = Array.from(selectedTaskIds).filter(
+      id => tasks.find(t => t.id === id)?.status !== 'done'
+    )
+    if (nonDoneTaskIds.length === 0) return
+
+    const previousSelection = selectedTaskIds
+    const previousTasks = tasks
+    clearSelection()
+
     try {
-      const nonDoneTaskIds = Array.from(selectedTaskIds).filter(
-        id => tasks.find(t => t.id === id)?.status !== 'done'
-      )
-      if (nonDoneTaskIds.length === 0) return
       await apiFetch('/api/batches', {
         method: 'POST',
         sidecar: true,
         body: JSON.stringify({ taskIds: nonDoneTaskIds, mode }),
       })
-      clearSelection()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to create batch'
+      setTasks(previousTasks)
+      setSelectedTaskIds(previousSelection)
+      const msg = err instanceof Error ? err.message : 'Operation failed'
       console.error('Error creating batch:', err)
       toast.error(msg)
     }
@@ -244,7 +250,6 @@ export function useKanbanBoard({ projectId, teamId, projects = [], searchQuery =
 
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const retryAttemptRef = useRef(0)
-  const safetyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const fetchTasks = useCallback(async (options?: {
     showLoading?: boolean
@@ -539,49 +544,48 @@ export function useKanbanBoard({ projectId, teamId, projects = [], searchQuery =
   useEffect(() => {
     fetchTasks({ showLoading: true, allowRetry: true, clearError: true, resetRetry: true })
 
-    // Safety timeout: force loading to false after 10s no matter what
-    safetyTimeoutRef.current = setTimeout(() => {
-      setLoading(prev => {
-        if (prev) {
-          console.warn('[KanbanBoard] Safety timeout triggered - forcing loading to false')
-          return false
-        }
-        return prev
-      })
-    }, 3000)
-
     return () => {
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current)
         retryTimeoutRef.current = null
       }
-      if (safetyTimeoutRef.current) {
-        clearTimeout(safetyTimeoutRef.current)
-        safetyTimeoutRef.current = null
-      }
     }
   }, [fetchTasks])
 
-  const updateTaskStatus = async (taskId: string, newStatus: Task['status']) => {
+  const updateTaskStatus = async (
+    taskIds: string | string[],
+    newStatus: Task['status'],
+  ) => {
+    const ids = Array.isArray(taskIds) ? taskIds : [taskIds]
+    if (ids.length === 0) return
+
+    let snapshot: Task[] = []
+    setTasks((prev) => {
+      snapshot = prev
+      const idSet = new Set(ids)
+      return prev.map((task) =>
+        idSet.has(task.id) ? { ...task, status: newStatus } : task,
+      )
+    })
+
     try {
-      await apiFetch(`/api/tasks/${taskId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: newStatus }),
-      })
+      await Promise.all(
+        ids.map((id) =>
+          apiFetch(`/api/tasks/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status: newStatus }),
+          }),
+        ),
+      )
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to update task'
+      setTasks(snapshot)
+      const msg = err instanceof Error ? err.message : 'Operation failed'
       console.error('Error updating task:', err)
       toast.error(msg)
-      fetchTasks({ silent: true })
     }
   }
 
   const handleMoveToInProgress = async (taskId: string) => {
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskId ? { ...task, status: 'in_progress' as const } : task
-      )
-    )
     await updateTaskStatus(taskId, 'in_progress')
   }
 
@@ -590,15 +594,8 @@ export function useKanbanBoard({ projectId, teamId, projects = [], searchQuery =
       id => tasks.find(t => t.id === id)?.status === 'todo'
     )
     if (todoIds.length === 0) return
-    for (const id of todoIds) {
-      setTasks((prev) =>
-        prev.map((task) =>
-          task.id === id ? { ...task, status: 'in_progress' as const } : task
-        )
-      )
-    }
     clearSelection()
-    await Promise.all(todoIds.map(id => updateTaskStatus(id, 'in_progress')))
+    await updateTaskStatus(todoIds, 'in_progress')
   }
 
   const handleDragEnd = async (result: DropResult) => {
@@ -617,21 +614,9 @@ export function useKanbanBoard({ projectId, teamId, projects = [], searchQuery =
 
       if (batchTaskIds.length === 0) return
 
-      setTasks((prev) =>
-        prev.map((task) =>
-          batchTaskIds.includes(task.id) ? { ...task, status: newStatus } : task
-        )
-      )
-
-      await Promise.all(batchTaskIds.map(id => updateTaskStatus(id, newStatus)))
+      await updateTaskStatus(batchTaskIds, newStatus)
       return
     }
-
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === draggableId ? { ...task, status: newStatus } : task
-      )
-    )
 
     await updateTaskStatus(draggableId, newStatus)
   }
@@ -722,15 +707,17 @@ export function useKanbanBoard({ projectId, teamId, projects = [], searchQuery =
 
   const handleDelete = async (taskId: string) => {
     const previousTasks = tasks
+    const previousSelectedTaskId = selectedTaskId
     setTasks((prev) => prev.filter((t) => t.id !== taskId))
     setSelectedTaskId(null)
     try {
       await apiFetch(`/api/tasks/${taskId}`, { method: 'DELETE' })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to delete task'
+      setTasks(previousTasks)
+      setSelectedTaskId(previousSelectedTaskId)
+      const msg = err instanceof Error ? err.message : 'Operation failed'
       console.error('Error deleting task:', err)
       toast.error(msg)
-      setTasks(previousTasks)
     }
   }
 
