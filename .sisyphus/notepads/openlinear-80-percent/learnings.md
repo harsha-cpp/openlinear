@@ -606,3 +606,44 @@ Once `teamMember.deleteMany` runs, the connected EventSource clients still have 
 ### What this does NOT do
 - No backend fetch with `q` param. T12 owns the search API (Cmd+K palette territory). The board filter is purely about narrowing what's already loaded — it does NOT broaden beyond the current `projectId` / `teamId` scope.
 - No fuzzy match. Plain `String.includes()` against title + identifier. If users complain, T25 (Cmd+K) is the right place to add fuzzy/Fuse.js.
+
+## [2026-05-01] Task: T18 — Optimistic update rollback for use-kanban-board
+
+### Pattern: Snapshot-via-functional-setter
+- `let snapshot: Task[] = []; setTasks(prev => { snapshot = prev; return optimistic(prev); })`
+- Captures the previous state ATOMICALLY with the optimistic mutation — avoids stale-closure
+  bugs that would happen if you snapshot via `const prev = tasks` (because `tasks` is a closure
+  capture from render time, may be stale if multiple updates queue).
+- On error: `setTasks(snapshot)` restores cleanly. SSE re-syncs eventually on success.
+
+### Pattern: Collapse N optimistic mutations into one
+- Old code had `for (id of ids) setTasks(...)` followed by `Promise.all(ids.map(updateTaskStatus))`.
+- Each update created its own snapshot/race window; partial failures left the UI inconsistent.
+- New: single updateTaskStatus(ids[], status) with one snapshot, one rollback. All-or-nothing.
+
+### Pattern: Restore selection state too
+- handleBatchExecute and handleDelete both snapshot `selectedTaskIds` / `selectedTaskId` IN ADDITION
+  to `tasks`, so a failed batch leaves the user's selection intact (they can retry without
+  re-selecting). This is a UX-critical detail — the spec called it out explicitly.
+
+### Anti-pattern killed: 3s "safety timeout"
+- Was force-setting `loading=false` after 3s "no matter what". Pure cargo-cult — fetchTasks's
+  finally block ALWAYS sets loading=false because apiFetch (T3) always resolves or rejects.
+- The timeout existed because pre-T3 code had hand-rolled fetches that could hang on network
+  error without rejecting. T3 fixed the root cause; T18 removes the bandage.
+
+### ApiError + apiFetch surfacing (from T3)
+- All thrown errors are `Error` subclasses (ApiError, AuthExpiredError, NetworkError) so
+  `err instanceof Error ? err.message : 'Operation failed'` is the correct one-liner.
+- The server's `{ error, code, details }` envelope flows through `.message` automatically.
+- No need to type-narrow on ApiError specifically unless you need `.status` or `.code`.
+
+### SSE + optimistic interaction (from T8)
+- On SUCCESS: don't re-fetch. SSE task:updated / task:deleted will push canonical state.
+- On FAILURE: snapshot rollback may briefly revert an SSE update if SSE arrived mid-flight.
+  Acceptable — SSE re-fires eventually-consistent updates. Documented in evidence file.
+
+### Files for downstream tasks
+- T20 still needs to delete the leftover `localStorage.getItem('token')` calls — but T18 didn't
+  touch any of those (all the call sites already used apiFetch).
+- T31 (bulk actions) can reuse `updateTaskStatus(string[], status)` directly for batch status changes.
