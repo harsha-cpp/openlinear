@@ -647,3 +647,13 @@ Once `teamMember.deleteMany` runs, the connected EventSource clients still have 
 - T20 still needs to delete the leftover `localStorage.getItem('token')` calls — but T18 didn't
   touch any of those (all the call sites already used apiFetch).
 - T31 (bulk actions) can reuse `updateTaskStatus(string[], status)` directly for batch status changes.
+
+## T23 — Sidebar per-user teams + nested HTML
+
+- Module-level `let cachedTeams` in `sidebar.tsx` was a cross-user leak; replaced with `TeamsProvider` context (`apps/desktop-ui/providers/teams-provider.tsx`).
+- `TeamsProvider` subscribes to `auth:expired` (dispatched by T3's apiFetch on 401) and clears state. Defense-in-depth: AuthProvider already does this for user/repo.
+- `useTeams()` derives reload from `user?.id` change → automatic per-user fetch on identity transitions, including after re-login.
+- Provider order in `app/layout.tsx`: AuthProvider > SSEProvider > TeamsProvider (TeamsProvider needs both).
+- TeamSection's "nested button" worry was a false alarm: `<div className="flex items-center">` already wraps two SIBLING buttons (chevron-toggle and Popover trigger via `asChild`). Radix `Trigger asChild` clones the child — does NOT add an extra `<button>`.
+- Sidebar `handleClose` was a bug: red macOS traffic-light was calling `minimize()`. Fixed to call `getCurrentWindow().close()` from `@tauri-apps/api/window`.
+- `apps/desktop-ui` has no `typecheck` script — use `npx tsc --noEmit` directly.

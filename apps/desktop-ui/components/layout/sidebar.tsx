@@ -11,12 +11,9 @@ import {
 import { ProjectSelector } from "@/components/auth/project-selector"
 import { useAuth } from "@/hooks/use-auth"
 import { cn } from "@/lib/utils"
-import { fetchInboxCount, fetchTeams, deleteTeam, type Team } from "@/lib/api"
-import { useSSESubscription } from "@/providers/sse-provider"
+import { deleteTeam, fetchInboxCount, type Team } from "@/lib/api"
+import { useTeams } from "@/providers/teams-provider"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-
-// Module-level cache so teams survive sidebar remounts during page navigation
-let cachedTeams: Team[] = []
 
 const navItemClass = (isActive: boolean) =>
     cn(
@@ -135,17 +132,10 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
     const searchParams = useSearchParams()
     const router = useRouter()
     const { user, isAuthenticated, isLoading, logout } = useAuth()
+    const { teams, reload: reloadTeams } = useTeams()
     const [isTauri, setIsTauri] = useState(false)
     const [inboxCount, setInboxCount] = useState<{ total: number; unread: number }>({ total: 0, unread: 0 })
-    const [teams, setTeams] = useState<Team[]>(cachedTeams)
     const [isFullscreen, setIsFullscreen] = useState(false)
-
-    const loadTeams = useCallback(() => {
-        fetchTeams().then((data) => {
-            cachedTeams = data
-            setTeams(data)
-        }).catch(() => setTeams([]))
-    }, [])
 
     useEffect(() => {
         const tauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -170,32 +160,22 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
         fetchInboxCount().then(setInboxCount).catch(() => setInboxCount({ total: 0, unread: 0 }))
     }, [pathname])
 
-    useEffect(() => {
-        loadTeams()
-    }, [loadTeams])
-
-    useSSESubscription((eventType) => {
-        if (['team:created', 'team:updated', 'team:deleted'].includes(eventType)) {
-            loadTeams()
-        }
-    })
-
     const handleDeleteTeam = useCallback(async (teamId: string, teamName: string) => {
         if (!confirm(`Delete "${teamName}"? This action cannot be undone.`)) return
         try {
             await deleteTeam(teamId)
-            loadTeams()
+            void reloadTeams()
             if (searchParams.get("teamId") === teamId || (pathname === "/teams/manage" && searchParams.get("id") === teamId)) {
                 router.push('/')
             }
         } catch (error) {
             console.error("Failed to delete team:", error)
         }
-    }, [loadTeams, searchParams, pathname, router])
+    }, [reloadTeams, searchParams, pathname, router])
 
     const handleClose = async () => {
         const { getCurrentWindow } = await import('@tauri-apps/api/window')
-        getCurrentWindow().minimize()
+        await getCurrentWindow().close()
     }
 
     const handleMinimize = async () => {

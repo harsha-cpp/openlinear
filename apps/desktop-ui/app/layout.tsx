@@ -3,6 +3,7 @@ import { DM_Mono, DM_Sans, EB_Garamond, Space_Grotesk } from "next/font/google"
 import "./globals.css"
 import { AuthProvider } from "@/hooks/use-auth"
 import { SSEProvider } from "@/providers/sse-provider"
+import { TeamsProvider } from "@/providers/teams-provider"
 import { Toaster } from "sonner"
 import { GlobalQuickCapture } from "@/components/global-quick-capture"
 import { GodModeOverlay } from "@/components/god-mode-overlay"
@@ -93,7 +94,9 @@ export default function RootLayout({
       <body className="font-sans antialiased">
         <AuthProvider>
           <SSEProvider>
-            {children}
+            <TeamsProvider>
+              {children}
+            </TeamsProvider>
           </SSEProvider>
           <GlobalQuickCapture />
           <GodModeOverlay />
