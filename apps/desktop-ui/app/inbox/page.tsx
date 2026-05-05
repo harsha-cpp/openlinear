@@ -3,13 +3,15 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import {
-  Inbox, CheckCheck, Loader2, AtSign, UserPlus, ArrowRightLeft,
+  Inbox, CheckCheck, AtSign, UserPlus, ArrowRightLeft,
   MessageSquare, Bell
 } from "lucide-react"
 import { AppShell } from "@/components/layout/app-shell"
 import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
 import { getApiUrl } from "@/lib/api/client"
+import { EmptyState } from "@/components/empty-state"
+import { Skeleton } from "@/components/ui/skeleton"
 
 type NotificationType = 'mention' | 'assignment' | 'status_change' | 'comment'
 
@@ -375,19 +377,31 @@ export default function InboxPage() {
 
       <div className="flex-1 overflow-y-auto bg-linear-bg">
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-5 h-5 animate-spin text-linear-text-tertiary" />
+          <div className="divide-y divide-linear-border">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex items-start gap-3 px-4 py-3">
+                <Skeleton className="mt-1 w-1.5 h-1.5 rounded-full" />
+                <Skeleton className="w-7 h-7 rounded-full flex-shrink-0" />
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-3 w-14 rounded" />
+                    <Skeleton className="h-3 w-2/3 rounded" />
+                  </div>
+                  <Skeleton className="h-2.5 w-32 rounded" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-linear-text-tertiary">
-            <Bell className="w-10 h-10 mb-3 opacity-40" />
-            <p className="text-sm">You&apos;re all caught up</p>
-            <p className="text-xs mt-1 opacity-60">
-              {filter === 'all'
+          <EmptyState
+            icon={Bell}
+            title="You're all caught up"
+            description={
+              filter === 'all'
                 ? 'No notifications yet'
-                : 'No notifications match this filter'}
-            </p>
-          </div>
+                : 'No notifications match this filter'
+            }
+          />
         ) : (
           <div>
             {BUCKET_ORDER.map((bucket) => {

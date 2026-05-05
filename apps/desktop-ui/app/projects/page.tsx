@@ -56,6 +56,8 @@ import {
 } from "@/lib/api"
 import { useSSESubscription } from "@/providers/sse-provider"
 import { toast } from "sonner"
+import { EmptyState } from "@/components/empty-state"
+import { Skeleton } from "@/components/ui/skeleton"
 
 function mapErrorToForm(
   err: unknown,
@@ -919,15 +921,36 @@ function ProjectsContent() {
                 </thead>
                 <tbody>
                   {isLoading ? (
-                    <tr>
-                      <td colSpan={6} className="py-12 text-center">
-                        <Loader2 className="w-6 h-6 animate-spin mx-auto text-linear-text-tertiary" />
-                      </td>
-                    </tr>
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <tr key={i} className="border-b border-linear-border/50">
+                        <td className="py-3 px-6">
+                          <div className="flex items-center gap-3">
+                            <Skeleton className="w-7 h-7 rounded-lg" />
+                            <div className="space-y-1.5">
+                              <Skeleton className="h-3.5 w-40 rounded" />
+                              <Skeleton className="h-2.5 w-56 rounded" />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4"><Skeleton className="h-5 w-16 rounded" /></td>
+                        <td className="py-3 px-4"><Skeleton className="h-5 w-24 rounded" /></td>
+                        <td className="py-3 px-4"><Skeleton className="h-3 w-20 rounded" /></td>
+                        <td className="py-3 px-4"><Skeleton className="h-3 w-6 rounded" /></td>
+                        <td className="py-3 px-4" />
+                      </tr>
+                    ))
                   ) : filteredProjects.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-linear-text-tertiary">
-                        {searchQuery ? "No projects match your search" : "No projects yet. Create your first project!"}
+                      <td colSpan={6} className="py-0">
+                        <EmptyState
+                          icon={FolderKanban}
+                          title={searchQuery ? "No projects match your search" : "No projects yet"}
+                          description={
+                            searchQuery
+                              ? "Try adjusting your search query"
+                              : "Create your first project to start organizing tasks"
+                          }
+                        />
                       </td>
                     </tr>
                   ) : (
@@ -1009,13 +1032,27 @@ function ProjectsContent() {
 
           <div className="block md:hidden space-y-3 p-4">
             {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-6 h-6 animate-spin text-linear-text-tertiary" />
-              </div>
+              Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="bg-linear-bg-secondary border border-linear-border rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <Skeleton className="w-7 h-7 rounded-lg" />
+                    <div className="flex-1 space-y-1.5">
+                      <Skeleton className="h-3.5 w-40 rounded" />
+                      <Skeleton className="h-2.5 w-56 rounded" />
+                    </div>
+                  </div>
+                </div>
+              ))
             ) : filteredProjects.length === 0 ? (
-              <div className="text-center py-12 text-linear-text-tertiary">
-                {searchQuery ? "No projects match your search" : "No projects yet. Create your first project!"}
-              </div>
+              <EmptyState
+                icon={FolderKanban}
+                title={searchQuery ? "No projects match your search" : "No projects yet"}
+                description={
+                  searchQuery
+                    ? "Try adjusting your search query"
+                    : "Create your first project to start organizing tasks"
+                }
+              />
             ) : (
               filteredProjects.map((project) => (
                 <div

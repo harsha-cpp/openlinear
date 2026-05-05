@@ -11,7 +11,8 @@ import { DashboardLoading } from "./dashboard-loading"
 import { TaskFormDialog } from "@/components/task-form"
 import { TaskDetailView } from "@/components/task-detail-view"
 import { ProviderSetupDialog } from "@/components/provider-setup-dialog"
-import { Plus, Settings2, GitBranch, CircleDot, Layers, Play, Pencil } from "lucide-react"
+import { EmptyState } from "@/components/empty-state"
+import { Plus, Settings2, GitBranch, CircleDot, Layers, Play, Pencil, Inbox } from "lucide-react"
 import { Task } from "@/types/task"
 import { Project, Repository } from "@/lib/api"
 import { useKanbanBoard, COLUMNS, KanbanBoardProps } from "./use-kanban-board"
@@ -318,16 +319,21 @@ export function KanbanBoard(props: KanbanBoardProps) {
                     isDraggingOver={snapshot.isDraggingOver}
                   >
                     {columnTasks.length === 0 && !snapshot.isDraggingOver ? (
-                      <button
-                        type="button"
-                        onClick={() => handleAddTask(column.status)}
-                        className="w-full flex flex-col items-center justify-center py-8 text-linear-text-tertiary hover:text-linear-text-secondary hover:bg-white/[0.03] rounded-lg transition-all cursor-pointer group"
-                      >
-                        <div className="w-10 h-10 rounded-full bg-white/[0.04] flex items-center justify-center mb-3 group-hover:bg-white/[0.06] group-hover:scale-110 transition-all">
-                          <Plus className="w-5 h-5" />
-                        </div>
-                        <span className="text-sm">Add task</span>
-                      </button>
+                      <EmptyState
+                        size="compact"
+                        icon={Inbox}
+                        title={`No ${column.title.toLowerCase()} tasks`}
+                        action={
+                          <button
+                            type="button"
+                            onClick={() => handleAddTask(column.status)}
+                            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium text-linear-text-secondary hover:text-linear-text hover:bg-white/[0.04] transition-colors"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add task
+                          </button>
+                        }
+                      />
                     ) : (() => {
                       if (column.status === 'in_progress' && batchTaskIds.length > 0) {
                         const batch = columnTasks.filter(t => batchTaskIds.includes(t.id))

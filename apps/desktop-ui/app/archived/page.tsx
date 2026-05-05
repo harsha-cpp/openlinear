@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils"
 import { AppShell } from "@/components/layout/app-shell"
 import { Task } from "@/types/task"
 import { apiFetch } from "@/lib/api/fetch"
+import { EmptyState } from "@/components/empty-state"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const PRIORITY_TABS = ["all", "high", "medium", "low"] as const
 type PriorityTab = (typeof PRIORITY_TABS)[number]
@@ -232,8 +234,18 @@ export default function ArchivedPage() {
 
         <div className="flex-1 overflow-auto">
           {loading ? (
-            <div className="flex items-center justify-center py-24">
-              <Loader2 className="w-5 h-5 animate-spin text-linear-text-tertiary" />
+            <div className="divide-y divide-linear-border/50">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 sm:px-6 py-3">
+                  <Skeleton className="w-4 h-4 rounded" />
+                  <Skeleton className="w-4 h-4 rounded" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-3.5 w-2/3 rounded" />
+                    <Skeleton className="h-2.5 w-1/3 rounded" />
+                  </div>
+                  <Skeleton className="h-5 w-14 rounded" />
+                </div>
+              ))}
             </div>
           ) : filteredTasks.length > 0 ? (
             <div className="divide-y divide-linear-border/50">
@@ -294,19 +306,15 @@ export default function ArchivedPage() {
               })}
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center py-24">
-              <div className="w-12 h-12 rounded-xl bg-linear-bg-tertiary border border-linear-border flex items-center justify-center mb-4">
-                <Archive className="w-6 h-6 text-linear-text-tertiary" />
-              </div>
-              <h3 className="text-sm font-medium text-linear-text mb-1">
-                {activeTab === "all" ? "No archived tasks" : `No ${activeTab} priority tasks`}
-              </h3>
-              <p className="text-sm text-linear-text-tertiary">
-                {activeTab === "all"
+            <EmptyState
+              icon={Archive}
+              title={activeTab === "all" ? "No archived tasks" : `No ${activeTab} priority tasks`}
+              description={
+                activeTab === "all"
                   ? "Tasks you archive will appear here"
-                  : "Try switching to a different priority tab"}
-              </p>
-            </div>
+                  : "Try switching to a different priority tab"
+              }
+            />
           )}
         </div>
       </div>

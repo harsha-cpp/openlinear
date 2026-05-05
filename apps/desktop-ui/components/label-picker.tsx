@@ -12,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
+import { EmptyState } from "@/components/empty-state"
 
 interface Label {
   id: string
@@ -125,9 +126,12 @@ export function LabelPicker({ selectedIds, onChange, triggerClassName }: LabelPi
                 </Button>
               </div>
             ) : labels.length === 0 ? (
-              <div className="p-4 text-center text-sm text-linear-text-tertiary">
-                No labels available
-              </div>
+              <EmptyState
+                size="compact"
+                icon={Tag}
+                title="No labels available"
+                description="Create labels in Settings to tag tasks"
+              />
             ) : (
               labels.map((label) => (
                 <div

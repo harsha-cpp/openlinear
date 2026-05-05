@@ -40,6 +40,8 @@ import { AppShell } from "@/components/layout/app-shell"
 import { fetchTeams, createTeam, deleteTeam, updateTeam, joinTeam, ApiError, type Team } from "@/lib/api"
 import { useSSESubscription } from "@/providers/sse-provider"
 import { toast } from "sonner"
+import { EmptyState } from "@/components/empty-state"
+import { Skeleton } from "@/components/ui/skeleton"
 
 function describeApiError(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
@@ -541,8 +543,33 @@ export default function TeamsPage() {
 
         <div className="flex-1 overflow-auto">
           {isLoading ? (
-            <div className="flex-1 flex items-center justify-center py-24">
-              <div className="text-linear-text-tertiary">Loading teams...</div>
+            <div className="hidden md:block">
+              <table className="w-full">
+                <tbody>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i} className="border-b border-linear-border/50">
+                      <td className="py-3 px-6">
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="w-7 h-7 rounded-lg" />
+                          <div className="space-y-1.5">
+                            <Skeleton className="h-3.5 w-32 rounded" />
+                            <Skeleton className="h-2.5 w-48 rounded" />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4"><Skeleton className="h-3 w-12 rounded" /></td>
+                      <td className="py-3 px-4"><Skeleton className="h-3 w-28 rounded" /></td>
+                      <td className="py-3 px-4"><Skeleton className="h-3 w-8 rounded" /></td>
+                      <td className="py-3 px-4" />
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="block md:hidden space-y-3 p-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-24 w-full rounded-lg" />
+                ))}
+              </div>
             </div>
           ) : filteredTeams.length > 0 ? (
             <>
@@ -770,30 +797,28 @@ export default function TeamsPage() {
               </div>
             </>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center py-24">
-              <div className="w-12 h-12 rounded-xl bg-linear-bg-tertiary border border-linear-border flex items-center justify-center mb-4">
-                <Users className="w-6 h-6 text-linear-text-tertiary" />
-              </div>
-              <h3 className="text-sm font-medium text-linear-text mb-1">
-                {filterText ? "No teams found" : "No teams yet"}
-              </h3>
-              <p className="text-sm text-linear-text-tertiary mb-4">
-                {filterText
+            <EmptyState
+              icon={Users}
+              title={filterText ? "No teams found" : "No teams yet"}
+              description={
+                filterText
                   ? "Try adjusting your filter"
-                  : "Create a team to organize your members and issues"}
-              </p>
-              {!filterText && (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-8 bg-linear-accent hover:bg-linear-accent-hover text-white"
-                  onClick={openCreateTeamDialog}
-                >
-                  <Plus className="w-4 h-4 mr-1.5" />
-                  Create team
-                </Button>
-              )}
-            </div>
+                  : "Create a team to organize your members and issues"
+              }
+              action={
+                !filterText && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 bg-linear-accent hover:bg-linear-accent-hover text-white"
+                    onClick={openCreateTeamDialog}
+                  >
+                    <Plus className="w-4 h-4 mr-1.5" />
+                    Create team
+                  </Button>
+                )
+              }
+            />
           )}
         </div>
       </div>
