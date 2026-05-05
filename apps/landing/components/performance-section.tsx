@@ -4,7 +4,7 @@ export function PerformanceSection() {
       <div className="relative mx-auto max-w-[1200px] px-4">
         <div className="text-center mb-16">
           <h2 className="font-display text-[2.5rem] md:text-[3.5rem] font-bold tracking-tight text-white leading-[1.1]">
-            Best latency, quality, and cost.
+            Built for shipping, not just tracking.
           </h2>
         </div>
 
@@ -17,22 +17,22 @@ export function PerformanceSection() {
               <div className="w-full space-y-4 relative z-10">
                 <div className="absolute -top-10 left-0 bg-white/[0.05] border border-white/10 px-3 py-1 rounded-md text-[11px] text-white/50">Recall time</div>
                 
-                {/* mem0 bar */}
+                {/* Agent A bar - sequential */}
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-[70%] bg-[#1a2133] rounded-lg border border-white/5 flex items-center px-4 gap-2">
+                  <div className="h-10 w-[80%] bg-[#1a2133] rounded-lg border border-white/5 flex items-center px-4 gap-2">
                     <div className="h-4 w-4 bg-white/20 rounded-full" />
-                    <span className="text-xs text-white/70">mem0</span>
+                    <span className="text-xs text-white/70">sequential</span>
                   </div>
-                  <span className="text-xs text-white/50 font-mono">7-8s</span>
+                  <span className="text-xs text-white/50 font-mono">4 tasks</span>
                 </div>
                 
-                {/* zep bar */}
+                {/* Agent B bar - queued */}
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-[45%] bg-[#1a2133] rounded-lg border border-white/5 flex items-center px-4 gap-2">
+                  <div className="h-10 w-[55%] bg-[#1a2133] rounded-lg border border-white/5 flex items-center px-4 gap-2">
                     <div className="h-4 w-4 bg-white/20 rounded-sm" />
-                    <span className="text-xs text-white/70">zep</span>
+                    <span className="text-xs text-white/70">queued</span>
                   </div>
-                  <span className="text-xs text-white/50 font-mono">4s</span>
+                  <span className="text-xs text-white/50 font-mono">2 tasks</span>
                 </div>
                 
                 {/* supermemory bar */}
@@ -50,9 +50,9 @@ export function PerformanceSection() {
               </div>
             </div>
             <div className="px-4 pb-4">
-              <h3 className="text-[20px] font-semibold text-white mb-2">Best-in-class recall time</h3>
+              <h3 className="text-[20px] font-semibold text-white mb-2">Parallel agent execution</h3>
               <p className="text-white/50 text-[15px] leading-relaxed mb-2">
-                OpenLinear retrieves memories in milliseconds — up to 10× faster than Zep and 25× faster than Mem0.
+                Run multiple AI agents in parallel across isolated git worktrees. Batch a sprint's worth of tasks and merge them into a single PR.
               </p>
             </div>
           </div>
@@ -94,9 +94,9 @@ export function PerformanceSection() {
               </div>
             </div>
             <div className="px-4 pb-4">
-              <h3 className="text-[20px] font-semibold text-white mb-2">Recall quality like the human brain</h3>
+              <h3 className="text-[20px] font-semibold text-white mb-2">Human-in-the-loop via PRs</h3>
               <p className="text-white/50 text-[15px] leading-relaxed mb-2">
-                We built OpenLinear like the human brain - with forgetfulness, updates and human-like understanding of events and data.
+                Every AgentRun ends in a real pull request. Review the diff, request changes, merge when it's right. No black box.
               </p>
             </div>
           </div>
@@ -116,9 +116,9 @@ export function PerformanceSection() {
               </div>
             </div>
             <div className="px-4 pb-4">
-              <h3 className="text-[20px] font-semibold text-white mb-2">Do more, spend less</h3>
+              <h3 className="text-[20px] font-semibold text-white mb-2">Cost tracked per AgentRun</h3>
               <p className="text-white/50 text-[15px] leading-relaxed mb-2">
-                Forget burning cash on bloated infra. With OpenLinear you get enterprise-grade memory at 70% lower cost.
+                Token usage and dollar cost recorded for every execution. Know what each task costs before it ships.
               </p>
             </div>
           </div>
