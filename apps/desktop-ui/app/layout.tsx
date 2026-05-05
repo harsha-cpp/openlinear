@@ -107,6 +107,7 @@ export default function RootLayout({
             <GlobalQuickCapture />
             <GodModeOverlay />
             <CommandPalette />
+            <ShortcutsOverlay />
             <ThemedToaster />
           </AuthProvider>
         </ThemeProvider>
