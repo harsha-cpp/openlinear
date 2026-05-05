@@ -159,8 +159,11 @@ export function TaskCard({ task, onExecute, onCancel, onDelete, onMoveToInProgre
             {task.labels.map((label) => (
               <span
                 key={label.id}
-                className="text-[11px] px-2 py-0.5 h-5 font-medium rounded-[4px] inline-flex items-center backdrop-blur-sm border border-white/10"
-                style={{ 
+                className={cn(
+                  "text-[11px] px-2 py-0.5 h-5 font-medium rounded-[4px] inline-flex items-center border border-white/10",
+                  !isDragging && "backdrop-blur-sm"
+                )}
+                style={{
                   backgroundColor: `${label.color}20`,
                   color: label.color
                 }}

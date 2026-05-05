@@ -686,3 +686,68 @@ Once `teamMember.deleteMany` runs, the connected EventSource clients still have 
 - `confirm()` is the global `window.confirm` — grep for both `window.confirm` and bare `confirm(`
   with negative-lookbehind `(^|[^.\w])confirm\(` to catch all forms. Same for alert/prompt.
 - `apps/desktop-ui` typecheck: `cd apps/desktop-ui && npx tsc --noEmit` (no script defined).
+
+## [2026-05-05] Task: T24 — Animation polish (useReducedMotion + transform-only sidebar + backdrop-filter gating)
+
+### Pattern: framer-motion `useReducedMotion` complements T21 CSS
+- T21 landed `@media (prefers-reduced-motion)` CSS overrides (`transition-duration: 0.01ms`).
+  That handles CSS-driven motion. The JS-driven framer-motion animations bypass CSS — they use
+  `requestAnimationFrame` directly. So even with T21's CSS in place, framer would still schedule
+  frames and burn CPU.
+- The hook returns `boolean | null`. Treat `null` as "no preference" (animate normally). Use as
+  `reduceMotion ? { duration: 0 } : SPRING` for transitions, and `initial={reduceMotion ? false : {...}}`
+  to skip the entrance entirely (passing `false` short-circuits all initial-frame work).
+
+### Anti-pattern: animating `width` / `box-shadow` / `border-color` / `filter`
+- `width` triggers layout (reflow of every flex sibling). Even one CSS transition adds ~16ms of
+  layout work per frame on a moderately complex page.
+- `box-shadow` triggers paint (GPU readback for the blur). Animating via `whileHover={{ boxShadow }}`
+  in framer-motion creates an inline-style write per frame.
+- `border-color` triggers paint of the border edge.
+- Replacement rule: stick to `transform` (translate/scale) and `opacity`. Both are composite-only —
+  the GPU just reuses cached layer textures, no CPU layout/paint involvement.
+- For hover effects use CSS `:hover` (zero JS overhead) when the target style is composite-friendly.
+
+### Sidebar transform-on-inner pattern (with shared CSS variable for layout coordination)
+- Outer container: `width: var(--sidebar-width)` set instantly (no CSS transition). This means
+  the layout reflow happens once per open/close, not per frame.
+- Inner panel: fixed `width: ${width}px` + `transform: translateX(open ? 0 : -${width}px)` with
+  CSS transition. The slide is purely composite — no layout work during the animation frames.
+- Trade-off: the content area "snaps" wider on close (instant) while the sidebar slides out
+  (animated). Reads as "fast and snappy" rather than jarring because the slide direction matches
+  the snap direction. If true coordination is desired, transition `padding-left` on content
+  with the same easing — but that's also layout, defeating the point.
+- `willChange: 'transform'` only when actively animating (`willChange: 'auto'` otherwise) avoids
+  permanent GPU layer promotion for the whole sidebar (which would consume VRAM proportional to
+  sidebar pixel area).
+
+### Shared CSS variable pattern for sidebar/content coordination
+- Set `--sidebar-width` on the root flex container in app-shell. Sidebar reads it directly
+  via `width: var(--sidebar-width, 0px)`. No prop drill needed for layout consumers.
+- The numeric `width` prop is still passed to the sidebar component because it's needed for the
+  inner panel's fixed width and the `translateX(-${width}px)` calc, which can't be expressed in
+  pure CSS (we'd need `calc(-1 * var(--sidebar-width))` which works, but mixing the two systems
+  for one value is messier than just passing the number).
+
+### Brain-pulse "infinite animation while invisible" pitfall
+- `motion.button` with `animate={[1,1.05,1]}` + `transition={{ repeat: Infinity }}` keeps
+  scheduling frames even when the button is covered by another overlay or off-screen. framer-motion
+  doesn't auto-pause based on intersection-observer.
+- Fix: gate the `animate` and `transition` props on the visibility/state condition. When
+  `state === "pill"` (overlay open), set `animate={{ scale: 1 }}` + `transition={{ duration: 0 }}` —
+  the animation stops scheduling entirely.
+
+### `backdrop-filter` is the most expensive paint property at scale
+- Each element with `backdrop-blur` triggers an offscreen render pass of everything behind it,
+  blurred. Stack 10+ blurred labels on a dragged card and frame rate drops noticeably even on
+  M1.
+- Defensive pattern: gate `backdrop-blur-*` classes with `!isDragging && "backdrop-blur-sm"`.
+  During drag (high frame rate, animated transform), drop the blur. After drag, restore.
+- This applies recursively to children of dragged elements — the parent dropping blur isn't enough
+  if children still apply `backdrop-blur-sm`.
+
+### Verification gotcha: desktop-ui has no `typecheck` script
+- `pnpm --filter @openlinear/desktop-ui typecheck` returns "no script". Direct `npx tsc --noEmit`
+  from the package dir works. Workspace `pnpm typecheck` runs api/sidecar/db/types via turbo.
+- Recommend adding `"typecheck": "tsc --noEmit"` to apps/desktop-ui/package.json so it's covered
+  by the turbo pipeline (filed mentally for a future T-task).

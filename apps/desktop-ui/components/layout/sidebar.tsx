@@ -222,12 +222,21 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
 
     return (
         <aside
-            className="bg-linear-bg-secondary border-r border-linear-border flex flex-col flex-shrink-0 overflow-hidden h-full"
+            className="bg-linear-bg-secondary border-r border-linear-border flex-shrink-0 overflow-hidden h-full relative"
             style={{
-                width: open ? width : 0,
-                transition: animating ? 'width 150ms cubic-bezier(0.25, 0.1, 0.25, 1)' : 'none',
+                width: 'var(--sidebar-width, 0px)',
             }}
+            aria-hidden={!open}
         >
+            <div
+                className="flex flex-col h-full"
+                style={{
+                    width: `${width}px`,
+                    transform: open ? 'translateX(0)' : `translateX(-${width}px)`,
+                    transition: animating ? 'transform 150ms cubic-bezier(0.25, 0.1, 0.25, 1)' : 'none',
+                    willChange: animating ? 'transform' : 'auto',
+                }}
+            >
             <div className="p-4 border-b border-linear-border flex items-center justify-between min-w-0" data-tauri-drag-region>
                 <div className="flex items-center gap-3">
                     {isTauri && (
@@ -386,6 +395,7 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
                         Sign in
                     </a>
                 )}
+            </div>
             </div>
 
             <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
