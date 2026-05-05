@@ -854,3 +854,37 @@ Once `teamMember.deleteMany` runs, the connected EventSource clients still have 
   ONLY if any failed (don't rollback successes — they're confirmed by SSE).
   For partial failures, single summary toast with "Failed N of M" beats N
   individual error toasts (which become unreadable at scale).
+
+T26 (markdown rendering):
+- pnpm install conflict "ERR_PNPM_INCLUDED_DEPS_CONFLICT modules dir installed
+  with optionalDependencies, dependencies, devDependencies. Current install
+  wants optionalDependencies, dependencies" is caused by `NODE_ENV=production`
+  in the env. Fix: `NODE_ENV=development pnpm --filter <pkg> add ...`. The
+  --include flag does NOT override; the env var wins.
+- react-markdown 9.x ships ESM-only and types `Components` from the top-level
+  export. Use `import ReactMarkdown, { type Components } from "react-markdown"`.
+  Default config is XSS-safe — raw HTML in markdown is dropped unless you
+  opt into rehype-raw. NEVER enable it for user-submitted content.
+- This repo has no @tailwindcss/typography. Inline component map is the right
+  call: ~15 element overrides covers descriptions+comments and stays themed
+  with the existing linear-* tokens. `prose prose-invert` would have required
+  installing+configuring the plugin, plus the dark variants override most
+  prose classes anyway — net zero benefit at higher install cost.
+- For embedded links inside a click-to-edit container, the `target.tagName ===
+  'A' || target.closest('a')` guard from existing code is the right pattern;
+  reuse it verbatim when wrapping <MarkdownView> in a clickable surface.
+
+## T34 - PNG → SVG logo migration
+
+- Plan listed header.tsx + footer.tsx as targets but landing app uses
+  text-only branding (no `<img src="/logo.png">` anywhere). Always grep
+  before assuming planned edit sites exist.
+- `grep -rn "logo.png" apps/` returns matches inside
+  `apps/desktop-ui/out/**` (Next.js export artifacts). These are gitignored
+  build output — narrow grep to source dirs (`components`, `app`, `lib`)
+  to get a meaningful "0 matches" verification.
+- Sidebar uses logomark (square, 16px), login splash uses wordmark (h-12,
+  needs horizontal lockup) — picking the right SVG variant per spatial
+  context matters more than uniformity.
+- 4MB PNG placeholder → ~400 byte SVG. Always check file sizes before
+  shipping placeholder assets to prod.

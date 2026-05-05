@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next"
-import { DM_Mono, DM_Sans, EB_Garamond, Space_Grotesk } from "next/font/google"
+import { DM_Mono, DM_Sans, Space_Grotesk } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "next-themes"
 import { AuthProvider } from "@/hooks/use-auth"
@@ -20,11 +20,6 @@ const spaceGrotesk = Space_Grotesk({
 const dmSans = DM_Sans({
   subsets: ["latin"],
   variable: "--font-dm-sans",
-})
-
-const ebGaramond = EB_Garamond({
-  subsets: ["latin"],
-  variable: "--font-eb-garamond",
 })
 
 const dmMono = DM_Mono({
@@ -82,13 +77,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${spaceGrotesk.variable} ${dmSans.variable} ${ebGaramond.variable} ${dmMono.variable}`}
+      className={`${spaceGrotesk.variable} ${dmSans.variable} ${dmMono.variable}`}
       suppressHydrationWarning
     >
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&display=swap" rel="stylesheet" />
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var s=localStorage.getItem("openlinear-accent");if(s){var c=JSON.parse(s);document.documentElement.style.setProperty("--linear-accent",c.accent);document.documentElement.style.setProperty("--linear-accent-hover",c.hover)}}catch(e){}})()`,

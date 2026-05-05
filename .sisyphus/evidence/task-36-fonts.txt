@@ -1,0 +1,2 @@
+820K	apps/desktop-ui/public/fonts/
+960K	apps/desktop-ui/app/fonts/

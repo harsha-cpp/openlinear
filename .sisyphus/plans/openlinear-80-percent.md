@@ -1230,7 +1230,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 17. **Convert TaskDetailView to Radix Sheet + fix project name placeholder**
+- [x] 17. **Convert TaskDetailView to Radix Sheet + fix project name placeholder**
 
   **What to do**: Refactor `apps/desktop-ui/components/task-detail-view.tsx` to wrap in `<Sheet>` from T2; remove custom `Escape` handler (Sheet handles); fix line 467 hardcoded `"OpenLinear"` to render `{project?.name}` (pass project as prop OR look up via task.projectId in caller); fix double-save on blur+enter (track `saved` flag).
 
@@ -1376,7 +1376,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 22. **Form error pipeline: surface errors with toast + inline**
+- [x] 22. **Form error pipeline: surface errors with toast + inline**
 
   **What to do**: Replace `console.error` swallows in:
   - `apps/desktop-ui/app/projects/page.tsx:374-378,381-395,397-425` (3 handlers)
@@ -1474,7 +1474,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ### WAVE 4 — FEATURES
 
-- [ ] 25. **Cmd+K command palette: cmdk + navigate/quick-actions + search results**
+- [x] 25. **Cmd+K command palette: cmdk + navigate/quick-actions + search results**
 
   **What to do**: Create `apps/desktop-ui/components/command-palette.tsx` using `<Command>` primitive from T2:
   - Mount at root (in `apps/desktop-ui/app/layout.tsx`); open via `cmd+k` (mac) / `ctrl+k` (windows) global hotkey
@@ -1511,7 +1511,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 26. **Markdown rendering: descriptions + comments**
+- [x] 26. **Markdown rendering: descriptions + comments**
 
   **What to do**: Install `react-markdown` + `remark-gfm` (GFM tables/strikethrough/task lists). Replace plain `<textarea>`+`whitespace-pre-wrap` in `apps/desktop-ui/components/task-detail-view.tsx` with split: edit mode = `<textarea>`, view mode = `<ReactMarkdown>`. Same for comment thread (T27). Custom styling via `prose` Tailwind plugin OR custom component map.
 
@@ -1538,7 +1538,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 27. **Comments UI: composer + thread + @mention autocomplete**
+- [x] 27. **Comments UI: composer + thread + @mention autocomplete**
 
   **What to do**: Add `<CommentsThread>` component under task description in `task-detail-view.tsx`:
   - List existing comments via T10 GET; group with avatar + relative time
@@ -1572,7 +1572,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 28. **Inbox real notifications: list from T13 with grouping + mark-read**
+- [x] 28. **Inbox real notifications: list from T13 with grouping + mark-read**
 
   **What to do**: Refactor `apps/desktop-ui/app/inbox/page.tsx`:
   - Replace task-based inbox with notifications from T13 GET `/api/notifications`
@@ -1607,7 +1607,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 29. **Working theme switcher: next-themes wired to settings + Toaster + meta**
+- [x] 29. **Working theme switcher: next-themes wired to settings + Toaster + meta**
 
   **What to do**: Install `next-themes`. Wrap `apps/desktop-ui/app/layout.tsx` body in `<ThemeProvider attribute="class" defaultTheme="dark" enableSystem>`. Wire `apps/desktop-ui/app/settings/page.tsx:691-720` `setTheme` to `useTheme().setTheme()`. Update `<Toaster theme={theme}>` (currently hardcoded "dark"). Update meta `theme-color` reactively. Limit options to **Dark / System** for now (light explicitly deferred — show "Light theme coming soon" disabled).
 
@@ -1634,7 +1634,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 30. **Keyboard shortcuts: react-hotkeys-hook + ? overlay**
+- [x] 30. **Keyboard shortcuts: react-hotkeys-hook + ? overlay**
 
   **What to do**: Install `react-hotkeys-hook`. Create `apps/desktop-ui/components/shortcuts-overlay.tsx`: opens via `?` key, shows grouped list (Navigation: g i / g m / g p / g t; Actions: c=create task, /=search, ?=help, esc=close; Editing: cmd+enter=save). Add `useHotkeys` calls at root for global bindings; per-page for contextual.
 
@@ -1661,7 +1661,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 31. **Inline task creation in board columns + bulk-select + bulk actions**
+- [x] 31. **Inline task creation in board columns + bulk-select + bulk actions**
 
   **What to do**:
   - Edit `apps/desktop-ui/components/board/column.tsx`: add "+ Add task" row at bottom; click → inline input; Enter creates via apiFetch + optimistic update; Esc cancels
@@ -1697,7 +1697,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 32. **Assignee/creator UI: picker in task detail + my-issues filters by current user**
+- [x] 32. **Assignee/creator UI: picker in task detail + my-issues filters by current user**
 
   **What to do**:
   - Add assignee picker in `task-detail-view.tsx` sidebar (Avatar + dropdown listing team members); writes via PATCH /tasks/:id `{assigneeId}` (auto-creates assignment notification via T13)
@@ -1730,7 +1730,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 33. **Cost analytics page: /usage with per-task + aggregate from AgentRun**
+- [x] 33. **Cost analytics page: /usage with per-task + aggregate from AgentRun**
 
   **What to do**: Create `apps/desktop-ui/app/usage/page.tsx`:
   - Header: total cost this month, total tokens, total runs, avg cost/run

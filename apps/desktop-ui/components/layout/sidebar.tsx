@@ -279,7 +279,7 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
                             />
                         </div>
                     )}
-                  <img src="/logo.png" alt="OpenLinear" className="h-[16px]" />
+                  <img src="/brand/logomark.svg" alt="OpenLinear" className="h-[16px]" />
                 </div>
                 <div className="flex items-center gap-1">
                     <button

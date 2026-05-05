@@ -1,0 +1,7 @@
+apps/landing/components/performance-section.tsx:20:                {/* mem0 bar */}
+apps/landing/components/performance-section.tsx:24:                    <span className="text-xs text-white/70">mem0</span>
+apps/landing/components/performance-section.tsx:29:                {/* zep bar */}
+apps/landing/components/performance-section.tsx:33:                    <span className="text-xs text-white/70">zep</span>
+apps/landing/components/performance-section.tsx:55:                OpenLinear retrieves memories in milliseconds — up to 10× faster than Zep and 25× faster than Mem0.
+apps/landing/components/integrations-section.tsx:51:              OpenLinear connects to Google Drive, Notion, Onedrive and more and syncs user context.
+---BEFORE GREP DONE---

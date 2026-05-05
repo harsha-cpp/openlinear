@@ -83,20 +83,21 @@
     --card-foreground: 228 20% 10%;
     --popover: 0 0% 100%;
     --popover-foreground: 228 20% 10%;
-    --primary: 243 40% 46%;
+    /* Canonical OpenLinear blue accent — synced with desktop-ui (#1d4ed8) */
+    --primary: 224 76% 48%;
     --primary-foreground: 0 0% 100%;
     --secondary: 228 14% 95.5%;
     --secondary-foreground: 228 20% 10%;
     --muted: 228 12% 96.5%;
     --muted-foreground: 228 8% 46%;
-    --accent: 243 40% 46%;
+    --accent: 224 76% 48%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 228 10% 90%;
     --input: 228 10% 90%;
-    --ring: 243 40% 46%;
-    --chart-1: 243 40% 46%;
+    --ring: 224 76% 48%;
+    --chart-1: 224 76% 48%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
@@ -104,12 +105,23 @@
     --radius: 0.75rem;
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 243 40% 46%;
+    --sidebar-primary: 224 76% 48%;
     --sidebar-primary-foreground: 0 0% 98%;
     --sidebar-accent: 240 4.8% 95.9%;
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 243 40% 46%;
+    --sidebar-ring: 224 76% 48%;
+
+    /* Canonical brand accent (hex) — must match desktop-ui.
+       Runtime-themable in desktop-ui via the accent-color picker;
+       static on landing for marketing consistency. */
+    --linear-accent: #1d4ed8;
+    --linear-accent-hover: #1e40af;
+
+    /* Landing-only secondary decoration (warm cream/gold).
+       NEVER apply to CTAs, buttons, or focus rings. Backgrounds + ornaments only. */
+    --landing-warm-cream: #ede8d0;
+    --landing-warm-cream-rgb: 237, 232, 208;
   }
 
   .dark {
@@ -119,32 +131,33 @@
     --card-foreground: 49 43% 87%;
     --popover: 228 18% 11%;
     --popover-foreground: 49 43% 87%;
-    --primary: 49 35% 72%;
-    --primary-foreground: 228 18% 11%;
+    /* Canonical OpenLinear blue accent — synced with desktop-ui (#1d4ed8) */
+    --primary: 224 76% 48%;
+    --primary-foreground: 0 0% 100%;
     --secondary: 228 12% 16%;
     --secondary-foreground: 49 30% 80%;
     --muted: 228 12% 16%;
     --muted-foreground: 228 8% 50%;
-    --accent: 49 35% 72%;
-    --accent-foreground: 228 18% 11%;
+    --accent: 224 76% 48%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 49 43% 95%;
     --border: 228 12% 20%;
     --input: 228 12% 20%;
-    --ring: 49 35% 72%;
-    --chart-1: 49 43% 87%;
+    --ring: 224 76% 48%;
+    --chart-1: 224 76% 48%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 45 50% 60%;
     --chart-5: 340 75% 55%;
     --sidebar-background: 228 18% 11%;
     --sidebar-foreground: 49 43% 87%;
-    --sidebar-primary: 49 35% 72%;
-    --sidebar-primary-foreground: 228 18% 11%;
+    --sidebar-primary: 224 76% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 228 12% 15%;
     --sidebar-accent-foreground: 49 43% 87%;
     --sidebar-border: 228 12% 20%;
-    --sidebar-ring: 49 35% 72%;
+    --sidebar-ring: 224 76% 48%;
   }
 }
 
