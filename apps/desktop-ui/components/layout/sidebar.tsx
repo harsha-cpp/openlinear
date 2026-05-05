@@ -5,7 +5,7 @@ import Link from "next/link"
 import { usePathname, useSearchParams, useRouter } from "next/navigation"
 import {
     Home, Inbox, Layers, Settings,
-    PanelLeftClose, LogOut, Archive, Brain,
+    PanelLeftClose, LogOut, Archive, Brain, BarChart3,
     ChevronRight, ChevronDown, CircleDot, Hexagon, MoreHorizontal, Pencil, Trash2, Plus
 } from "lucide-react"
 import { ProjectSelector } from "@/components/auth/project-selector"
@@ -355,6 +355,10 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
                     <Link href="/archived" className={navItemClass(pathname === "/archived")}>
                         <Archive className="w-4 h-4 flex-shrink-0" />
                         <span>Archived</span>
+                    </Link>
+                    <Link href="/usage" className={navItemClass(pathname === "/usage")}>
+                        <BarChart3 className="w-4 h-4 flex-shrink-0" />
+                        <span>Usage</span>
                     </Link>
                     <Link href="/settings?section=ai-providers" className={navItemClass(pathname === "/settings" && searchParams.get("section") === "ai-providers")}>
                         <Brain className="w-4 h-4 flex-shrink-0" />

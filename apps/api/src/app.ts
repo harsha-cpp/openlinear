@@ -24,6 +24,7 @@ import commentsRouter from './routes/comments';
 import notificationsRouter from './routes/notifications';
 import activityLogRouter from './routes/activity-log';
 import agentRunsRouter from './routes/agent-runs';
+import usageRouter from './routes/usage';
 import jwt from 'jsonwebtoken';
 import { clients, SSEClient } from './sse';
 import { logger } from './logger';
@@ -146,6 +147,7 @@ export function createApp(): Application {
   app.use('/api/activity', activityLogRouter);
   app.use('/api/search', searchRouter);
   app.use('/api/agent-runs', agentRunsRouter);
+  app.use('/api/usage', usageRouter);
 
   app.get('/health', (_req: Request, res: Response) => {
     res.json({
