@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { X, ArrowLeft, Bot, Wrench, CheckCircle, AlertCircle, Info, Clock, AlertTriangle, Flag, Tag, Folder, Square, Archive, GitMerge, ExternalLink, Play, Check, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet"
+import { MarkdownView } from "@/components/markdown-view"
 import { cn, openExternal } from "@/lib/utils"
 import { Task, ExecutionProgress, ExecutionLogEntry, formatDuration } from "@/types/task"
 
@@ -345,18 +346,18 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                       rows={4}
                     />
                   ) : task.description ? (
-                    <p
-                      className="text-sm text-linear-text-secondary leading-relaxed whitespace-pre-wrap cursor-text hover:text-linear-text-secondary/80"
+                    <div
+                      className="cursor-text rounded-md -mx-2 px-2 py-1 hover:bg-linear-bg-secondary/40"
                       onClick={(e) => {
-                        // Don't enter edit mode when the user clicks an embedded link in the description.
+                        // Don't enter edit mode when clicking embedded markdown links.
                         const target = e.target as HTMLElement
                         if (target.tagName === 'A' || target.closest('a')) return
                         setDescriptionDraft(task.description || "")
                         setEditingDescription(true)
                       }}
                     >
-                      {task.description}
-                    </p>
+                      <MarkdownView body={task.description} />
+                    </div>
                   ) : (
                     <button
                       className="text-sm text-linear-text-tertiary hover:text-linear-text-secondary"
