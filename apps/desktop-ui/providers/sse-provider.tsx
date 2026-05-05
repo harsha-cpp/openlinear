@@ -1,11 +1,76 @@
 "use client"
 
 import { createContext, useContext, useEffect, useRef, useCallback, useState, type ReactNode } from "react"
-import type { SSEEventType, SSEEventData } from "@/hooks/use-sse"
 import { useAuth } from "@/hooks/use-auth"
 import { getApiUrl, getSidecarApiUrl } from "@/lib/api/client"
 
 const SSE_MAX_BACKOFF_MS = 30_000
+
+export interface SSEEventData {
+  type?: string
+  clientId?: string
+  id?: string
+  title?: string
+  description?: string | null
+  priority?: 'low' | 'medium' | 'high'
+  status?: 'todo' | 'in_progress' | 'done' | 'cancelled'
+  sessionId?: string | null
+  createdAt?: string
+  updatedAt?: string
+  labels?: Array<{
+    id: string
+    name: string
+    color: string
+    priority: number
+  }>
+  executionStartedAt?: string | null
+  executionPausedAt?: string | null
+  executionElapsedMs?: number
+  executionProgress?: number | null
+  prUrl?: string | null
+  outcome?: string | null
+  batchId?: string | null
+  inboxRead?: boolean
+  identifier?: string | null
+  number?: number | null
+  dueDate?: string | null
+  taskId?: string
+  mode?: string
+  tasks?: Array<{
+    taskId: string
+    title: string
+    status: 'queued' | 'running' | 'completed' | 'failed' | 'skipped' | 'cancelled'
+  }>
+}
+
+export type SSEEventType =
+  | 'connected'
+  | 'task:created'
+  | 'task:updated'
+  | 'task:deleted'
+  | 'label:created'
+  | 'label:updated'
+  | 'label:deleted'
+  | 'settings:updated'
+  | 'execution:progress'
+  | 'execution:log'
+  | 'batch:created'
+  | 'batch:started'
+  | 'batch:task:started'
+  | 'batch:task:completed'
+  | 'batch:task:failed'
+  | 'batch:task:skipped'
+  | 'batch:task:cancelled'
+  | 'batch:merging'
+  | 'batch:completed'
+  | 'batch:failed'
+  | 'batch:cancelled'
+  | 'team:created'
+  | 'team:updated'
+  | 'team:deleted'
+  | 'project:created'
+  | 'project:updated'
+  | 'project:deleted'
 
 type SSEListener = (eventType: SSEEventType, data: SSEEventData) => void
 

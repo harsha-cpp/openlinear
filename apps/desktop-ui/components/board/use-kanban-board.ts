@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useDeferredValue, useMemo } from "react"
 import { DropResult } from "@hello-pangea/dnd"
 import { toast } from "sonner"
-import { SSEEventType, SSEEventData } from "@/hooks/use-sse"
+import type { SSEEventType, SSEEventData } from "@/providers/sse-provider"
 import { useSSESubscription } from "@/providers/sse-provider"
 import { useAuth } from "@/hooks/use-auth"
 import { Project } from "@/lib/api"

@@ -3,14 +3,16 @@
 import { useState, useEffect, useCallback } from "react"
 import {
   Layers, Clock, GitPullRequest, ExternalLink,
-  Loader2, Circle, Timer, CheckCircle2, XCircle
+  Circle, Timer, CheckCircle2, XCircle
 } from "lucide-react"
 import { AppShell } from "@/components/layout/app-shell"
 import { cn, openExternal } from "@/lib/utils"
 import { formatDuration } from "@/types/task"
 import { fetchMyIssues, type MyIssueTask } from "@/lib/api"
 import { useSSESubscription } from "@/providers/sse-provider"
-import type { SSEEventType, SSEEventData } from "@/hooks/use-sse"
+import type { SSEEventType, SSEEventData } from "@/providers/sse-provider"
+import { EmptyState } from "@/components/empty-state"
+import { Skeleton } from "@/components/ui/skeleton"
 
 type StatusGroup = 'in_progress' | 'todo' | 'done' | 'cancelled'
 
@@ -164,15 +166,34 @@ export default function MyIssuesPage() {
 
       <div className="flex-1 overflow-y-auto bg-linear-bg">
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-5 h-5 animate-spin text-linear-text-tertiary" />
+          <div>
+            {Array.from({ length: 2 }).map((_, gi) => (
+              <div key={gi}>
+                <div className="flex items-center gap-2 px-4 py-2 bg-white/[0.015] border-b border-linear-border">
+                  <Skeleton className="w-3.5 h-3.5 rounded" />
+                  <Skeleton className="h-3 w-20 rounded" />
+                </div>
+                <div className="divide-y divide-white/[0.04]">
+                  {Array.from({ length: 3 }).map((_, ri) => (
+                    <div key={ri} className="flex items-center gap-3 px-4 py-3">
+                      <Skeleton className="w-2 h-2 rounded-full" />
+                      <div className="flex-1 space-y-1.5">
+                        <Skeleton className="h-3.5 w-2/3 rounded" />
+                        <Skeleton className="h-2.5 w-32 rounded" />
+                      </div>
+                      <Skeleton className="h-3 w-12 rounded" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         ) : tasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-linear-text-tertiary">
-            <Layers className="w-10 h-10 mb-3 opacity-40" />
-            <p className="text-sm">No issues yet</p>
-            <p className="text-xs mt-1 opacity-60">Create tasks in a project to see them here</p>
-          </div>
+          <EmptyState
+            icon={Layers}
+            title="No issues yet"
+            description="Create tasks in a project to see them here"
+          />
         ) : (
           <div>
             {grouped.map(({ status, tasks: groupTasks }) => {
