@@ -83,6 +83,7 @@ async function main() {
     create: {
       id: "seed-user-demo",
       username: "demo",
+      email: "demo@openlinear.tech",
     },
   });
   console.log(`[seed] Upserted user "${user.username}"`);
@@ -113,7 +114,7 @@ async function main() {
     console.log(`[seed] Backfilled invite codes for ${teamsWithoutCode.length} teams`);
   }
 
-  // 4. Link kaz to Default team
+  // 4. Link demo user to Default team
   await prisma.teamMember.upsert({
     where: { teamId_userId: { teamId: team.id, userId: user.id } },
     update: {},
