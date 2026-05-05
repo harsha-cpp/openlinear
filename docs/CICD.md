@@ -113,7 +113,7 @@ All three jobs run in **parallel**.
 | **build-macos-intel** | macos-13 | Tauri → .dmg (x86_64) | 40 min |
 | **build-macos-arm** | macos-14 | Tauri → .dmg (aarch64) | 40 min |
 | **create-release** | ubuntu-22.04 | Collect artifacts → GitHub Release | 10 min |
-| **publish-cli** | ubuntu-22.04 | Publish `@kaizen403/openlinear-cli` to GitHub Packages | 10 min |
+| **publish-cli** | ubuntu-22.04 | Publish `@openlinear/openlinear-cli` to GitHub Packages | 10 min |
 
 All 3 build jobs run in parallel. `create-release` collects them. `publish-cli` fires after the release is created.
 
@@ -125,7 +125,7 @@ openlinear-{v}-x86_64.deb             Debian / Ubuntu
 openlinear-{v}-x86_64.dmg             macOS Intel
 openlinear-{v}-aarch64.dmg            macOS Apple Silicon
 openlinear-api-{v}-x86_64             API sidecar binary (Linux)
-@kaizen403/openlinear-cli@{v}         npm (GitHub Packages)
+@openlinear/openlinear-cli@{v}         npm (GitHub Packages)
 ```
 
 ---

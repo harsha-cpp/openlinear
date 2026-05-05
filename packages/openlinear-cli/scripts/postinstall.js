@@ -14,7 +14,7 @@ if (platform !== 'linux' || arch !== 'x64') {
 }
 
 const baseUrl = process.env.OPENLINEAR_RELEASE_BASE_URL ||
-  `https://github.com/kaizen403/openlinear/releases/download/v${packageJson.version}`;
+  `https://github.com/openlinear/openlinear/releases/download/v${packageJson.version}`;
 const fileName = `openlinear-${packageJson.version}-x86_64.AppImage`;
 const downloadUrl = `${baseUrl}/${fileName}`;
 

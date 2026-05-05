@@ -20,7 +20,7 @@ npm run build
 
 NPMRC_FILE=".npmrc.github"
 cat > "$NPMRC_FILE" << EOF
-@kaizen403:registry=https://npm.pkg.github.com
+@openlinear:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 EOF
 
@@ -30,7 +30,7 @@ ORIG_PUBLISH_CONFIG=$(node -p "JSON.stringify(require('./package.json').publishC
 node -e "
 const fs = require('fs');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-pkg.name = '@kaizen403/openlinear';
+pkg.name = '@openlinear/openlinear';
 pkg.publishConfig = { registry: 'https://npm.pkg.github.com', access: 'public' };
 fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
 "
@@ -48,4 +48,4 @@ fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
 rm -f "$NPMRC_FILE"
 
 echo ""
-echo "Done! https://github.com/kaizen403?tab=packages"
+echo "Done! https://github.com/openlinear?tab=packages"

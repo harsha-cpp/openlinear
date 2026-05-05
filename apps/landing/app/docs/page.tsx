@@ -166,11 +166,11 @@ function SectionGettingStarted() {
       </Paragraph>
 
       <SubHeading>Prerequisites</SubHeading>
-      <BulletList items={["Node.js 18+", "pnpm package manager", "Docker (for PostgreSQL and worker containers)"]} />
+      <BulletList items={["Node.js 22+", "pnpm 9+", "Docker (for the local PostgreSQL container)", "A GitHub OAuth app (for login and repo access)"]} />
 
       <SubHeading>Installation</SubHeading>
       <CodeBlock>{`# Clone and install dependencies
-git clone https://github.com/kaizen403/openlinear.git
+git clone https://github.com/openlinear/openlinear.git
 cd openlinear
 pnpm install
 
@@ -885,48 +885,49 @@ function SectionOpenCodeIntegration() {
     <section>
       <SectionHeading id="opencode-integration">OpenCode Integration</SectionHeading>
       <Paragraph>
-        OpenLinear uses OpenCode as its AI coding agent. Each user gets an isolated Docker container running their own
-        OpenCode instance.
+        OpenLinear uses OpenCode as its AI coding agent. The agent runs directly on your machine as a bundled
+        Tauri sidecar process, working against an isolated git worktree per task. No Docker, no container overhead,
+        no shared infrastructure between users.
       </Paragraph>
 
-      <SubHeading>Container-per-User Architecture</SubHeading>
+      <SubHeading>Sidecar Architecture</SubHeading>
       <NumberedList
         items={[
-          "User triggers a task execution",
-          "API checks if the user already has a running container",
-          "If not, a new container is created from the opencode-worker image",
-          "The repository is mounted into the container",
-          "The agent session starts with the task prompt",
+          "User triggers a task execution from the kanban board",
+          "API creates an isolated git worktree for the task branch",
+          "The bundled OpenCode sidecar starts a session in that worktree",
+          "The agent receives the task prompt and begins editing files",
+          "Tool calls and file edits stream back over SSE in real time",
         ]}
       />
 
-      <SubHeading>Container Lifecycle</SubHeading>
+      <SubHeading>Process Lifecycle</SubHeading>
       <DocTable
         headers={["State", "Description"]}
         rows={[
-          ["starting", "Container is being created and initialized"],
-          ["running", "Container is active and processing"],
-          ["stopping", "Container is shutting down gracefully"],
-          ["stopped", "Container has been removed"],
-          ["error", "Container encountered a fatal error"],
+          ["starting", "Sidecar process is spawning and binding to a free port"],
+          ["running", "Session is active and processing the task"],
+          ["stopping", "Session is finishing and cleaning up the worktree"],
+          ["stopped", "Process has exited and the worktree is removed"],
+          ["error", "Sidecar crashed or returned a fatal error"],
         ]}
       />
 
       <SubHeading>Idle Cleanup</SubHeading>
       <Paragraph>
-        Containers that have been idle for more than 10 minutes are automatically stopped and removed to conserve
-        resources. The cleanup runs on a periodic interval.
+        Idle sessions are reaped after the configured timeout to free up worktree disk space and ports. Cleanup runs
+        on a periodic interval inside the API process.
       </Paragraph>
 
       <SubHeading>Recovery</SubHeading>
       <Paragraph>
-        On API restart, all running containers are detected and their state is reconciled. Orphaned containers are
-        cleaned up, and in-progress executions are marked as failed.
+        On API restart, orphaned worktrees and sidecar processes are detected and cleaned up. In-progress executions
+        are marked as failed so the user can retry from the board.
       </Paragraph>
 
       <SubHeading>SDK Usage</SubHeading>
       <Paragraph>
-        The API communicates with OpenCode containers via the OpenCode SDK. The SDK handles session creation, message
+        The API talks to the OpenCode sidecar over the OpenCode SDK. The SDK handles session creation, message
         sending, and event streaming.
       </Paragraph>
       <CodeBlock>{`import { OpenCode } from "@opencode/sdk"
@@ -1113,17 +1114,17 @@ function SectionArchitecture() {
         ]}
       />
 
-      <SubHeading>Container-per-User</SubHeading>
+      <SubHeading>Per-User Isolation</SubHeading>
       <Paragraph>
-        Each user gets a dedicated Docker container for AI agent execution. Containers are created on-demand and cleaned
-        up after idle timeout. This ensures complete isolation of credentials and file system access.
+        Each task execution runs in its own git worktree on the user's machine, with the OpenCode sidecar bound to
+        a dedicated ephemeral port. Worktrees are created on-demand and removed when the session ends, isolating
+        credentials, branches, and file changes between tasks.
       </Paragraph>
 
       <SubHeading>Docker Services</SubHeading>
       <BulletList
         items={[
-          "postgres \u2014 PostgreSQL 15 database",
-          "opencode-worker \u2014 per-user AI agent container (created dynamically)",
+          "postgres \u2014 PostgreSQL 15 database for local development",
         ]}
       />
 

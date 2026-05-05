@@ -38,14 +38,15 @@ export function Header() {
 
         {/* Right side actions */}
         <div className="hidden md:flex items-center gap-4">
-          <a 
-            href="https://github.com/kaizen403/openlinear" 
+          <a
+            href="https://github.com/openlinear/openlinear"
             className="flex items-center gap-2 text-sm text-white/60 hover:text-white transition-colors pr-2"
             target="_blank"
             rel="noopener noreferrer"
+            aria-label="GitHub"
           >
-            <span className="font-medium text-white/80">X</span>
-            <span className="font-medium">1.2k</span>
+            <Github className="h-4 w-4" />
+            <span className="font-medium">GitHub</span>
           </a>
 
           <a

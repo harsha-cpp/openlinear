@@ -6,8 +6,8 @@
 
 OpenLinear is an open-source desktop app that connects a Linear-style task board to AI coding agents. Create a task, describe what you want, hit execute — and get a pull request with working code.
 
-[![GitHub](https://img.shields.io/github/stars/kaizen403/openlinear?style=social)](https://github.com/kaizen403/openlinear)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/kaizen403/openlinear/blob/main/LICENSE)
+[![GitHub](https://img.shields.io/github/stars/openlinear/openlinear?style=social)](https://github.com/openlinear/openlinear)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/openlinear/openlinear/blob/main/LICENSE)
 [![Live](https://img.shields.io/badge/try%20it-openlinear.tech-purple)](https://openlinear.tech)
 
 </div>
@@ -33,22 +33,22 @@ Next.js, Tauri, Express.js, PostgreSQL, Prisma, OpenCode SDK
 ### Get Started
 
 ```bash
-git clone https://github.com/kaizen403/openlinear.git
+git clone https://github.com/openlinear/openlinear.git
 cd openlinear && pnpm install
 docker compose up -d
 pnpm db:push && pnpm dev
 ```
 
-Full setup guide and architecture docs in the [repository](https://github.com/kaizen403/openlinear).
+Full setup guide and architecture docs in the [repository](https://github.com/openlinear/openlinear).
 
 ### Links
 
-- [Repository](https://github.com/kaizen403/openlinear)
-- [Documentation](https://github.com/kaizen403/openlinear/tree/main/docs/features)
-- [Architecture](https://github.com/kaizen403/openlinear/blob/main/docs/ARCHITECTURE.md)
-- [Releases](https://github.com/kaizen403/openlinear/releases)
+- [Repository](https://github.com/openlinear/openlinear)
+- [Documentation](https://github.com/openlinear/openlinear/tree/main/docs/features)
+- [Architecture](https://github.com/openlinear/openlinear/blob/main/docs/ARCHITECTURE.md)
+- [Releases](https://github.com/openlinear/openlinear/releases)
 - [Live Instance](https://openlinear.tech)
 
 ### License
 
-[MIT](https://github.com/kaizen403/openlinear/blob/main/LICENSE)
+[MIT](https://github.com/openlinear/openlinear/blob/main/LICENSE)

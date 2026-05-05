@@ -28,7 +28,7 @@ export function FinalCTASection() {
           </a>
           
           <a
-            href="https://github.com/kaizen403/openlinear"
+            href="https://github.com/openlinear/openlinear"
             className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-white/[0.04] border border-white/[0.12] text-white font-medium hover:bg-white/[0.08] hover:border-white/[0.2] transition-all"
             target="_blank"
             rel="noopener noreferrer"

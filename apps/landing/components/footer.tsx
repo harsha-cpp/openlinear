@@ -14,7 +14,7 @@ const footerLinks: Record<string, FooterLink[]> = {
 
 const socialLinks: FooterLink[] = [
   // GitHub URL is a placeholder pending T41 (real org URL)
-  { label: "GitHub", href: "https://github.com/kaizen403/openlinear", external: true },
+  { label: "GitHub", href: "https://github.com/openlinear/openlinear", external: true },
 ]
 
 const socialIcons: Record<string, string> = {

@@ -1,11 +1,11 @@
 {
-  "name": "@kaizen403/openlinear-cli",
+  "name": "@openlinear/cli",
   "version": "0.1.0",
   "description": "OpenLinear launcher and installer",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kaizen403/openlinear"
+    "url": "https://github.com/openlinear/openlinear"
   },
   "bin": {
     "openlinear": "bin/openlinear.js"

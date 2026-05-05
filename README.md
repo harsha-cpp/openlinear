@@ -57,7 +57,7 @@ The OpenCode AI agent runs directly on your machine as a bundled Tauri sidecar. 
 
 ```bash
 # Clone and install
-git clone https://github.com/kaizen403/openlinear.git
+git clone https://github.com/openlinear/openlinear.git
 cd openlinear
 pnpm install
 
@@ -123,11 +123,11 @@ openlinear/
 
 | Format | Platform | Install |
 |--------|----------|---------|
-| .dmg | macOS (Apple Silicon) | [GitHub Releases](https://github.com/kaizen403/openlinear/releases) |
-| AppImage | Linux | [GitHub Releases](https://github.com/kaizen403/openlinear/releases) |
-| .deb | Debian/Ubuntu | [GitHub Releases](https://github.com/kaizen403/openlinear/releases) |
+| .dmg | macOS (Apple Silicon) | [GitHub Releases](https://github.com/openlinear/openlinear/releases) |
+| AppImage | Linux | [GitHub Releases](https://github.com/openlinear/openlinear/releases) |
+| .deb | Debian/Ubuntu | [GitHub Releases](https://github.com/openlinear/openlinear/releases) |
 | AUR | Arch Linux | `yay -S openlinear-bin` |
-| npm CLI | Any | `npm install @kaizen403/openlinear-cli` |
+| npm CLI | Any | `npm install @openlinear/openlinear-cli` |
 
 > **macOS note**: The app currently ships ad-hoc signed (`signingIdentity: "-"`). On first launch macOS will warn that "Apple cannot verify" the app — right-click → Open, or run `xattr -cr /Applications/OpenLinear.app` to bypass Gatekeeper. To produce a properly signed/notarized build, add a Developer ID certificate and set `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` in the release workflow and replace `signingIdentity: "-"` in `apps/desktop/src-tauri/tauri.conf.json` with your identity name.
 

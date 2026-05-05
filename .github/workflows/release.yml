@@ -209,7 +209,7 @@ jobs:
           node-version: 22
           registry-url: https://npm.pkg.github.com
           cache: pnpm
-          scope: '@kaizen403'
+          scope: '@openlinear'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

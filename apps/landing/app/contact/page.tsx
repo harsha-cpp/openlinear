@@ -60,8 +60,8 @@ export default function ContactPage() {
               {
                 icon: Github,
                 title: "GitHub",
-                detail: "kaizen403/openlinear",
-                href: "https://github.com/kaizen403/openlinear",
+                detail: "openlinear/openlinear",
+                href: "https://github.com/openlinear/openlinear",
               },
             ].map((item) => (
               <div key={item.title} className="glass-panel rounded-xl p-5 flex items-center gap-4 group">
@@ -238,10 +238,10 @@ export default function ContactPage() {
                   <div>
                     <p className="text-[0.75rem] text-muted-foreground/40 mb-1">GitHub</p>
                     <a
-                      href="https://github.com/kaizen403/openlinear"
+                      href="https://github.com/openlinear/openlinear"
                       className="text-primary/80 hover:text-primary text-[0.875rem] transition-colors duration-250"
                     >
-                      github.com/kaizen403/openlinear
+                      github.com/openlinear/openlinear
                     </a>
                   </div>
                 </div>

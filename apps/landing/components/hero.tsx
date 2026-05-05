@@ -59,7 +59,7 @@ export function Hero() {
             Setup in 5 mins
           </a>
           <a
-            href="https://github.com/kaizen403/openlinear"
+            href="https://github.com/openlinear/openlinear"
             className="group inline-flex items-center gap-2 rounded-xl bg-white/[0.03] border border-white/[0.15] px-6 py-3.5 text-sm font-medium text-white/80 hover:text-white hover:bg-white/[0.06] hover:border-white/[0.25] transition-all duration-300"
           >
             Talk to founder
