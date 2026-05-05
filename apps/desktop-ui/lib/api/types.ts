@@ -113,6 +113,10 @@ export interface MyIssueTask {
   project?: { id: string; name: string; status: string; color: string } | null
   identifier?: string | null
   dueDate?: string | null
+  assigneeId?: string | null
+  creatorId?: string | null
+  assignee?: { id: string; username: string; avatarUrl: string | null } | null
+  creator?: { id: string; username: string; avatarUrl: string | null } | null
 }
 
 export interface InboxCount {

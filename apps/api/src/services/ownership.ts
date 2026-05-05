@@ -6,7 +6,8 @@ export type OwnershipResourceType =
   | 'project'
   | 'team'
   | 'comment'
-  | 'label';
+  | 'label'
+  | 'user';
 
 export type OwnershipReason =
   | 'not_found'

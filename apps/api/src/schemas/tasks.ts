@@ -28,11 +28,17 @@ export const updateTaskBodySchema = z.object({
   teamId: z.string().uuid().nullable().optional(),
   projectId: z.string().uuid().nullable().optional(),
   dueDate: z.string().datetime().nullable().optional(),
+  assigneeId: z.string().uuid().nullable().optional(),
 });
+
+// "me" or a UUID — UUID is checked against caller's team membership in the route.
+const meOrUuid = z.union([z.literal('me'), z.string().uuid()]);
 
 export const listTasksQuerySchema = z.object({
   teamId: z.string().uuid().optional(),
   projectId: z.string().uuid().optional(),
+  assignee: meOrUuid.optional(),
+  creator: meOrUuid.optional(),
 });
 
 export type CreateTaskBody = z.infer<typeof createTaskBodySchema>;

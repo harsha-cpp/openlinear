@@ -88,6 +88,8 @@ const taskInclude = {
   labels: { include: { label: true } },
   team: { select: { id: true, name: true, key: true, color: true } },
   project: { select: { id: true, name: true, status: true, color: true } },
+  assignee: { select: { id: true, username: true, avatarUrl: true } },
+  creator: { select: { id: true, username: true, avatarUrl: true } },
 };
 
 const router: Router = Router();
@@ -138,7 +140,7 @@ router.get(
   validateQuery(listTasksQuerySchema),
   async (req: AuthRequest & ValidatedRequest<unknown, ListTasksQuery>, res: Response, next: NextFunction) => {
     try {
-      const { teamId, projectId } = req.validQuery!;
+      const { teamId, projectId, assignee, creator } = req.validQuery!;
 
       const userTeamIds = await getUserTeamIds(req.userId!);
       const where: Record<string, unknown> = { archived: false };
@@ -152,6 +154,30 @@ router.get(
         where.teamId = { in: userTeamIds };
       }
       if (projectId) where.projectId = projectId;
+
+      const resolveUserFilter = async (value: string): Promise<string> => {
+        if (value === 'me') return req.userId!;
+        const member = await prisma.teamMember.findFirst({
+          where: { userId: value, teamId: { in: userTeamIds } },
+          select: { userId: true },
+        });
+        if (!member) {
+          throw new OwnershipError('user', value, 'forbidden');
+        }
+        return value;
+      };
+
+      if (assignee && creator) {
+        const [assigneeId, creatorId] = await Promise.all([
+          resolveUserFilter(assignee),
+          resolveUserFilter(creator),
+        ]);
+        where.OR = [{ assigneeId }, { creatorId }];
+      } else if (assignee) {
+        where.assigneeId = await resolveUserFilter(assignee);
+      } else if (creator) {
+        where.creatorId = await resolveUserFilter(creator);
+      }
 
       const tasks = await prisma.task.findMany({
         where,
@@ -287,7 +313,7 @@ router.patch(
         select: { assigneeId: true, creatorId: true, title: true },
       });
 
-      const { labelIds, teamId, projectId, dueDate, ...updateData } = req.validBody!;
+      const { labelIds, teamId, projectId, dueDate, assigneeId, ...updateData } = req.validBody!;
 
       const data: Record<string, unknown> = { ...updateData };
 
@@ -317,6 +343,27 @@ router.patch(
         }
         data.teamId = teamId;
       }
+
+      if (assigneeId !== undefined) {
+        if (assigneeId === null) {
+          data.assigneeId = null;
+        } else {
+          const effectiveTeamId =
+            (data.teamId as string | null | undefined) ?? existing.teamId ?? null;
+          if (!effectiveTeamId) {
+            throw new ValidationError('Cannot assign user: task has no team');
+          }
+          const member = await prisma.teamMember.findFirst({
+            where: { teamId: effectiveTeamId, userId: assigneeId },
+            select: { userId: true },
+          });
+          if (!member) {
+            throw new OwnershipError('user', assigneeId, 'forbidden');
+          }
+          data.assigneeId = assigneeId;
+        }
+      }
+
       if (labelIds !== undefined) {
         data.labels = {
           deleteMany: {},
@@ -335,7 +382,7 @@ router.patch(
 
       const statusChanged =
         updateData.status !== undefined && updateData.status !== existing.status;
-      const newAssigneeId = (updateData as { assigneeId?: string | null }).assigneeId;
+      const newAssigneeId = assigneeId;
       const previousAssigneeId = previousTaskMeta?.assigneeId ?? null;
       const assigneeChanged =
         newAssigneeId !== undefined && newAssigneeId !== previousAssigneeId;

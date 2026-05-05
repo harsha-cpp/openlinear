@@ -1,8 +1,16 @@
 import { apiFetch } from './fetch';
 import type { InboxCount, InboxTask, MyIssueTask } from './types';
 
-export async function fetchMyIssues(): Promise<MyIssueTask[]> {
-  return apiFetch<MyIssueTask[]>('/api/tasks');
+export async function fetchMyIssues(
+  filter: 'assigned' | 'created' | 'all' = 'assigned',
+): Promise<MyIssueTask[]> {
+  const qs =
+    filter === 'assigned'
+      ? '?assignee=me'
+      : filter === 'created'
+      ? '?creator=me'
+      : '';
+  return apiFetch<MyIssueTask[]>(`/api/tasks${qs}`);
 }
 
 export async function executeTaskPublic(taskId: string): Promise<void> {
