@@ -14,6 +14,17 @@ import { cn } from "@/lib/utils"
 import { deleteTeam, fetchInboxCount, type Team } from "@/lib/api"
 import { useTeams } from "@/providers/teams-provider"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { buttonVariants } from "@/components/ui/button"
 
 const navItemClass = (isActive: boolean) =>
     cn(
@@ -160,18 +171,30 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
         fetchInboxCount().then(setInboxCount).catch(() => setInboxCount({ total: 0, unread: 0 }))
     }, [pathname])
 
-    const handleDeleteTeam = useCallback(async (teamId: string, teamName: string) => {
-        if (!confirm(`Delete "${teamName}"? This action cannot be undone.`)) return
+    const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
+    const [isDeletingTeam, setIsDeletingTeam] = useState(false)
+
+    const handleDeleteTeam = useCallback((teamId: string, teamName: string) => {
+        setDeleteTarget({ id: teamId, name: teamName })
+    }, [])
+
+    const confirmDeleteTeam = useCallback(async () => {
+        if (!deleteTarget) return
+        const { id: teamId } = deleteTarget
         try {
+            setIsDeletingTeam(true)
             await deleteTeam(teamId)
             void reloadTeams()
             if (searchParams.get("teamId") === teamId || (pathname === "/teams/manage" && searchParams.get("id") === teamId)) {
                 router.push('/')
             }
+            setDeleteTarget(null)
         } catch (error) {
             console.error("Failed to delete team:", error)
+        } finally {
+            setIsDeletingTeam(false)
         }
-    }, [reloadTeams, searchParams, pathname, router])
+    }, [deleteTarget, reloadTeams, searchParams, pathname, router])
 
     const handleClose = async () => {
         const { getCurrentWindow } = await import('@tauri-apps/api/window')
@@ -364,6 +387,27 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
                     </a>
                 )}
             </div>
+
+            <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete team</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Delete &ldquo;{deleteTarget?.name}&rdquo;? This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeletingTeam}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(e) => { e.preventDefault(); void confirmDeleteTeam() }}
+                            disabled={isDeletingTeam}
+                            className={cn(buttonVariants({ variant: "destructive" }))}
+                        >
+                            {isDeletingTeam ? "Deleting..." : "Delete"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </aside>
     )
 }

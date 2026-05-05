@@ -657,3 +657,32 @@ Once `teamMember.deleteMany` runs, the connected EventSource clients still have 
 - TeamSection's "nested button" worry was a false alarm: `<div className="flex items-center">` already wraps two SIBLING buttons (chevron-toggle and Popover trigger via `asChild`). Radix `Trigger asChild` clones the child — does NOT add an extra `<button>`.
 - Sidebar `handleClose` was a bug: red macOS traffic-light was calling `minimize()`. Fixed to call `getCurrentWindow().close()` from `@tauri-apps/api/window`.
 - `apps/desktop-ui` has no `typecheck` script — use `npx tsc --noEmit` directly.
+
+## T19 — AlertDialog replaces window.confirm (4 sites)
+
+- T2's `<AlertDialogAction>` defaults to `buttonVariants()` (NOT destructive). For delete/remove
+  flows you MUST pass `className={cn(buttonVariants({ variant: "destructive" }))}` — there's no
+  prop API to override the variant directly. The Action element still uses Radix internals (it's
+  just a styled button) so className override works cleanly.
+- Pattern for "controlled AlertDialog with async action that should show loading state":
+  ```tsx
+  <AlertDialogAction
+    onClick={(e) => { e.preventDefault(); void confirmAction() }}
+    disabled={isLoading}
+    className={cn(buttonVariants({ variant: "destructive" }))}
+  >
+    {isLoading ? "Deleting..." : "Delete"}
+  </AlertDialogAction>
+  ```
+  The `e.preventDefault()` is REQUIRED — without it Radix auto-closes the dialog on click,
+  unmounting the loading state before the request finishes. Caller controls dismissal via
+  `setTarget(null)` in the success branch of the async handler.
+- For "delete X by id with confirmation" pattern with a name to show in the prompt, use
+  `useState<{ id: string; name: string } | null>(null)` rather than two separate states —
+  one atomic update keeps the dialog body and pending action in sync.
+- For sidebar dialogs that mount inside scrolling `<aside>`: AlertDialog uses Radix Portal so
+  it escapes to body anyway; the location of `<AlertDialog>` in the JSX tree doesn't matter for
+  layout, only for context propagation.
+- `confirm()` is the global `window.confirm` — grep for both `window.confirm` and bare `confirm(`
+  with negative-lookbehind `(^|[^.\w])confirm\(` to catch all forms. Same for alert/prompt.
+- `apps/desktop-ui` typecheck: `cd apps/desktop-ui && npx tsc --noEmit` (no script defined).

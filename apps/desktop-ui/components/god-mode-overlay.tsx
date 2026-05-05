@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useCallback, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
 import {
   Plus,
   Globe,
@@ -46,6 +46,7 @@ export function GodModeOverlay() {
   const [isRecording, setIsRecording] = useState(false)
   const [micSupported, setMicSupported] = useState(true)
   const [webSearchAvailable, setWebSearchAvailable] = useState(false)
+  const reduceMotion = useReducedMotion()
   const inputRef = useRef<HTMLInputElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
@@ -131,12 +132,12 @@ export function GodModeOverlay() {
     <div className="fixed inset-0 z-50 pointer-events-none">
       <motion.button
         onClick={togglePill}
-        animate={{ scale: [1, 1.05, 1] }}
-        transition={{
-          repeat: Infinity,
-          duration: 2.4,
-          ease: "easeInOut",
-        }}
+        animate={state === "pill" || reduceMotion ? { scale: 1 } : { scale: [1, 1.05, 1] }}
+        transition={
+          state === "pill" || reduceMotion
+            ? { duration: 0 }
+            : { repeat: Infinity, duration: 2.4, ease: "easeInOut" }
+        }
         className={cn(
           "pointer-events-auto",
           "fixed bottom-4 right-4 sm:bottom-6 sm:right-6",
@@ -156,10 +157,10 @@ export function GodModeOverlay() {
         {showPill && (
           <motion.div
             key="pill"
-            initial={{ y: 100, opacity: 0 }}
+            initial={reduceMotion ? false : { y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
-            transition={SPRING}
+            exit={reduceMotion ? { opacity: 0 } : { y: 100, opacity: 0 }}
+            transition={reduceMotion ? { duration: 0 } : SPRING}
             className={cn(
               "pointer-events-auto",
               "fixed bottom-12 inset-x-0 mx-auto",

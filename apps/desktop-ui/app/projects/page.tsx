@@ -49,11 +49,46 @@ import {
   deleteProject,
   fetchGitHubRepos,
   getLoginUrl,
+  ApiError,
   type Project,
   type Team,
   type GitHubRepo,
 } from "@/lib/api"
 import { useSSESubscription } from "@/providers/sse-provider"
+import { toast } from "sonner"
+
+function mapErrorToForm(
+  err: unknown,
+  fallbackMessage: string,
+): { toastMessage: string; formErrors: Record<string, string> } {
+  if (err instanceof ApiError) {
+    const formErrors: Record<string, string> = {}
+    const details = err.details as
+      | { fieldErrors?: Record<string, string[]>; formErrors?: string[] }
+      | undefined
+    if (details?.fieldErrors && typeof details.fieldErrors === "object") {
+      for (const [field, msgs] of Object.entries(details.fieldErrors)) {
+        if (Array.isArray(msgs) && msgs.length > 0 && typeof msgs[0] === "string") {
+          formErrors[field] = msgs[0]
+        }
+      }
+    }
+    if (err.code === "OWNERSHIP_REQUIRED") {
+      const message =
+        err.status === 404
+          ? "You don't have access to this resource."
+          : "You don't have permission to perform this action."
+      formErrors._root = message
+      return { toastMessage: message, formErrors }
+    }
+    formErrors._root = err.message
+    return { toastMessage: err.message, formErrors }
+  }
+  return {
+    toastMessage: fallbackMessage,
+    formErrors: { _root: fallbackMessage },
+  }
+}
 
 type StatusType = 'planned' | 'in_progress' | 'paused' | 'completed' | 'cancelled'
 
@@ -290,13 +325,21 @@ function ProjectsContent() {
 
   const handleEditDialogOpenChange = (open: boolean) => {
     setIsEditDialogOpen(open)
-    if (open) return
+    if (open) {
+      setFormErrors({})
+      return
+    }
 
     const params = new URLSearchParams(searchParams.toString())
     if (!params.has('editProjectId')) return
     params.delete('editProjectId')
     const qs = params.toString()
     router.replace(qs ? `/projects?${qs}` : '/projects', { scroll: false })
+  }
+
+  const handleCreateDialogOpenChange = (open: boolean) => {
+    setIsCreateDialogOpen(open)
+    if (open) setFormErrors({})
   }
 
   useSSESubscription((eventType) => {
@@ -372,7 +415,12 @@ function ProjectsContent() {
       setIsCreateDialogOpen(false)
       loadProjects()
     } catch (error) {
-      console.error("Failed to create project:", error)
+      const { toastMessage, formErrors: nextErrors } = mapErrorToForm(
+        error,
+        "Could not reach OpenLinear server. Check your connection and try again.",
+      )
+      setFormErrors((prev) => ({ ...prev, ...nextErrors }))
+      toast.error(toastMessage)
     } finally {
       setIsSubmitting(false)
     }
@@ -388,7 +436,11 @@ function ProjectsContent() {
       setProjectToDelete(null)
       loadProjects()
     } catch (error) {
-      console.error("Failed to delete project:", error)
+      const { toastMessage } = mapErrorToForm(
+        error,
+        "Could not reach OpenLinear server. Check your connection and try again.",
+      )
+      toast.error(`Failed to delete project: ${toastMessage}`)
     } finally {
       setIsSubmitting(false)
     }
@@ -418,7 +470,12 @@ function ProjectsContent() {
       setEditProject(null)
       loadProjects()
     } catch (error) {
-      console.error("Failed to update project:", error)
+      const { toastMessage, formErrors: nextErrors } = mapErrorToForm(
+        error,
+        "Could not reach OpenLinear server. Check your connection and try again.",
+      )
+      setFormErrors((prev) => ({ ...prev, ...nextErrors }))
+      toast.error(toastMessage)
     } finally {
       setIsSubmitting(false)
     }
@@ -476,7 +533,7 @@ function ProjectsContent() {
                   <TrendingUp className="w-4 h-4 mr-1.5" />
                   <span className="hidden sm:inline">New view</span>
                 </Button>
-                <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                <Dialog open={isCreateDialogOpen} onOpenChange={handleCreateDialogOpenChange}>
                   <DialogTrigger asChild>
                     <Button size="sm" className="h-8 bg-linear-accent hover:bg-linear-accent-hover text-white">
                       <Plus className="w-4 h-4 mr-1.5" />
@@ -768,6 +825,12 @@ function ProjectsContent() {
                           </div>
                         )}
                       </div>
+
+                      {formErrors._root && (
+                        <div role="alert" className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+                          {formErrors._root}
+                        </div>
+                      )}
 
                       <DialogFooter className="gap-2">
                         <Button
@@ -1338,6 +1401,12 @@ function ProjectsContent() {
                 )
               )}
             </div>
+
+            {formErrors._root && (
+              <div role="alert" className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+                {formErrors._root}
+              </div>
+            )}
 
             <DialogFooter className="gap-2">
               <Button

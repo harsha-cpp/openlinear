@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { X, ArrowLeft, Bot, Wrench, CheckCircle, AlertCircle, Info, Clock, AlertTriangle, Flag, Tag, Folder, Square, Archive, GitMerge, ExternalLink, Play, Check, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { cn, openExternal } from "@/lib/utils"
 import { Task, ExecutionProgress, ExecutionLogEntry, formatDuration } from "@/types/task"
 
@@ -17,6 +18,7 @@ interface TaskDetailViewProps {
   onExecute?: (taskId: string) => void
   onUpdate?: (taskId: string, data: { title?: string; description?: string | null }) => void
   isExecuting?: boolean
+  project?: { id: string; name: string } | null
 }
 
 const statusConfig = {
@@ -67,7 +69,7 @@ function formatDate(timestamp: string): string {
   })
 }
 
-export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, onCancel, onExecute, onUpdate, isExecuting }: TaskDetailViewProps) {
+export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, onCancel, onExecute, onUpdate, isExecuting, project }: TaskDetailViewProps) {
   const logsContainerRef = useRef<HTMLDivElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const descriptionRef = useRef<HTMLTextAreaElement>(null)
@@ -76,6 +78,9 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
   const [titleDraft, setTitleDraft] = useState("")
   const [descriptionDraft, setDescriptionDraft] = useState("")
   const [cancelling, setCancelling] = useState(false)
+  // Tracks whether a save already fired this edit cycle so blur+Enter don't double-fire onUpdate.
+  const titleSavedRef = useRef(false)
+  const descriptionSavedRef = useRef(false)
 
   useEffect(() => {
     if (logsContainerRef.current && open && logs.length > 0) {
@@ -88,35 +93,17 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
   }, [isExecuting])
 
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (editingTitle) {
-          setEditingTitle(false)
-          return
-        }
-        if (editingDescription) {
-          setEditingDescription(false)
-          return
-        }
-        if (open) {
-          onClose()
-        }
-      }
-    }
-    window.addEventListener('keydown', handleEscape)
-    return () => window.removeEventListener('keydown', handleEscape)
-  }, [open, onClose, editingTitle, editingDescription])
-
-  useEffect(() => {
     if (editingTitle && titleInputRef.current) {
       titleInputRef.current.focus()
       titleInputRef.current.select()
+      titleSavedRef.current = false
     }
   }, [editingTitle])
 
   useEffect(() => {
     if (editingDescription && descriptionRef.current) {
       descriptionRef.current.focus()
+      descriptionSavedRef.current = false
     }
   }, [editingDescription])
 
@@ -126,6 +113,11 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
   }, [task?.id])
 
   const saveTitle = () => {
+    if (titleSavedRef.current) {
+      setEditingTitle(false)
+      return
+    }
+    titleSavedRef.current = true
     const trimmed = titleDraft.trim()
     if (trimmed && trimmed !== task?.title && onUpdate && task) {
       onUpdate(task.id, { title: trimmed })
@@ -134,6 +126,11 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
   }
 
   const saveDescription = () => {
+    if (descriptionSavedRef.current) {
+      setEditingDescription(false)
+      return
+    }
+    descriptionSavedRef.current = true
     if (!task || !onUpdate) { setEditingDescription(false); return }
     const value = descriptionDraft.trim() || null
     if (value !== (task.description || null)) {
@@ -142,17 +139,40 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
     setEditingDescription(false)
   }
 
-  if (!open || !task) {
+  // Esc inside an inline editor should cancel the edit, not close the Sheet.
+  // Stop propagation so Radix's outer Esc handler doesn't also fire.
+  const cancelTitleEdit = (e: React.KeyboardEvent) => {
+    e.stopPropagation()
+    titleSavedRef.current = true
+    setEditingTitle(false)
+  }
+  const cancelDescriptionEdit = (e: React.KeyboardEvent) => {
+    e.stopPropagation()
+    descriptionSavedRef.current = true
+    setEditingDescription(false)
+  }
+
+  if (!task) {
     return null
   }
 
   const statusInfo = statusConfig[task.status]
   const priorityInfo = priorityConfig[task.priority]
   const PriorityIcon = priorityInfo.icon
+  const projectName = project?.name ?? 'No project'
 
   return (
-    <div className="absolute inset-0 z-40 bg-linear-bg">
-      <div className="flex flex-col h-full">
+    <Sheet open={open} onOpenChange={(next) => { if (!next) onClose() }}>
+      <SheetContent
+        side="right"
+        // Override default narrow width; this is a full task detail panel, not a settings drawer.
+        className="w-full sm:max-w-none md:w-[860px] lg:w-[960px] xl:w-[1100px] p-0 bg-linear-bg border-linear-border flex flex-col"
+        // Hide the built-in close button (we render our own X in the header)
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        <SheetTitle className="sr-only">{task.title}</SheetTitle>
+        <SheetDescription className="sr-only">Task detail view for {task.identifier || task.id}</SheetDescription>
+
         <header className="flex items-center justify-between px-3 sm:px-4 py-3 border-b border-linear-border">
           <div className="flex items-center gap-3">
             <Button
@@ -240,8 +260,11 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                       onChange={(e) => setTitleDraft(e.target.value)}
                       onBlur={saveTitle}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') saveTitle()
-                        if (e.key === 'Escape') setEditingTitle(false)
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          saveTitle()
+                        }
+                        if (e.key === 'Escape') cancelTitleEdit(e)
                       }}
                     />
                   ) : (
@@ -312,14 +335,22 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                       onChange={(e) => setDescriptionDraft(e.target.value)}
                       onBlur={saveDescription}
                       onKeyDown={(e) => {
-                        if (e.key === 'Escape') setEditingDescription(false)
+                        if (e.key === 'Escape') cancelDescriptionEdit(e)
+                        // ⌘+Enter (or Ctrl+Enter) saves description, mirroring task-form behavior.
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                          e.preventDefault()
+                          saveDescription()
+                        }
                       }}
                       rows={4}
                     />
                   ) : task.description ? (
                     <p
                       className="text-sm text-linear-text-secondary leading-relaxed whitespace-pre-wrap cursor-text hover:text-linear-text-secondary/80"
-                      onClick={() => {
+                      onClick={(e) => {
+                        // Don't enter edit mode when the user clicks an embedded link in the description.
+                        const target = e.target as HTMLElement
+                        if (target.tagName === 'A' || target.closest('a')) return
                         setDescriptionDraft(task.description || "")
                         setEditingDescription(true)
                       }}
@@ -464,7 +495,7 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                         <span className="text-sm text-linear-text-secondary">Project</span>
                         <Folder className="w-3.5 h-3.5 text-linear-text-tertiary" />
                       </div>
-                          <span className="text-sm text-linear-text">OpenLinear</span>
+                      <span className="text-sm text-linear-text">{projectName}</span>
                     </div>
 
                     <div className="py-2">
@@ -506,7 +537,7 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
             </aside>
           </div>
         </div>
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   )
 }

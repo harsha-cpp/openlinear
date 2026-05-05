@@ -364,6 +364,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
           onExecute={selectedTaskId && batchTaskIds.includes(selectedTaskId) ? undefined : handleExecute}
           onUpdate={handleUpdateTask}
           isExecuting={selectedTask?.status === 'in_progress'}
+          project={selectedProject ? { id: selectedProject.id, name: selectedProject.name } : null}
         />
 
         <ProviderSetupDialog

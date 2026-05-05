@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
 import {
   Rocket,
   FolderKanban,
@@ -33,21 +33,22 @@ interface OnboardingWizardProps {
 }
 
 function WelcomeStep({ onNext }: { onNext: () => void }) {
+  const reduceMotion = useReducedMotion()
   return (
     <div className="text-center space-y-6">
       <motion.div
-        initial={{ scale: 0.8, opacity: 0 }}
+        initial={reduceMotion ? false : { scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ ...SPRING, delay: 0.1 }}
+        transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.1 }}
         className="w-20 h-20 mx-auto rounded-2xl bg-linear-accent/10 flex items-center justify-center"
       >
         <Rocket className="w-10 h-10 text-linear-accent" />
       </motion.div>
 
       <motion.div
-        initial={{ y: 20, opacity: 0 }}
+        initial={reduceMotion ? false : { y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ ...SPRING, delay: 0.2 }}
+        transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.2 }}
         className="space-y-2"
       >
         <h2 className="text-2xl font-semibold text-linear-text">
@@ -59,9 +60,9 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
       </motion.div>
 
       <motion.div
-        initial={{ y: 20, opacity: 0 }}
+        initial={reduceMotion ? false : { y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ ...SPRING, delay: 0.3 }}
+        transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.3 }}
       >
         <button
           type="button"
@@ -272,6 +273,7 @@ function ProjectStep({
   teamId: string
   onComplete: (result: { teamId: string; projectId: string }) => void
 }) {
+  const reduceMotion = useReducedMotion()
   const [activeTab, setActiveTab] = useState<ProjectTab>("github")
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null)
   const [repoUrl, setRepoUrl] = useState("")
@@ -371,10 +373,10 @@ function ProjectStep({
       <AnimatePresence mode="wait">
         <motion.div
           key={activeTab}
-          initial={{ opacity: 0, y: 8 }}
+          initial={reduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.15 }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+          transition={reduceMotion ? { duration: 0 } : { duration: 0.15 }}
         >
           {activeTab === "github" ? (
             <GitHubRepoTab
@@ -571,6 +573,7 @@ function TeamStep({
 }
 
 function StepIndicator({ currentStep, totalSteps }: { currentStep: number; totalSteps: number }) {
+  const reduceMotion = useReducedMotion()
   const stepKeys = useMemo(
     () => Array.from({ length: totalSteps }, (_, i) => `step-${i}`),
     [totalSteps]
@@ -593,6 +596,7 @@ function StepIndicator({ currentStep, totalSteps }: { currentStep: number; total
                     ? "rgb(29, 78, 216)"
                     : "rgb(42, 42, 42)",
               }}
+              transition={reduceMotion ? { duration: 0 } : undefined}
               className="w-2.5 h-2.5 rounded-full transition-colors"
             />
             {index < totalSteps - 1 && (
@@ -611,6 +615,7 @@ function StepIndicator({ currentStep, totalSteps }: { currentStep: number; total
 
 export function OnboardingWizard({ teams, onComplete }: OnboardingWizardProps) {
   const [currentStep, setCurrentStep] = useState(0)
+  const reduceMotion = useReducedMotion()
 
   const [teamFlow, setTeamFlow] = useState(false)
   const [createdTeam, setCreatedTeam] = useState<Team | null>(null)
@@ -659,10 +664,10 @@ export function OnboardingWizard({ teams, onComplete }: OnboardingWizardProps) {
       <AnimatePresence mode="wait">
         <motion.div
           key={currentStep}
-          initial={{ opacity: 0, x: 20 }}
+          initial={reduceMotion ? false : { opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          transition={SPRING}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -20 }}
+          transition={reduceMotion ? { duration: 0 } : SPRING}
           className="bg-linear-bg-secondary border border-linear-border rounded-xl p-6"
         >
           {steps[currentStep]}

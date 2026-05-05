@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useCallback, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
 import {
   Plus,
   Sparkles,
@@ -95,26 +95,25 @@ function TaskCard({
   task: GeneratedTask
   onToggle: (id: string) => void
 }) {
+  const reduceMotion = useReducedMotion()
   return (
     <motion.div
-      layout
-      initial={{ opacity: 0, y: 24, scale: 0.96, filter: "blur(6px)" }}
+      layout={!reduceMotion}
+      initial={reduceMotion ? false : { opacity: 0, y: 24, scale: 0.96, filter: "blur(6px)" }}
       animate={{
         opacity: 1,
         y: 0,
         scale: 1,
         filter: "blur(0px)",
-        boxShadow: "0 0 0 rgba(255,255,255,0)",
       }}
-      exit={{ opacity: 0, y: -12, scale: 0.97, filter: "blur(4px)" }}
-      transition={{ type: "spring", stiffness: 260, damping: 28 }}
-      whileHover={{
-        boxShadow: "0 0 20px rgba(255,255,255,0.03)",
-        borderColor: "rgba(255,255,255,0.1)",
-      }}
+      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -12, scale: 0.97, filter: "blur(4px)" }}
+      transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 260, damping: 28 }}
+      whileHover={reduceMotion ? undefined : { scale: 1.005 }}
       className={cn(
         "group relative rounded-lg border border-white/[0.06] bg-zinc-900/60 backdrop-blur-sm",
         "border-l-2",
+        // CSS-only hover: GPU-accelerated (no layout/paint)
+        "transition-opacity hover:border-white/10",
         PRIORITY_COLORS[task.priority],
         !task.selected && "opacity-50"
       )}
