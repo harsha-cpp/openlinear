@@ -1,3 +1,8 @@
+T38: Replace raw hex Tailwind classes with linear-* design tokens
+=================================================================
+
+BEFORE: 53 hex matches across apps/desktop-ui/{components,app}/
+-----------------------------------------------------------------
 apps/desktop-ui/components/global-quick-capture.tsx:513:                "bg-[#09090b]/80 backdrop-blur-xl",
 apps/desktop-ui/components/board/kanban-board.tsx:277:      <div className="flex-1 overflow-hidden relative bg-[#111111] flex flex-col">
 apps/desktop-ui/components/board/batch-progress.tsx:26:  queued: { color: 'text-[#666]', bg: 'bg-[#2a2a2a]', icon: Clock, label: 'Queued' },
@@ -51,4 +56,42 @@ apps/desktop-ui/app/inbox/page.tsx:376:      <div className="flex-1 overflow-y-a
 apps/desktop-ui/app/my-issues/page.tsx:165:      <div className="flex-1 overflow-y-auto bg-[#111111]">
 apps/desktop-ui/app/usage/page.tsx:171:      <div className="flex-1 overflow-y-auto bg-[#111111]">
 apps/desktop-ui/app/login/page.tsx:46:            className="w-full bg-[#24292e] hover:bg-[#1b1f23] text-white"
----BEFORE COUNT---
+
+BEFORE COUNT: 53
+
+AFTER: 0 hex matches in apps/desktop-ui/{components,app}/
+---------------------------------------------------------
+(grep returned no results)
+
+REPLACEMENTS APPLIED: 53
+
+Mapping summary:
+  #111111 → bg-linear-bg
+  #141414 / #1a1a1a → bg-linear-bg-secondary
+  #1f1f1f / #0f0f0f → bg-linear-bg-tertiary
+  #2a2a2a / #222 → bg-linear-border / border-linear-border
+  #3a3a3a / #333 / #444 → bg-linear-border-hover / border-linear-border-hover
+  #f5f5f5 → text-linear-text
+  #a0a0a0 → text-linear-text-secondary
+  #6a6a6a / #666 → text-linear-text-tertiary
+
+god-mode-overlay.tsx zinc-950/80 → linear-bg-secondary/80 (line 145, 167)
+
+Status colors extracted into lib/design-tokens.ts STATUS_COLORS:
+  - task-card.tsx progressConfig: cloning/executing/committing/creating_pr/done/cancelled/error
+  - execution-drawer.tsx statusConfig + logColors
+
+Brand/non-token hex extracted into lib/design-tokens.ts:
+  - BRAND_COLORS: macClose/macMinimize/macMaximize, githubBg/githubBgHover, githubPurple/githubPurpleHover, overlaySurface
+    → consumed via inline style in: sidebar.tsx (mac dots), login/page.tsx (GitHub btn),
+      task-detail-view.tsx (PR btn), global-quick-capture.tsx (overlay surface)
+  - BATCH_STATUS_COLORS: queued/running/completed/failed/skipped/cancelled
+    → consumed via class+inline style in batch-progress.tsx
+
+VERIFICATION
+============
+$ grep -rEn 'bg-\[#|text-\[#|border-\[#' apps/desktop-ui/components/ apps/desktop-ui/app/
+(0 matches; exit 1)
+
+Typecheck: 752 errors before, 752 errors after — no new errors introduced
+(pre-existing baseline issue: monorepo @types/react resolution under tsc --noEmit)

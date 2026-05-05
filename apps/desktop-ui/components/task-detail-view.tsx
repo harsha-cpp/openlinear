@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, type MouseEvent } from "react"
 import { X, ArrowLeft, Bot, Wrench, CheckCircle, AlertCircle, Info, Clock, AlertTriangle, Flag, Tag, Folder, Square, Archive, GitMerge, ExternalLink, Play, Check, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet"
@@ -8,6 +8,7 @@ import { MarkdownView } from "@/components/markdown-view"
 import { CommentsThread } from "@/components/comments-thread"
 import { cn, openExternal } from "@/lib/utils"
 import { Task, ExecutionProgress, ExecutionLogEntry, formatDuration } from "@/types/task"
+import { BRAND_COLORS } from "@/lib/design-tokens"
 
 interface TaskDetailViewProps {
   task: Task | null
@@ -299,7 +300,10 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                     {(task.prUrl || progress?.prUrl) && (
                       <button
                         onClick={() => openExternal((task.prUrl || progress?.prUrl)!)}
-                        className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium text-white bg-[#8957e5] hover:bg-[#7c4dcc] transition-colors"
+                        className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium text-white transition-colors"
+                        style={{ backgroundColor: BRAND_COLORS.githubPurple }}
+                        onMouseEnter={(e: MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.backgroundColor = BRAND_COLORS.githubPurpleHover }}
+                        onMouseLeave={(e: MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.backgroundColor = BRAND_COLORS.githubPurple }}
                       >
                         <GitMerge className="w-3.5 h-3.5" />
                         View Pull Request

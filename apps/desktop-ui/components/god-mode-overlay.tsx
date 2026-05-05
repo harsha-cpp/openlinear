@@ -142,10 +142,10 @@ export function GodModeOverlay() {
           "fixed bottom-4 right-4 sm:bottom-6 sm:right-6",
           "flex items-center justify-center",
           "w-12 h-12 rounded-full",
-          "bg-zinc-950/80 backdrop-blur-2xl border border-white/10 shadow-2xl",
+          "bg-linear-bg-secondary/80 backdrop-blur-2xl border border-white/10 shadow-2xl",
           "cursor-pointer",
           "transition-colors duration-200",
-          "hover:bg-zinc-900/80"
+          "hover:bg-linear-bg-tertiary/80"
         )}
         aria-label="Toggle God Mode"
       >
@@ -164,7 +164,7 @@ export function GodModeOverlay() {
               "pointer-events-auto",
               "fixed bottom-12 inset-x-0 mx-auto",
               "w-[calc(100%-2rem)] sm:w-[600px] max-w-[600px] h-14 sm:h-16 rounded-full",
-              "bg-zinc-950/80 backdrop-blur-2xl border border-white/10 shadow-2xl",
+              "bg-linear-bg-secondary/80 backdrop-blur-2xl border border-white/10 shadow-2xl",
               "flex items-center gap-3 px-4"
             )}
           >

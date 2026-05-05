@@ -11,6 +11,7 @@ import {
 import { ProjectSelector } from "@/components/auth/project-selector"
 import { useAuth } from "@/hooks/use-auth"
 import { cn } from "@/lib/utils"
+import { BRAND_COLORS } from "@/lib/design-tokens"
 import { deleteTeam, apiFetch, type Team } from "@/lib/api"
 import { getApiUrl } from "@/lib/api/client"
 import { useTeams } from "@/providers/teams-provider"
@@ -264,17 +265,20 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
                         <div className="flex items-center gap-[7px]">
                             <button
                                 onClick={handleClose}
-                                className="w-[12px] h-[12px] rounded-full bg-[#ff5f57] hover:brightness-110 transition-all flex-shrink-0"
+                                className="w-[12px] h-[12px] rounded-full hover:brightness-110 transition-all flex-shrink-0"
+                                style={{ backgroundColor: BRAND_COLORS.macClose }}
                                 aria-label="Close"
                             />
                             <button
                                 onClick={handleMinimize}
-                                className="w-[12px] h-[12px] rounded-full bg-[#febc2e] hover:brightness-110 transition-all flex-shrink-0"
+                                className="w-[12px] h-[12px] rounded-full hover:brightness-110 transition-all flex-shrink-0"
+                                style={{ backgroundColor: BRAND_COLORS.macMinimize }}
                                 aria-label="Minimize"
                             />
                             <button
                                 onClick={handleMaximize}
-                                className="w-[12px] h-[12px] rounded-full bg-[#28c840] hover:brightness-110 transition-all flex-shrink-0"
+                                className="w-[12px] h-[12px] rounded-full hover:brightness-110 transition-all flex-shrink-0"
+                                style={{ backgroundColor: BRAND_COLORS.macMaximize }}
                                 aria-label="Maximize"
                             />
                         </div>

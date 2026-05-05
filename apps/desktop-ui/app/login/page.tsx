@@ -1,11 +1,12 @@
 "use client"
 
 import { Github, Loader2 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, type MouseEvent } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { startLogin } from "@/lib/api"
 import { useAuth } from "@/hooks/use-auth"
+import { BRAND_COLORS } from "@/lib/design-tokens"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -43,7 +44,10 @@ export default function LoginPage() {
           <Button
             onClick={handleGitHubLogin}
             disabled={isLoading}
-            className="w-full bg-[#24292e] hover:bg-[#1b1f23] text-white"
+            className="w-full text-white"
+            style={{ backgroundColor: BRAND_COLORS.githubBg }}
+            onMouseEnter={(e: MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.backgroundColor = BRAND_COLORS.githubBgHover }}
+            onMouseLeave={(e: MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.backgroundColor = BRAND_COLORS.githubBg }}
           >
             {isLoading ? (
               <>

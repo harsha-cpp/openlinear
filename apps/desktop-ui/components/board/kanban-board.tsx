@@ -274,7 +274,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="flex-1 overflow-hidden relative bg-[#111111] flex flex-col">
+      <div className="flex-1 overflow-hidden relative bg-linear-bg flex flex-col">
         {activeBatch && (
           <BatchProgress
             batchId={activeBatch.id}

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Loader2, GitBranch, Code, GitPullRequest, Check, X, ExternalLink, Play, ArrowRight, Archive, Clock, CalendarDays } from "lucide-react"
 import { cn, openExternal } from "@/lib/utils"
 import { Task, ExecutionProgress, formatDuration } from "@/types/task"
+import { STATUS_COLORS } from "@/lib/design-tokens"
 
 interface TaskCardProps {
   task: Task
@@ -38,13 +39,13 @@ function formatDueDate(dateStr: string): { text: string; isOverdue: boolean } {
 }
 
 const progressConfig = {
-  cloning: { icon: GitBranch, label: 'Cloning', color: 'text-blue-400' },
-  executing: { icon: Code, label: 'Executing', color: 'text-linear-accent' },
-  committing: { icon: GitBranch, label: 'Committing', color: 'text-yellow-400' },
-  creating_pr: { icon: GitPullRequest, label: 'Creating PR', color: 'text-purple-400' },
-  done: { icon: Check, label: 'Done', color: 'text-green-400' },
-  cancelled: { icon: X, label: 'Cancelled', color: 'text-gray-400' },
-  error: { icon: X, label: 'Error', color: 'text-red-400' },
+  cloning: { icon: GitBranch, label: 'Cloning', color: STATUS_COLORS.cloning.text },
+  executing: { icon: Code, label: 'Executing', color: STATUS_COLORS.executing.text },
+  committing: { icon: GitBranch, label: 'Committing', color: STATUS_COLORS.committing.text },
+  creating_pr: { icon: GitPullRequest, label: 'Creating PR', color: STATUS_COLORS.creating_pr.text },
+  done: { icon: Check, label: 'Done', color: STATUS_COLORS.done.text },
+  cancelled: { icon: X, label: 'Cancelled', color: STATUS_COLORS.cancelled.text },
+  error: { icon: X, label: 'Error', color: STATUS_COLORS.error.text },
 }
 
 export function TaskCard({ task, onExecute, onCancel, onDelete, onMoveToInProgress, onTaskClick, executionProgress, selected, onToggleSelect, selectionMode, isBatchTask, isCompletedBatchTask, isDragging }: TaskCardProps) {
@@ -117,7 +118,7 @@ export function TaskCard({ task, onExecute, onCancel, onDelete, onMoveToInProgre
     <Card 
       className={cn(
         isDragging
-          ? "bg-[#1a1a1a] border border-white/[0.12] shadow-2xl"
+          ? "bg-linear-bg-secondary border border-white/[0.12] shadow-2xl"
           : "bg-white/[0.03] backdrop-blur-md border border-white/[0.08] shadow-[0_4px_24px_-8px_rgba(0,0,0,0.4),0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.05)]",
         "cursor-pointer group rounded-xl",
         selected && !isDragging && "bg-white/[0.06] border-white/[0.15]",

@@ -10,6 +10,7 @@ import {
   Mic,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { BRAND_COLORS } from "@/lib/design-tokens"
 import { checkBrainstormAvailability, generateBrainstormQuestions, streamBrainstormTasks, transcribeAudio, type BrainstormTask } from "@/lib/api/brainstorm"
 import { fetchProjects } from "@/lib/api/projects"
 import type { Project } from "@/lib/api/types"
@@ -510,10 +511,11 @@ export function GlobalQuickCapture() {
               className={cn(
                 "fixed right-0 top-0 z-[9999] h-full",
                 "flex flex-col",
-                "bg-[#09090b]/80 backdrop-blur-xl",
+                "backdrop-blur-xl",
                 "border-l border-white/10",
                 "shadow-[-8px_0_30px_rgba(0,0,0,0.5)]"
               )}
+              style={{ backgroundColor: `${BRAND_COLORS.overlaySurface}cc` }}
             >
               {/* ---------- Top bar ---------- */}
               <div className="flex items-center justify-between px-5 pt-5 pb-3">

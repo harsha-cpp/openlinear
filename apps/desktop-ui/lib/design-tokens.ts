@@ -43,39 +43,39 @@ export const STATUS_COLORS: Readonly<Record<StatusKey, ColorTriad>> = {
     border: "border-blue-500/30",
   },
   done: {
-    bg: "bg-emerald-500/10",
-    text: "text-emerald-400",
-    border: "border-emerald-500/30",
+    bg: "bg-green-500/10",
+    text: "text-green-400",
+    border: "border-green-500/30",
   },
   cancelled: {
-    bg: "bg-zinc-500/10",
-    text: "text-zinc-400",
-    border: "border-zinc-500/30",
+    bg: "bg-gray-500/10",
+    text: "text-gray-400",
+    border: "border-gray-500/30",
   },
   error: {
-    bg: "bg-destructive/10",
-    text: "text-destructive",
-    border: "border-destructive/40",
+    bg: "bg-red-500/10",
+    text: "text-red-400",
+    border: "border-red-500/30",
   },
   cloning: {
-    bg: "bg-sky-500/10",
-    text: "text-sky-400",
-    border: "border-sky-500/30",
+    bg: "bg-blue-500/10",
+    text: "text-blue-400",
+    border: "border-blue-500/30",
   },
   executing: {
-    bg: "bg-amber-500/10",
-    text: "text-amber-400",
-    border: "border-amber-500/30",
+    bg: "bg-linear-accent/10",
+    text: "text-linear-accent",
+    border: "border-linear-accent/30",
   },
   committing: {
-    bg: "bg-violet-500/10",
-    text: "text-violet-400",
-    border: "border-violet-500/30",
+    bg: "bg-yellow-500/10",
+    text: "text-yellow-400",
+    border: "border-yellow-500/30",
   },
   creating_pr: {
-    bg: "bg-fuchsia-500/10",
-    text: "text-fuchsia-400",
-    border: "border-fuchsia-500/30",
+    bg: "bg-purple-500/10",
+    text: "text-purple-400",
+    border: "border-purple-500/30",
   },
 } as const
 
@@ -113,3 +113,25 @@ export const SHADOWS = {
 } as const
 
 export type ShadowKey = keyof typeof SHADOWS
+
+/** Brand colors with no semantic linear-* equivalent; use as inline style. */
+export const BRAND_COLORS = {
+  macClose: "#ff5f57",
+  macMinimize: "#febc2e",
+  macMaximize: "#28c840",
+  githubBg: "#24292e",
+  githubBgHover: "#1b1f23",
+  githubPurple: "#8957e5",
+  githubPurpleHover: "#7c4dcc",
+  overlaySurface: "#09090b",
+} as const
+
+/** Batch-execution status colors (distinct semantic from STATUS_COLORS). */
+export const BATCH_STATUS_COLORS = {
+  queued: { text: "text-linear-text-tertiary", bg: "bg-linear-border" },
+  running: { text: "text-linear-accent", bg: "bg-linear-accent" },
+  completed: { text: "#4a7c5c", bg: "#1f3a2a", dot: "#2d5a3d" },
+  failed: { text: "#8b5a5a", bg: "#3d2626", dot: "#5a2d2d" },
+  skipped: { text: "#7c6a4a", bg: "#3d3526" },
+  cancelled: { text: "text-linear-text-tertiary", bg: "bg-linear-border-hover" },
+} as const
