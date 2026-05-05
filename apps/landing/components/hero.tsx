@@ -32,7 +32,7 @@ export function Hero() {
               <span className="text-blue-400 font-medium">Product</span>
             </span>
             <span className="w-[1px] h-4 bg-white/10"></span>
-            <span className="text-white/60 group-hover:text-white/80">OpenLinear is now the best task execution platform</span>
+            <span className="text-white/60 group-hover:text-white/80">AI-powered project management that writes the code</span>
             <ArrowRight className="h-3.5 w-3.5 text-white/40 group-hover:text-white/60 transition-transform duration-300 group-hover:translate-x-0.5" />
           </a>
         </div>
@@ -153,7 +153,7 @@ export function Hero() {
                     <div className="h-3 w-3 rounded-full bg-green-400/80" />
                   </div>
                   <div className="h-4 w-[1px] bg-white/10 mx-2" />
-                  <span className="text-sm text-white/40 font-mono">openlinear.dev</span>
+                  <span className="text-sm text-white/40 font-mono">openlinear.tech</span>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06]">

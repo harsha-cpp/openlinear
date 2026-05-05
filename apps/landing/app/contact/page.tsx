@@ -54,8 +54,8 @@ export default function ContactPage() {
               {
                 icon: Mail,
                 title: "Email",
-                detail: "hello@openlinear.dev",
-                href: "mailto:hello@openlinear.dev",
+                detail: "hello@openlinear.tech",
+                href: "mailto:hello@openlinear.tech",
               },
               {
                 icon: Github,
@@ -229,10 +229,10 @@ export default function ContactPage() {
                   <div>
                     <p className="text-[0.75rem] text-muted-foreground/40 mb-1">Email</p>
                     <a
-                      href="mailto:hello@openlinear.dev"
+                      href="mailto:hello@openlinear.tech"
                       className="text-primary/80 hover:text-primary text-[0.875rem] transition-colors duration-250"
                     >
-                      hello@openlinear.dev
+                      hello@openlinear.tech
                     </a>
                   </div>
                   <div>

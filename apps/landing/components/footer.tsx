@@ -1,31 +1,25 @@
-const footerLinks = {
-  Products: [
-    "Overview",
-    "Batch Execution",
-    "GitHub Integration",
-    "Desktop App",
-    "Agent Store",
+type FooterLink = { label: string; href: string; external?: boolean }
+
+const footerLinks: Record<string, FooterLink[]> = {
+  Product: [
+    { label: "Overview", href: "/product" },
+    { label: "Pricing", href: "/pricing" },
+    { label: "Enterprise", href: "/enterprise" },
+    { label: "Docs", href: "/docs" },
   ],
   Company: [
-    "Contact Us",
-    "Help Center",
-    "Careers",
-    "Partners",
-  ],
-  Legal: [
-    "Terms",
-    "Privacy Policy",
-    "Trust",
-    "Legal Notices",
+    { label: "Contact Us", href: "/contact" },
   ],
 }
 
-const socialLinks = [
-  { name: "LinkedIn", icon: "in" },
-  { name: "X", icon: "𝕏" },
-  { name: "GitHub", icon: "gh" },
-  { name: "Discord", icon: "dc" },
+const socialLinks: FooterLink[] = [
+  // GitHub URL is a placeholder pending T41 (real org URL)
+  { label: "GitHub", href: "https://github.com/kaizen403/openlinear", external: true },
 ]
+
+const socialIcons: Record<string, string> = {
+  GitHub: "gh",
+}
 
 export function Footer() {
   return (
@@ -56,12 +50,12 @@ export function Footer() {
                 <p className="text-[0.8125rem] font-semibold text-[#EDE8D0]/90 tracking-[-0.01em]">{category}</p>
                 <ul className="flex flex-col gap-3">
                   {links.map((link) => (
-                    <li key={link}>
+                    <li key={link.label}>
                       <a
-                        href="#"
+                        href={link.href}
                         className="text-[0.8125rem] text-[#EDE8D0]/35 hover:text-[#EDE8D0]/70 transition-colors duration-300"
                       >
-                        {link}
+                        {link.label}
                       </a>
                     </li>
                   ))}
@@ -74,13 +68,15 @@ export function Footer() {
               <p className="text-[0.8125rem] font-semibold text-[#EDE8D0]/90 tracking-[-0.01em]">Connect</p>
               <ul className="flex flex-col gap-3">
                 {socialLinks.map((social) => (
-                  <li key={social.name}>
+                  <li key={social.label}>
                     <a
-                      href="#"
+                      href={social.href}
+                      target={social.external ? "_blank" : undefined}
+                      rel={social.external ? "noopener noreferrer" : undefined}
                       className="flex items-center gap-2.5 text-[0.8125rem] text-[#EDE8D0]/35 hover:text-[#EDE8D0]/70 transition-colors duration-300"
                     >
-                      <span className="text-[0.6875rem] font-mono w-5 text-center opacity-60">{social.icon}</span>
-                      {social.name}
+                      <span className="text-[0.6875rem] font-mono w-5 text-center opacity-60">{socialIcons[social.label] ?? ""}</span>
+                      {social.label}
                     </a>
                   </li>
                 ))}

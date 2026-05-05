@@ -294,10 +294,10 @@ export default function PricingPage() {
           <p className="text-muted-foreground/55 text-[0.9375rem] tracking-[-0.01em]">
             Reach out at{" "}
             <a
-              href="mailto:hello@openlinear.dev"
+              href="mailto:hello@openlinear.tech"
               className="text-primary/80 hover:text-primary transition-colors duration-250"
             >
-              hello@openlinear.dev
+              hello@openlinear.tech
             </a>{" "}
             or{" "}
             <a
