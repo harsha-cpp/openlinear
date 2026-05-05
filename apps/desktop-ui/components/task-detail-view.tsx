@@ -5,6 +5,7 @@ import { X, ArrowLeft, Bot, Wrench, CheckCircle, AlertCircle, Info, Clock, Alert
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { MarkdownView } from "@/components/markdown-view"
+import { CommentsThread } from "@/components/comments-thread"
 import { cn, openExternal } from "@/lib/utils"
 import { Task, ExecutionProgress, ExecutionLogEntry, formatDuration } from "@/types/task"
 
@@ -370,6 +371,8 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                     </button>
                   )}
                 </div>
+
+                <CommentsThread taskId={task.id} />
 
                 <div className="border-t border-linear-border pt-6">
                   <h2 className="text-sm font-medium text-linear-text-secondary mb-4 flex items-center gap-2">
