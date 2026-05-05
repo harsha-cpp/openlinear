@@ -11,7 +11,8 @@ import {
 import { ProjectSelector } from "@/components/auth/project-selector"
 import { useAuth } from "@/hooks/use-auth"
 import { cn } from "@/lib/utils"
-import { deleteTeam, fetchInboxCount, type Team } from "@/lib/api"
+import { deleteTeam, apiFetch, type Team } from "@/lib/api"
+import { getApiUrl } from "@/lib/api/client"
 import { useTeams } from "@/providers/teams-provider"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
@@ -145,7 +146,7 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
     const { user, isAuthenticated, isLoading, logout } = useAuth()
     const { teams, reload: reloadTeams } = useTeams()
     const [isTauri, setIsTauri] = useState(false)
-    const [inboxCount, setInboxCount] = useState<{ total: number; unread: number }>({ total: 0, unread: 0 })
+    const [unreadCount, setUnreadCount] = useState<number>(0)
     const [isFullscreen, setIsFullscreen] = useState(false)
 
     useEffect(() => {
@@ -168,8 +169,28 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
     }, [])
 
     useEffect(() => {
-        fetchInboxCount().then(setInboxCount).catch(() => setInboxCount({ total: 0, unread: 0 }))
+        let cancelled = false
+        apiFetch<{ unreadCount: number }>('/api/notifications?pageSize=1')
+            .then((res) => { if (!cancelled) setUnreadCount(res.unreadCount) })
+            .catch(() => { if (!cancelled) setUnreadCount(0) })
+        return () => { cancelled = true }
     }, [pathname])
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+        let token: string | null = null
+        try { token = window.localStorage.getItem('token') } catch { token = null }
+        if (!token) return
+        const url = new URL(`${getApiUrl()}/api/events`)
+        url.searchParams.set('token', token)
+        const es = new EventSource(url.toString())
+        const onCreated = () => setUnreadCount((c) => c + 1)
+        es.addEventListener('notification:created', onCreated)
+        return () => {
+            es.removeEventListener('notification:created', onCreated)
+            es.close()
+        }
+    }, [])
 
     const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
     const [isDeletingTeam, setIsDeletingTeam] = useState(false)
@@ -280,14 +301,9 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
                     <Link href="/inbox" className={navItemClass(pathname === "/inbox")}>
                         <Inbox className="w-4 h-4 flex-shrink-0" />
                         <span>Inbox</span>
-                        {inboxCount.total > 0 && (
-                            <span className={cn(
-                                "ml-auto text-xs px-1.5 py-0.5 rounded",
-                                inboxCount.unread > 0
-                                    ? "text-linear-accent bg-linear-accent/10"
-                                    : "text-linear-text-tertiary bg-linear-bg-tertiary"
-                            )}>
-                                {inboxCount.total}
+                        {unreadCount > 0 && (
+                            <span className="ml-auto text-xs px-1.5 py-0.5 rounded text-linear-accent bg-linear-accent/10">
+                                {unreadCount}
                             </span>
                         )}
                     </Link>
