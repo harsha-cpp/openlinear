@@ -14,6 +14,8 @@ import { checkBrainstormAvailability, generateBrainstormQuestions, streamBrainst
 import { fetchProjects } from "@/lib/api/projects"
 import type { Project } from "@/lib/api/types"
 import { getApiUrl, getAuthHeader } from "@/lib/api/client"
+import { ApiError } from "@/lib/api/fetch"
+import { toast } from "sonner"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -374,9 +376,9 @@ export function GlobalQuickCapture() {
 
     setInserting(true)
     try {
-      await Promise.all(
-        selectedTasks.map((task) =>
-          fetch(`${getApiUrl()}/api/tasks`, {
+      const results = await Promise.allSettled(
+        selectedTasks.map(async (task) => {
+          const res = await fetch(`${getApiUrl()}/api/tasks`, {
             method: "POST",
             headers: { "Content-Type": "application/json", ...getAuthHeader() },
             body: JSON.stringify({
@@ -386,11 +388,44 @@ export function GlobalQuickCapture() {
               projectId: selectedProjectId,
             }),
           })
-        )
+          if (!res.ok) {
+            let message = `HTTP ${res.status}`
+            try {
+              const body = await res.json() as { error?: string }
+              if (body?.error) message = body.error
+            } catch {
+              // ignore parse errors
+            }
+            throw new Error(message)
+          }
+          return task
+        })
       )
-      handleClose()
+
+      const succeeded = results.filter((r: PromiseSettledResult<GeneratedTask>) => r.status === "fulfilled").length
+      const failed = results.length - succeeded
+
+      if (failed === 0) {
+        toast.success(`Added ${succeeded} task${succeeded === 1 ? "" : "s"} to project`)
+        handleClose()
+        return
+      }
+
+      // Surface each failure individually so users can see which titles failed.
+      results.forEach((r: PromiseSettledResult<GeneratedTask>, idx: number) => {
+        if (r.status === "rejected") {
+          const reason = r.reason instanceof Error ? r.reason.message : "Unknown error"
+          toast.error(`"${selectedTasks[idx]!.title}": ${reason}`)
+        }
+      })
+      toast.error(
+        `Added ${succeeded} of ${results.length} tasks. ${failed} failed — see details above.`,
+      )
+      setInserting(false)
     } catch (err) {
-      console.error("Failed to add tasks:", err)
+      // Defensive: Promise.allSettled doesn't throw, but keep a fallback.
+      const msg = err instanceof ApiError ? err.message : "Could not reach OpenLinear server."
+      toast.error(`Failed to add tasks: ${msg}`)
       setInserting(false)
     }
   }, [tasks, selectedProjectId, handleClose])

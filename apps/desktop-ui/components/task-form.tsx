@@ -51,7 +51,7 @@ interface TaskFormDialogProps {
   projects?: Project[]
 }
 
-import { apiFetch } from "@/lib/api/fetch"
+import { apiFetch, ApiError } from "@/lib/api/fetch"
 import { toast } from "sonner"
 
 const statusColors = {
@@ -118,9 +118,26 @@ export function TaskFormDialog({
       onOpenChange(false)
       onSuccess?.()
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to create task"
-      toast.error(message)
-      console.error("Error creating task:", error)
+      if (error instanceof ApiError) {
+        toast.error(error.message)
+        const details = error.details as
+          | { fieldErrors?: Record<string, string[]> }
+          | undefined
+        if (details?.fieldErrors && typeof details.fieldErrors === "object") {
+          for (const [field, msgs] of Object.entries(details.fieldErrors)) {
+            if (Array.isArray(msgs) && msgs.length > 0 && typeof msgs[0] === "string") {
+              if (field === "title" || field === "description" || field === "status" || field === "projectId" || field === "dueDate") {
+                form.setError(field as keyof FormValues, { type: "server", message: msgs[0] })
+              }
+            }
+          }
+        } else {
+          form.setError("root", { type: "server", message: error.message })
+        }
+      } else {
+        toast.error("Could not reach OpenLinear server. Check your connection and try again.")
+        form.setError("root", { type: "server", message: "Network error" })
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -372,6 +389,12 @@ export function TaskFormDialog({
             </div>
 
             <div className="border-b border-[#2a2a2a]" />
+
+            {form.formState.errors.root?.message && (
+              <div className="px-4 sm:px-5 pt-2 text-xs text-red-400">
+                {form.formState.errors.root.message}
+              </div>
+            )}
 
             <DialogFooter className="px-4 sm:px-5 py-3 gap-2 sm:gap-2">
               <Button

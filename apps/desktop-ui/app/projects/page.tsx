@@ -267,7 +267,11 @@ function ProjectsContent() {
         setFormData((prev) => ({ ...prev, sourceType: "local", repoUrl: "", localPath: selectedPath }))
       }
     } catch (error) {
-      console.error("Failed to pick local folder:", error)
+      const { toastMessage } = mapErrorToForm(
+        error,
+        "Could not open the folder picker. Try again or paste a path manually.",
+      )
+      toast.error(toastMessage)
     } finally {
       if (isEdit) {
         setIsPickingEditLocalPath(false)
@@ -282,7 +286,11 @@ function ProjectsContent() {
       const data = await fetchProjects(filterTeamId)
       setProjects(data)
     } catch (error) {
-      console.error("Failed to fetch projects:", error)
+      const { toastMessage } = mapErrorToForm(
+        error,
+        "Could not load projects. Check your connection and try again.",
+      )
+      toast.error(`Failed to load projects: ${toastMessage}`)
     }
   }, [filterTeamId])
 
@@ -291,7 +299,11 @@ function ProjectsContent() {
       const data = await fetchTeams()
       setTeams(data)
     } catch (error) {
-      console.error("Failed to fetch teams:", error)
+      const { toastMessage } = mapErrorToForm(
+        error,
+        "Could not load teams. Check your connection and try again.",
+      )
+      toast.error(`Failed to load teams: ${toastMessage}`)
     }
   }, [])
 

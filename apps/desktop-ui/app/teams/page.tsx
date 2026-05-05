@@ -204,7 +204,8 @@ export default function TeamsPage() {
       setDeleteTeamId(null)
       loadTeams()
     } catch (error) {
-      console.error("Failed to delete team:", error)
+      const message = describeApiError(error, "Could not reach OpenLinear server. Check your connection and try again.")
+      toast.error(`Failed to delete team: ${message}`)
     } finally {
       setIsDeletingTeam(false)
     }
@@ -216,6 +217,7 @@ export default function TeamsPage() {
 
     try {
       setIsSubmitting(true)
+      setEditError(null)
       await updateTeam(editTeam.id, {
         name: editFormData.name,
         description: editFormData.description || null,
@@ -226,7 +228,9 @@ export default function TeamsPage() {
       setEditFormData({ name: "", description: "", color: "#6366f1" })
       loadTeams()
     } catch (error) {
-      console.error("Failed to update team:", error)
+      const message = describeApiError(error, "Could not reach OpenLinear server. Check your connection and try again.")
+      setEditError(message)
+      toast.error(message)
     } finally {
       setIsSubmitting(false)
     }

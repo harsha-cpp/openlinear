@@ -26,12 +26,13 @@ interface LabelPickerProps {
   triggerClassName?: string
 }
 
-import { apiFetch } from "@/lib/api/fetch"
+import { apiFetch, ApiError } from "@/lib/api/fetch"
 
 export function LabelPicker({ selectedIds, onChange, triggerClassName }: LabelPickerProps) {
   const [labels, setLabels] = useState<Label[]>([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchLabels()
@@ -40,13 +41,19 @@ export function LabelPicker({ selectedIds, onChange, triggerClassName }: LabelPi
   const fetchLabels = async () => {
     try {
       setLoading(true)
+      setLoadError(null)
       const data = await apiFetch<Label[]>('/api/labels')
       const sortedLabels = [...data].sort((a, b) => a.priority - b.priority)
       setLabels(sortedLabels)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to fetch labels'
-      console.error("Error fetching labels:", err)
-      toast.error(msg)
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Could not reach OpenLinear server.'
+      setLoadError(msg)
+      toast.error(`Failed to load labels: ${msg}`)
     } finally {
       setLoading(false)
     }
@@ -103,6 +110,19 @@ export function LabelPicker({ selectedIds, onChange, triggerClassName }: LabelPi
             {loading ? (
               <div className="p-4 text-center text-sm text-linear-text-tertiary">
                 Loading labels...
+              </div>
+            ) : loadError ? (
+              <div className="p-3 flex flex-col items-center gap-2">
+                <div className="text-xs text-red-400 text-center">{loadError}</div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={fetchLabels}
+                  className="text-xs h-7"
+                >
+                  Retry
+                </Button>
               </div>
             ) : labels.length === 0 ? (
               <div className="p-4 text-center text-sm text-linear-text-tertiary">

@@ -787,3 +787,24 @@ Once `teamMember.deleteMany` runs, the connected EventSource clients still have 
 - **Sequence keys (g+i, g+m, ...)**: Skipped react-hotkeys-hook for these; raw `window.addEventListener("keydown")` with a `pendingG` flag + 1.2s timeout is simpler than chaining `useHotkeys("g>i")` strings. Cleared on each non-match key, so `g x` doesn't poison the next real `g i`.
 - **Custom event for `c`**: Rather than reaching into GlobalQuickCapture's setState, dispatch `window.dispatchEvent(new CustomEvent("openlinear:new-task"))`. Loose coupling — overlay component knows nothing about capture's internals; capture (or any future task-creator) just adds a `window.addEventListener` if it wants to respond. Makes T30 mergeable independent of capture changes.
 - **`document.activeElement` vs `e.target`**: For `useHotkeys`'s `enabled` callback, no event is passed — query `document.activeElement` instead. For raw keydown handlers I still use `e.target` since it's more accurate for the actual key event. Two different APIs, two different access patterns.
+
+### T22 — error-surfacing patterns
+- `mapErrorToForm` (projects) and `describeApiError` (teams) are local helpers per page —
+  not shared. Both inspect `ApiError.code === "OWNERSHIP_REQUIRED"` and `details.fieldErrors`
+  (a `Record<string, string[]>` from zod-on-the-server). Reuse the local helper rather than
+  inventing a third shape. If a third page needs the same logic, extract to `@/lib/api/errors.ts`.
+- React-hook-form: `form.setError("root", { type, message })` renders via
+  `form.formState.errors.root?.message` — there's no `<FormMessage name="root" />` because
+  root has no FormField. Render a manual `<div>` adjacent to the form footer.
+- Promise.allSettled UX: per-task failure toasts get noisy past ~5 items, but users need to
+  know *which* titles failed. Pattern: per-failure toast + 1 summary toast. For >10 failures,
+  a future improvement would batch into a single toast with a "View details" action.
+- `keyof FormValues` narrowing: when iterating `Object.entries(fieldErrors)` you can't pass
+  the loose `string` key to `form.setError` directly — TS rejects it. Solution: explicit
+  string-equality narrowing to the known field names (`if (field === "title" || …)`). Keeps
+  it type-safe without `as any` and survives schema additions (TS will complain when adding
+  a new field to the schema if it's missing from the narrowing list).
+- Working tree volatility: when editing across many files in a long session, periodically
+  `git status` + grep verification is essential — concurrent edits (other agents, hooks,
+  IDE autosave) can silently revert chunks. Apply edits in tight bursts, then verify
+  with the same grep pattern used to find the original problem before commit.
