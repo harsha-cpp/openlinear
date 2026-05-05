@@ -1203,7 +1203,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ### WAVE 3 — UI BUG SWEEP
 
-- [ ] 16. **Wire header search to KanbanBoard filter (currently does nothing)**
+- [x] 16. **Wire header search to KanbanBoard filter (currently does nothing)**
 
   **What to do**: Edit `apps/desktop-ui/app/page.tsx`: pass `searchQuery` state into `<KanbanBoard searchQuery=... />`. Edit `apps/desktop-ui/components/board/kanban-board.tsx` + `use-kanban-board.ts:filteredTasks`: filter tasks by case-insensitive substring match on title + identifier when `searchQuery.length >= 1`. Add debounce 200ms via `useDeferredValue`.
 
@@ -1257,7 +1257,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 18. **Optimistic update rollback for use-kanban-board**
+- [x] 18. **Optimistic update rollback for use-kanban-board**
 
   **What to do**: Edit `apps/desktop-ui/components/board/use-kanban-board.ts`: in `updateTaskStatus`, `handleDelete`, `handleBatchExecute`, snapshot `tasks` BEFORE optimistic mutation; on error, restore snapshot + show toast.error with server message; restore `selectedTaskId` on failed delete; remove the 3s safety timeout hack (line 547-571) — fix root cause.
 
@@ -1285,7 +1285,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 19. **Replace 4 native window.confirm() with AlertDialog**
+- [x] 19. **Replace 4 native window.confirm() with AlertDialog**
 
   **What to do**: Replace `window.confirm()` at `apps/desktop-ui/components/layout/sidebar.tsx:184`, `apps/desktop-ui/app/teams/page.tsx:164`, `apps/desktop-ui/app/teams/manage/page.tsx:188+213` with `<AlertDialog>` from T2. Wrap each confirm flow in a controlled-open dialog with destructive variant button.
 
@@ -1312,7 +1312,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 20. **Replace 8 hand-rolled localStorage.getItem('token') in use-kanban-board**
+- [x] 20. **Replace 8 hand-rolled localStorage.getItem('token') in use-kanban-board**
 
   **What to do**: Replace lines 191, 216, 575, 671, 693, 707, 745, 760 in `apps/desktop-ui/components/board/use-kanban-board.ts` with `apiFetch()` from T3. Removes need for hand-rolled headers.
 
@@ -1339,7 +1339,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 21. **globals.css: focus-visible 2px ring + prefers-reduced-motion overrides**
+- [x] 21. **globals.css: focus-visible 2px ring + prefers-reduced-motion overrides**
 
   **What to do**: Edit `apps/desktop-ui/app/globals.css`:
   - Replace lines 140-143 `outline: none` with `outline: 2px solid var(--linear-accent); outline-offset: 1px` on `:focus-visible` (NOT `:focus`)
@@ -1412,7 +1412,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 23. **Sidebar: remove module-level cachedTeams; per-user via context + clear on logout**
+- [x] 23. **Sidebar: remove module-level cachedTeams; per-user via context + clear on logout**
 
   **What to do**: Edit `apps/desktop-ui/components/layout/sidebar.tsx:18-19`: delete `let cachedTeams`; move teams state to a small `TeamsProvider` context OR derive from `useAuth().user.teams` if auth context loads them; clear on logout via `auth:expired` listener (T3). Also fix sidebar bugs from research: line 198 `handleClose` calls `minimize()` (rename to handleMinimize OR add real close); fix nested `<button>` in TeamSection (line 75-82) by restructuring as flex siblings.
 
@@ -1439,7 +1439,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 24. **Animation polish: useReducedMotion + stop infinite brain pulse + coordinate sidebar transitions**
+- [x] 24. **Animation polish: useReducedMotion + stop infinite brain pulse + coordinate sidebar transitions**
 
   **What to do**:
   - Add `useReducedMotion()` hook check in `apps/desktop-ui/components/global-quick-capture.tsx`, `god-mode-overlay.tsx`, `onboarding-wizard.tsx` — gate `transition` and `animate` props

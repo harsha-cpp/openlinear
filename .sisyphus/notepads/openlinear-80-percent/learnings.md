@@ -751,3 +751,12 @@ Once `teamMember.deleteMany` runs, the connected EventSource clients still have 
   from the package dir works. Workspace `pnpm typecheck` runs api/sidecar/db/types via turbo.
 - Recommend adding `"typecheck": "tsc --noEmit"` to apps/desktop-ui/package.json so it's covered
   by the turbo pipeline (filed mentally for a future T-task).
+
+## [2026-05-05] Task: T17 — TaskDetailView Sheet wrap (RETRY, no-op)
+
+- **Already-applied state**: All T17 surgery present in HEAD before retry. Earlier commits `307d68c` (AlertDialog refactor) and `95b706c` (kanban+detail polish) folded the changes in. No code diff needed.
+- **Verification convention**: When plan task overlaps prior work, run `npx tsc --noEmit` from `apps/desktop-ui` (no `typecheck` script defined in package.json — just `dev/build/lint`). Clean exit = green.
+- **Sheet primitive integration**: `Sheet open onOpenChange` with `onOpenAutoFocus={(e) => e.preventDefault()}` is the right pattern when the sheet contains its own header/close button — prevents Radix from stealing focus to first focusable, lets inline editors (title input) keep their focus contract.
+- **Double-save guard**: Pattern `titleSavedRef.current = true` set at start of save fn AND in cancel paths; reset to `false` in the `useEffect` that runs when `editing*` flips true. Prevents blur-after-Enter from firing onUpdate twice without needing debounce.
+- **Anchor-skip on click-to-edit**: `target.tagName === 'A' || target.closest('a')` — covers both direct anchor clicks and clicks on text/img inside anchors.
+- **Caller signature**: `kanban-board.tsx:367` passes `project={selectedProject ? { id, name } : null}`. Keep prop nullable in TaskDetailView since selection can be cleared.
