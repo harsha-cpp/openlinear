@@ -45,6 +45,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useSearchParams } from "next/navigation"
+import { useTheme } from "next-themes"
 import { toast } from "sonner"
 import { DatabaseSettings } from "@/components/desktop/database-settings"
 import { getSetupStatus, setProviderApiKey, getProviderAuthMethods, oauthAuthorize, oauthCallback, getModels, getModelConfig, setModel, SetupStatus, ProviderAuthMethods, ProviderModels } from "@/lib/api/opencode"
@@ -90,7 +91,7 @@ function SettingsContent() {
   const [timezone, setTimezone] = useState("UTC")
   const [autoSave, setAutoSave] = useState(true)
 
-  const [theme, setTheme] = useState<"dark" | "light" | "system">("dark")
+  const { theme, setTheme } = useTheme()
   const [compactMode, setCompactMode] = useState(false)
   const [animations, setAnimations] = useState(true)
 
@@ -693,22 +694,29 @@ function SettingsContent() {
           <div className="grid grid-cols-3 gap-3">
             {(
               [
-                { value: "dark" as const, label: "Dark", icon: Moon },
-                { value: "light" as const, label: "Light", icon: Sun },
-                { value: "system" as const, label: "System", icon: Laptop },
+                { value: "dark" as const, label: "Dark", icon: Moon, disabled: false },
+                { value: "light" as const, label: "Light", icon: Sun, disabled: true },
+                { value: "system" as const, label: "System", icon: Laptop, disabled: false },
               ] as const
             ).map((option) => (
               <button
                 key={option.value}
-                onClick={() => setTheme(option.value)}
+                onClick={() => !option.disabled && setTheme(option.value)}
+                disabled={option.disabled}
+                title={option.disabled ? "Light theme coming soon" : undefined}
                 className={`flex flex-col items-center gap-2 p-4 rounded-lg border transition-colors ${
-                  theme === option.value
+                  option.disabled
+                    ? "border-linear-border bg-linear-bg text-linear-text-tertiary opacity-50 cursor-not-allowed"
+                    : theme === option.value
                     ? "border-linear-accent bg-linear-accent/10 text-linear-text"
                     : "border-linear-border bg-linear-bg text-linear-text-secondary hover:text-linear-text hover:border-linear-border"
                 }`}
               >
                 <option.icon className="w-5 h-5" />
                 <span className="text-sm font-medium">{option.label}</span>
+                {option.disabled && (
+                  <span className="text-[10px] text-linear-text-tertiary">Coming soon</span>
+                )}
               </button>
             ))}
           </div>

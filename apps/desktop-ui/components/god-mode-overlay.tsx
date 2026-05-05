@@ -78,9 +78,8 @@ export function GodModeOverlay() {
       }
 
       const isMac = navigator.platform.toUpperCase().includes("MAC")
-      const isToggle = isMac
-        ? e.altKey && e.code === "Space"
-        : e.ctrlKey && e.key === "k"
+      // Cmd+K / Ctrl+K is owned by CommandPalette (T25); god-mode keeps Alt+Space on mac only.
+      const isToggle = isMac && e.altKey && e.code === "Space"
 
       if (isToggle) {
         e.preventDefault()

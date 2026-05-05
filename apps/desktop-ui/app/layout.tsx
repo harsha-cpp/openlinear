@@ -1,12 +1,16 @@
 import type { Metadata, Viewport } from "next"
 import { DM_Mono, DM_Sans, EB_Garamond, Space_Grotesk } from "next/font/google"
 import "./globals.css"
+import { ThemeProvider } from "next-themes"
 import { AuthProvider } from "@/hooks/use-auth"
 import { SSEProvider } from "@/providers/sse-provider"
 import { TeamsProvider } from "@/providers/teams-provider"
-import { Toaster } from "sonner"
+import { ThemedToaster } from "@/components/themed-toaster"
+import { ThemeMeta } from "@/components/theme-meta"
 import { GlobalQuickCapture } from "@/components/global-quick-capture"
 import { GodModeOverlay } from "@/components/god-mode-overlay"
+import { CommandPalette } from "@/components/command-palette"
+import { ShortcutsOverlay } from "@/components/shortcuts-overlay"
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -78,7 +82,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`dark ${spaceGrotesk.variable} ${dmSans.variable} ${ebGaramond.variable} ${dmMono.variable}`}
+      className={`${spaceGrotesk.variable} ${dmSans.variable} ${ebGaramond.variable} ${dmMono.variable}`}
       suppressHydrationWarning
     >
       <head>
@@ -92,16 +96,20 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased">
-        <AuthProvider>
-          <SSEProvider>
-            <TeamsProvider>
-              {children}
-            </TeamsProvider>
-          </SSEProvider>
-          <GlobalQuickCapture />
-          <GodModeOverlay />
-          <Toaster position="bottom-right" theme="dark" />
-        </AuthProvider>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+          <ThemeMeta />
+          <AuthProvider>
+            <SSEProvider>
+              <TeamsProvider>
+                {children}
+              </TeamsProvider>
+            </SSEProvider>
+            <GlobalQuickCapture />
+            <GodModeOverlay />
+            <CommandPalette />
+            <ThemedToaster />
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   )
