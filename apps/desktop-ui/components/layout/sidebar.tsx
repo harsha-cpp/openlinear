@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams, useRouter } from "next/navigation"
+import { useTheme } from "next-themes"
 import {
     Home, Inbox, Layers, Settings,
     PanelLeftClose, LogOut, Archive, Brain, BarChart3,
-    ChevronRight, ChevronDown, CircleDot, Hexagon, MoreHorizontal, Pencil, Trash2, Plus
+    ChevronRight, ChevronDown, CircleDot, Hexagon, MoreHorizontal, Pencil, Trash2, Plus,
+    User as UserIcon, Sun, Moon, Monitor, ChevronsUpDown
 } from "lucide-react"
 import { ProjectSelector } from "@/components/auth/project-selector"
 import { useAuth } from "@/hooks/use-auth"
@@ -27,6 +29,18 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { buttonVariants } from "@/components/ui/button"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 const navItemClass = (isActive: boolean) =>
     cn(
@@ -146,6 +160,7 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
     const router = useRouter()
     const { user, isAuthenticated, isLoading, logout } = useAuth()
     const { teams, reload: reloadTeams } = useTeams()
+    const { setTheme } = useTheme()
     const [isTauri, setIsTauri] = useState(false)
     const [unreadCount, setUnreadCount] = useState<number>(0)
     const [isFullscreen, setIsFullscreen] = useState(false)
@@ -394,23 +409,66 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
                         <div className="h-3 w-20 bg-linear-bg-tertiary rounded animate-pulse" />
                     </div>
                 ) : isAuthenticated && user ? (
-                    <div className="flex items-center gap-3 px-3 py-2">
-                        {user.avatarUrl && (
-                            <img
-                                src={user.avatarUrl}
-                                alt={user.username}
-                                className="w-7 h-7 rounded-full flex-shrink-0"
-                            />
-                        )}
-                        <span className="text-sm text-linear-text truncate flex-1">{user.username}</span>
-                        <button
-                            onClick={logout}
-                            className="p-1.5 rounded-md hover:bg-linear-bg-tertiary transition-colors text-linear-text-tertiary hover:text-linear-text"
-                            title="Sign out"
-                        >
-                            <LogOut className="w-3.5 h-3.5" />
-                        </button>
-                    </div>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                className="flex items-center gap-3 w-full px-2 py-2 rounded-md hover:bg-linear-bg-tertiary/50 transition-colors text-left"
+                                aria-label="User menu"
+                            >
+                                <Avatar className="w-7 h-7 flex-shrink-0">
+                                    {user.avatarUrl && (
+                                        <AvatarImage src={user.avatarUrl} alt={user.username} />
+                                    )}
+                                    <AvatarFallback className="text-xs">
+                                        {user.username.charAt(0).toUpperCase()}
+                                    </AvatarFallback>
+                                </Avatar>
+                                <span className="text-sm text-linear-text truncate flex-1">{user.username}</span>
+                                <ChevronsUpDown className="w-3.5 h-3.5 text-linear-text-tertiary flex-shrink-0" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" side="top" className="w-56">
+                            <DropdownMenuLabel className="truncate">{user.username}</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem asChild>
+                                <Link href="/settings" className="cursor-pointer">
+                                    <UserIcon className="w-4 h-4 mr-2" />
+                                    Profile
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                                <Link href="/settings" className="cursor-pointer">
+                                    <Settings className="w-4 h-4 mr-2" />
+                                    Settings
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                    <Sun className="w-4 h-4 mr-2" />
+                                    Theme
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                    <DropdownMenuItem onClick={() => setTheme("light")} className="cursor-pointer">
+                                        <Sun className="w-4 h-4 mr-2" />
+                                        Light
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setTheme("dark")} className="cursor-pointer">
+                                        <Moon className="w-4 h-4 mr-2" />
+                                        Dark
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setTheme("system")} className="cursor-pointer">
+                                        <Monitor className="w-4 h-4 mr-2" />
+                                        System
+                                    </DropdownMenuItem>
+                                </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => logout()} className="cursor-pointer text-red-500 focus:text-red-500">
+                                <LogOut className="w-4 h-4 mr-2" />
+                                Sign out
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 ) : (
                     <a
                         href="/login"

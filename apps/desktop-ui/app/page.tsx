@@ -55,14 +55,13 @@ function HomeContent() {
     setRefreshKey((prev) => prev + 1)
   }, [])
 
-  const rawHeaderLabel = selectedTeamId
+  const headerLabel = selectedTeamId
     ? teams.find(t => t.id === selectedTeamId)?.name || "Team Issues"
     : selectedProjectId
       ? projects.find(p => p.id === selectedProjectId)?.name || "Project"
         : activeRepository
           ? activeRepository.name
           : "Dashboard"
-  const headerLabel = rawHeaderLabel.replace(/openlinear/gi, "Dashboard")
 
   if (isLoading || !isAuthenticated) {
     return null
