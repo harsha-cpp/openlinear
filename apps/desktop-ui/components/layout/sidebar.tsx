@@ -15,7 +15,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { cn } from "@/lib/utils"
 import { BRAND_COLORS } from "@/lib/design-tokens"
 import { deleteTeam, apiFetch, type Team } from "@/lib/api"
-import { getApiUrl } from "@/lib/api/client"
+import { getApiUrl, getAuthToken } from "@/lib/api/client"
 import { useTeams } from "@/providers/teams-provider"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
@@ -194,8 +194,7 @@ export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
 
     useEffect(() => {
         if (typeof window === 'undefined') return
-        let token: string | null = null
-        try { token = window.localStorage.getItem('token') } catch { token = null }
+        const token = getAuthToken()
         if (!token) return
         const url = new URL(`${getApiUrl()}/api/events`)
         url.searchParams.set('token', token)

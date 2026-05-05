@@ -9,7 +9,7 @@ import {
 import { AppShell } from "@/components/layout/app-shell"
 import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
-import { getApiUrl } from "@/lib/api/client"
+import { getApiUrl, getAuthToken } from "@/lib/api/client"
 import { EmptyState } from "@/components/empty-state"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -137,11 +137,7 @@ async function markAllNotificationsRead(): Promise<void> {
 
 function readToken(): string | null {
   if (typeof window === 'undefined') return null
-  try {
-    return window.localStorage.getItem('token')
-  } catch {
-    return null
-  }
+  return getAuthToken()
 }
 
 function useNotificationStream(onCreated: (n: AppNotification) => void): void {

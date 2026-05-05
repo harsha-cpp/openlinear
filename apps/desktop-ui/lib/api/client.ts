@@ -89,9 +89,25 @@ function getClientHeader(): HeadersInit {
 }
 
 export function getAuthHeader(): HeadersInit {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = getAuthToken();
   return {
     ...getClientHeader(),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
+}
+
+/**
+ * Returns the current JWT token (or null). Single point of truth for token reads.
+ *
+ * Use this for callsites that cannot use `apiFetch` directly — currently:
+ * native EventSource (cannot set Authorization headers, must pass token via URL).
+ * Do NOT use elsewhere; prefer `apiFetch` from `lib/api/fetch.ts`.
+ */
+export function getAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem('token');
+  } catch {
+    return null;
+  }
 }
