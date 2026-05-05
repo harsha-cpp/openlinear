@@ -24,6 +24,8 @@ import {
   AlertCircle,
   ExternalLink,
   Pencil,
+  User as UserIcon,
+  Github,
 } from "lucide-react"
 import { Slider } from "@/components/ui/slider"
 import { Button } from "@/components/ui/button"
@@ -52,8 +54,12 @@ import { getSetupStatus, setProviderApiKey, getProviderAuthMethods, oauthAuthori
 import { getActiveRepository, setActiveRepositoryBaseBranch } from "@/lib/api"
 import { AppShell } from "@/components/layout/app-shell"
 import { apiFetch } from "@/lib/api/fetch"
+import { startLogin } from "@/lib/api"
+import { useAuth } from "@/hooks/use-auth"
+import { EmptyState } from "@/components/empty-state"
 
 type SettingsSection =
+  | "profile"
   | "general"
   | "appearance"
   | "notifications"
@@ -68,6 +74,7 @@ const NAV_ITEMS: {
   label: string
   icon: React.ElementType
 }[] = [
+  { id: "profile", label: "Profile", icon: UserIcon },
   { id: "general", label: "General", icon: Globe },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "notifications", label: "Notifications", icon: Bell },
@@ -83,10 +90,11 @@ const OAUTH_PENDING_STORAGE_KEY = "opencode-oauth-pending"
 
 function SettingsContent() {
   const searchParams = useSearchParams()
-  const initialSection = (searchParams.get("section") as SettingsSection) || "general"
+  const initialSection = (searchParams.get("section") as SettingsSection) || "profile"
   const [activeSection, setActiveSection] =
     useState<SettingsSection>(initialSection)
 
+  const { user, isLoading: authLoading } = useAuth()
   const [language, setLanguage] = useState("en")
   const [timezone, setTimezone] = useState("UTC")
   const [autoSave, setAutoSave] = useState(true)
@@ -115,12 +123,8 @@ function SettingsContent() {
   const [prBaseBranch, setPrBaseBranch] = useState("")
   const [savedPrBaseBranch, setSavedPrBaseBranch] = useState("")
 
-  const [twoFactor, setTwoFactor] = useState(false)
+  const [twoFactor] = useState(false)
   const [sessionTimeout, setSessionTimeout] = useState("4h")
-
-  const [showApiKey, setShowApiKey] = useState(false)
-  const maskedKey = "sk-ol-************************************a3f7"
-  const fullKey = "sk-ol-9d8f7e6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a3f7"
 
   const [providersLoading, setProvidersLoading] = useState(false)
   const [providerSetupStatus, setProviderSetupStatus] = useState<SetupStatus | null>(null)
@@ -307,11 +311,6 @@ function SettingsContent() {
     } finally {
       setSaving(false)
     }
-  }
-
-  const handleCopyApiKey = () => {
-    navigator.clipboard.writeText(fullKey)
-    toast.success("API key copied to clipboard")
   }
 
   const handleSaveProviderKey = async (providerId: string) => {
@@ -582,6 +581,126 @@ function SettingsContent() {
     }
   }
 
+  const renderProfile = () => (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold text-linear-text">Profile</h2>
+        <p className="text-sm text-linear-text-tertiary mt-1">
+          Your account is managed by GitHub. Update your name, email, or avatar
+          on GitHub and reconnect to sync changes.
+        </p>
+      </div>
+
+      <Card className="bg-linear-bg-secondary border-linear-border">
+        <CardHeader>
+          <CardTitle className="text-linear-text">Account</CardTitle>
+          <CardDescription className="text-linear-text-secondary">
+            Synced from GitHub. Read-only here.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {authLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-linear-text-secondary" />
+            </div>
+          ) : !user ? (
+            <EmptyState
+              icon={UserIcon}
+              title="Not signed in"
+              description="Sign in with GitHub to manage your profile."
+              action={
+                <Button
+                  onClick={() => void startLogin()}
+                  className="bg-linear-accent hover:bg-linear-accent-hover text-white gap-2"
+                >
+                  <Github className="w-4 h-4" />
+                  Sign in with GitHub
+                </Button>
+              }
+            />
+          ) : (
+            <>
+              <div className="flex items-center gap-4">
+                {user.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.username}
+                    className="w-16 h-16 rounded-full border border-linear-border"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-linear-bg-tertiary border border-linear-border flex items-center justify-center">
+                    <UserIcon className="w-7 h-7 text-linear-text-tertiary" />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-base font-medium text-linear-text truncate">
+                    {user.username}
+                  </p>
+                  <p className="text-sm text-linear-text-tertiary truncate">
+                    {user.email || "No email on file"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2 border-t border-linear-border">
+                <div>
+                  <Label className="text-xs text-linear-text-tertiary">
+                    Username
+                  </Label>
+                  <Input
+                    readOnly
+                    value={user.username}
+                    className="mt-1 bg-linear-bg border-linear-border text-linear-text"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-linear-text-tertiary">
+                    Email
+                  </Label>
+                  <Input
+                    readOnly
+                    value={user.email || ""}
+                    placeholder="No email shared from GitHub"
+                    className="mt-1 bg-linear-bg border-linear-border text-linear-text"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-linear-text-tertiary">
+                    GitHub ID
+                  </Label>
+                  <Input
+                    readOnly
+                    value={String(user.githubId)}
+                    className="mt-1 bg-linear-bg border-linear-border text-linear-text font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-linear-border">
+                <div>
+                  <p className="text-sm text-linear-text">Reconnect GitHub</p>
+                  <p className="text-xs text-linear-text-tertiary">
+                    Re-run OAuth to refresh permissions and pull latest profile
+                    data.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => void startLogin()}
+                  className="border-linear-border text-linear-text hover:bg-linear-bg-tertiary gap-2"
+                >
+                  <Github className="w-4 h-4" />
+                  Reconnect
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+
   const renderGeneral = () => (
     <div className="space-y-6">
       <div>
@@ -807,6 +926,24 @@ function SettingsContent() {
       </div>
 
       <Card className="bg-linear-bg-secondary border-linear-border">
+        <CardContent className="py-4">
+          <div className="flex items-start gap-3">
+            <Bell className="w-4 h-4 text-linear-text-tertiary flex-shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-sm text-linear-text">
+                Per-user notification preferences are coming soon
+              </p>
+              <p className="text-xs text-linear-text-tertiary">
+                The controls below are previews and don&apos;t persist yet.
+                You&apos;ll still receive in-app notifications for mentions,
+                assignments, and PR updates from the inbox.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-linear-bg-secondary border-linear-border opacity-60">
         <CardHeader>
           <CardTitle className="text-linear-text">Channels</CardTitle>
           <CardDescription className="text-linear-text-secondary">
@@ -823,10 +960,7 @@ function SettingsContent() {
                 Receive updates via email
               </p>
             </div>
-            <Switch
-              checked={emailNotifications}
-              onCheckedChange={setEmailNotifications}
-            />
+            <Switch checked={emailNotifications} disabled />
           </div>
 
           <div className="flex items-center justify-between py-3 border-t border-linear-border">
@@ -838,10 +972,7 @@ function SettingsContent() {
                 Browser and desktop push alerts
               </p>
             </div>
-            <Switch
-              checked={pushNotifications}
-              onCheckedChange={setPushNotifications}
-            />
+            <Switch checked={pushNotifications} disabled />
           </div>
 
           <div className="flex items-center justify-between py-3 border-t border-linear-border">
@@ -851,15 +982,12 @@ function SettingsContent() {
                 Play a sound for incoming notifications
               </p>
             </div>
-            <Switch
-              checked={soundEnabled}
-              onCheckedChange={setSoundEnabled}
-            />
+            <Switch checked={soundEnabled} disabled />
           </div>
         </CardContent>
       </Card>
 
-      <Card className="bg-linear-bg-secondary border-linear-border">
+      <Card className="bg-linear-bg-secondary border-linear-border opacity-60">
         <CardHeader>
           <CardTitle className="text-linear-text">Event Types</CardTitle>
           <CardDescription className="text-linear-text-secondary">
@@ -874,10 +1002,7 @@ function SettingsContent() {
                 When someone mentions you in a comment
               </p>
             </div>
-            <Switch
-              checked={mentionNotifs}
-              onCheckedChange={setMentionNotifs}
-            />
+            <Switch checked={mentionNotifs} disabled />
           </div>
 
           <div className="flex items-center justify-between py-3 border-t border-linear-border">
@@ -887,10 +1012,7 @@ function SettingsContent() {
                 When a task is assigned to you
               </p>
             </div>
-            <Switch
-              checked={assignmentNotifs}
-              onCheckedChange={setAssignmentNotifs}
-            />
+            <Switch checked={assignmentNotifs} disabled />
           </div>
 
           <div className="flex items-center justify-between py-3 border-t border-linear-border">
@@ -900,10 +1022,7 @@ function SettingsContent() {
                 When a task you are watching changes status
               </p>
             </div>
-            <Switch
-              checked={statusChangeNotifs}
-              onCheckedChange={setStatusChangeNotifs}
-            />
+            <Switch checked={statusChangeNotifs} disabled />
           </div>
         </CardContent>
       </Card>
@@ -1149,13 +1268,11 @@ function SettingsContent() {
                 Two-factor authentication
               </p>
               <p className="text-xs text-linear-text-tertiary">
-                Add an extra layer of security to your account
+                Add an extra layer of security to your account.{" "}
+                <span className="text-linear-text-tertiary">Coming soon.</span>
               </p>
             </div>
-            <Switch
-              checked={twoFactor}
-              onCheckedChange={setTwoFactor}
-            />
+            <Switch checked={twoFactor} disabled aria-label="Two-factor authentication (coming soon)" />
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-3 border-t border-linear-border">
@@ -1193,60 +1310,13 @@ function SettingsContent() {
             Devices currently signed into your account.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {[
-            {
-              device: "MacBook Pro - Chrome",
-              ip: "192.168.1.42",
-              lastActive: "Active now",
-              current: true,
-            },
-            {
-              device: "iPhone 15 - Safari",
-              ip: "10.0.0.15",
-              lastActive: "2 hours ago",
-              current: false,
-            },
-            {
-              device: "Windows Desktop - Firefox",
-              ip: "172.16.0.8",
-              lastActive: "3 days ago",
-              current: false,
-            },
-          ].map((session, i) => (
-            <div
-              key={i}
-              className={`flex items-center justify-between py-3 ${
-                i > 0 ? "border-t border-linear-border" : ""
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Monitor className="w-4 h-4 text-linear-text-tertiary flex-shrink-0" />
-                <div>
-                  <p className="text-sm text-linear-text">
-                    {session.device}
-                    {session.current && (
-                      <span className="ml-2 text-xs text-linear-accent font-medium">
-                        Current
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-xs text-linear-text-tertiary">
-                    {session.ip} &middot; {session.lastActive}
-                  </p>
-                </div>
-              </div>
-              {!session.current && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-linear-border text-linear-text-secondary hover:text-linear-text"
-                >
-                  Revoke
-                </Button>
-              )}
-            </div>
-          ))}
+        <CardContent>
+          <EmptyState
+            icon={Shield}
+            size="compact"
+            title="No active session data yet"
+            description="Per-device session tracking will appear here once it ships."
+          />
         </CardContent>
       </Card>
     </div>
@@ -1270,39 +1340,13 @@ function SettingsContent() {
             Use this key to authenticate API requests.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center h-10 px-3 rounded-md bg-linear-bg border border-linear-border font-mono text-sm text-linear-text-secondary">
-              {showApiKey ? fullKey : maskedKey}
-            </div>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setShowApiKey(!showApiKey)}
-              className="border-linear-border text-linear-text-secondary hover:text-linear-text flex-shrink-0"
-            >
-              {showApiKey ? (
-                <EyeOff className="w-4 h-4" />
-              ) : (
-                <Eye className="w-4 h-4" />
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleCopyApiKey}
-              className="border-linear-border text-linear-text-secondary hover:text-linear-text flex-shrink-0"
-            >
-              <Copy className="w-4 h-4" />
-            </Button>
-          </div>
-
-          <div className="pt-2">
-            <Button variant="destructive" size="sm" className="gap-2">
-              <RefreshCw className="w-3.5 h-3.5" />
-              Regenerate Key
-            </Button>
-          </div>
+        <CardContent>
+          <EmptyState
+            icon={Key}
+            size="compact"
+            title="No API keys yet"
+            description="Generate one when this feature ships. For now, the desktop app authenticates via your GitHub session."
+          />
         </CardContent>
       </Card>
 
@@ -1748,6 +1792,8 @@ function SettingsContent() {
 
   const renderContent = () => {
     switch (activeSection) {
+      case "profile":
+        return renderProfile()
       case "general":
         return renderGeneral()
       case "appearance":
