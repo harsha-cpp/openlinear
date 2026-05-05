@@ -1,8 +1,9 @@
 "use client"
 
+import { useState, useRef, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
-import { Plus } from "lucide-react"
+import { Plus, Loader2 } from "lucide-react"
 import { DroppableProvidedProps } from "@hello-pangea/dnd"
 
 interface ColumnProps {
@@ -11,6 +12,7 @@ interface ColumnProps {
   taskCount: number
   children: React.ReactNode
   onAddTask?: () => void
+  onInlineCreate?: (title: string) => Promise<void> | void
   selectionActive?: boolean
   onToggleSelection?: () => void
   onSelectAll?: () => void
@@ -19,7 +21,20 @@ interface ColumnProps {
   isDraggingOver?: boolean
 }
 
-export function Column({ id, title, taskCount, children, onAddTask, selectionActive, onToggleSelection, onSelectAll, innerRef, droppableProps, isDraggingOver }: ColumnProps) {
+export function Column({
+  id,
+  title,
+  taskCount,
+  children,
+  onAddTask,
+  onInlineCreate,
+  selectionActive,
+  onToggleSelection,
+  onSelectAll,
+  innerRef,
+  droppableProps,
+  isDraggingOver,
+}: ColumnProps) {
   return (
     <div className="flex flex-col h-full border-r border-white/[0.06] last:border-r-0 w-[90vw] sm:w-[72vw] flex-none md:w-full md:flex-auto snap-start bg-gradient-to-b from-white/[0.02] to-transparent">
       <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 backdrop-blur-sm bg-white/[0.02] border-b border-white/[0.04] gap-2 flex-nowrap min-h-11 flex-shrink-0">
@@ -64,7 +79,7 @@ export function Column({ id, title, taskCount, children, onAddTask, selectionAct
         </div>
       </div>
 
-      <div 
+      <div
         ref={innerRef}
         {...droppableProps}
         className={cn(
@@ -74,6 +89,89 @@ export function Column({ id, title, taskCount, children, onAddTask, selectionAct
         )}
       >
         {children}
+        {onInlineCreate && <InlineAddTask columnId={id} columnTitle={title} onCreate={onInlineCreate} />}
+      </div>
+    </div>
+  )
+}
+
+interface InlineAddTaskProps {
+  columnId: string
+  columnTitle: string
+  onCreate: (title: string) => Promise<void> | void
+}
+
+function InlineAddTask({ columnTitle, onCreate }: InlineAddTaskProps) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus()
+    }
+  }, [editing])
+
+  const cancel = () => {
+    setValue("")
+    setEditing(false)
+  }
+
+  const submit = async () => {
+    const trimmed = value.trim()
+    if (!trimmed || submitting) return
+    setSubmitting(true)
+    try {
+      await onCreate(trimmed)
+      setValue("")
+      // Keep input open for fast successive entry (Linear-style)
+      inputRef.current?.focus()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] text-linear-text-tertiary hover:text-linear-text hover:bg-white/[0.03] transition-colors group"
+      >
+        <Plus className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100" />
+        <span>Add task</span>
+      </button>
+    )
+  }
+
+  return (
+    <div className="rounded-lg border border-white/[0.10] bg-white/[0.04] backdrop-blur-sm focus-within:border-linear-accent/50 focus-within:bg-white/[0.06] transition-colors">
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        disabled={submitting}
+        placeholder={`New task in ${columnTitle.toLowerCase()}…`}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault()
+            void submit()
+          } else if (e.key === "Escape") {
+            e.preventDefault()
+            cancel()
+          }
+        }}
+        onBlur={() => {
+          // Cancel on blur only if empty — preserve in-flight typing on accidental clicks
+          if (!value.trim() && !submitting) cancel()
+        }}
+        className="w-full bg-transparent px-3 py-2.5 text-sm text-linear-text placeholder:text-linear-text-tertiary outline-none disabled:opacity-60"
+      />
+      <div className="flex items-center justify-between px-3 pb-2 pt-0.5 text-[10px] uppercase tracking-wider text-linear-text-tertiary">
+        <span>Enter to save · Esc to cancel</span>
+        {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
       </div>
     </div>
   )

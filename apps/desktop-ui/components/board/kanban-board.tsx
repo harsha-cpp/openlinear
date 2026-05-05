@@ -1,9 +1,11 @@
 "use client"
 
+import { useEffect } from "react"
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
 import { Column } from "./column"
 import { TaskCard } from "./task-card"
 import { BatchControls } from "./batch-controls"
+import { BulkSelectionToolbar } from "./bulk-selection-toolbar"
 import { BatchProgress } from "./batch-progress"
 import { DashboardLoading } from "./dashboard-loading"
 import { TaskFormDialog } from "@/components/task-form"
@@ -155,6 +157,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
     selectedTaskId,
     taskLogs,
     selectedTaskIds,
+    selectionActive,
     selectingColumns,
     activeBatch,
     setActiveBatch,
@@ -181,15 +184,46 @@ export function KanbanBoard(props: KanbanBoardProps) {
     toggleTaskSelect,
     toggleColumnSelection,
     toggleColumnSelectAll,
+    selectAllVisible,
     clearSelection,
+    handleInlineCreateTask,
+    handleBulkDelete,
+    handleBulkChangeStatus,
     fetchTasks,
     showProviderSetup,
     setShowProviderSetup,
     handleProviderSetupComplete,
   } = useKanbanBoard(props)
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      const isEditable =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable
+      if (isEditable) return
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault()
+        selectAllVisible()
+        return
+      }
+      if (e.key === 'Escape' && selectionActive) {
+        clearSelection()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [selectAllVisible, clearSelection, selectionActive])
+
   const renderTask = (task: Task, index: number, isCompletedBatch?: boolean) => (
-    <Draggable key={task.id} draggableId={task.id} index={index}>
+    <Draggable
+      key={task.id}
+      draggableId={task.id}
+      index={index}
+      isDragDisabled={selectionActive || task.id.startsWith('temp-')}
+    >
       {(provided, snapshot) => (
         <div
           ref={provided.innerRef}
@@ -207,7 +241,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
             executionProgress={executionProgress[task.id]}
             selected={selectedTaskIds.has(task.id)}
             onToggleSelect={toggleTaskSelect}
-            selectionMode={selectingColumns.has(task.status)}
+            selectionMode={selectionActive || selectingColumns.has(task.status)}
             isBatchTask={batchTaskIds.includes(task.id)}
             isCompletedBatchTask={isCompletedBatch}
             isDragging={snapshot.isDragging}
@@ -275,6 +309,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
                     title={column.title}
                     taskCount={columnTasks.length}
                     onAddTask={() => handleAddTask(column.status)}
+                    onInlineCreate={(title) => handleInlineCreateTask(column.status, title)}
                     selectionActive={selectionActive}
                     onToggleSelection={!hasParallelGroup ? () => toggleColumnSelection(column.id) : undefined}
                     onSelectAll={selectionActive ? () => toggleColumnSelectAll(column.status) : undefined}
@@ -383,17 +418,33 @@ export function KanbanBoard(props: KanbanBoardProps) {
           )
           const hasTodo = selectedTodoIds.length > 0
           const hasInProgress = selectedInProgressIds.length > 0
+          const showBatchControls = hasTodo || hasInProgress
           const mode = hasTodo && hasInProgress ? 'mixed' as const : hasTodo ? 'move' as const : hasInProgress ? 'execute' as const : 'view' as const
+
           return (
-            <BatchControls
-              selectedCount={selectedTaskIds.size}
-              mode={mode}
-              onExecuteParallel={() => handleBatchExecute('parallel')}
-              onExecuteQueue={() => handleBatchExecute('queue')}
-              onMoveToInProgress={handleBatchMoveToInProgress}
-              onClearSelection={clearSelection}
-              disabled={!canExecute}
-            />
+            <>
+              {showBatchControls && (
+                <div className="fixed bottom-20 sm:bottom-24 left-0 right-0 z-50 flex justify-center pointer-events-none">
+                  <div className="pointer-events-auto">
+                    <BatchControls
+                      selectedCount={selectedTaskIds.size}
+                      mode={mode}
+                      onExecuteParallel={() => handleBatchExecute('parallel')}
+                      onExecuteQueue={() => handleBatchExecute('queue')}
+                      onMoveToInProgress={handleBatchMoveToInProgress}
+                      onClearSelection={clearSelection}
+                      disabled={!canExecute}
+                    />
+                  </div>
+                </div>
+              )}
+              <BulkSelectionToolbar
+                selectedCount={selectedTaskIds.size}
+                onChangeStatus={handleBulkChangeStatus}
+                onDelete={handleBulkDelete}
+                onClear={clearSelection}
+              />
+            </>
           )
         })()}
       </div>

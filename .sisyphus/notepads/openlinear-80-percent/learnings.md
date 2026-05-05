@@ -820,3 +820,37 @@ Once `teamMember.deleteMany` runs, the connected EventSource clients still have 
 - **T33 — Decimal → number serialization for analytics**: AgentRun.costUsd is `Decimal? @db.Decimal(12,6)`. Prisma returns a `Decimal` instance with `.toNumber()`. For per-row aggregation (zero-fill into a daily bucket) and JSON response, convert via a small helper that calls `.toNumber()` and falls back to `Number(d.toString())`. Round to 6 decimals before sending — matches DB precision and avoids floating-point noise like `0.012300000000001` in the chart tooltip.
 - **T33 — pnpm `ERR_PNPM_INCLUDED_DEPS_CONFLICT` on add**: After previous workspace installs that included dev deps, a fresh `pnpm --filter ... add <pkg>` fails because the modules dir was installed with `optional + dependencies + devDependencies` but the new install only requests a subset. Fix: pass `--include-workspace-root=false --prod=false` to force inclusion of all dep types, matching the existing modules layout. No package.json or .npmrc change needed.
 - **T33 — Multi-tenant scope for analytics**: Canonical pattern `{ OR: [{ userId }, { task: { teamId: { in: teamIds } } }] }` covers both cases (user's own runs + team-scoped runs) in a single Prisma where clause. Crucially, when `teamIds` is empty the OR still includes the userId clause — so a user without team memberships still sees their own runs. Building the where as a function (`buildScopeWhere`) and reusing it in both `/summary` and `/by-task` keeps the security invariant in one place.
+
+### T31 — inline create + bulk-select on kanban board
+- Optimistic insert pattern for create (vs T18 which was for update): generate
+  `temp-${Date.now()}-${random}` id, push into tasks immediately, then on
+  success swap with server-returned task by id (`prev.map(t => t.id === tempId
+  ? created : t)`). On failure: filter out the temp by id. Cleaner than full
+  snapshot/restore because nothing else depended on the missing row.
+- `Draggable.isDragDisabled` is the correct knob — not `<DragDropContext>`
+  enabled, not removing Draggable wrappers. Per-task disable lets us also block
+  drag on optimistic temp-id rows (avoids racing the POST that returns the real
+  id) while keeping non-selected, non-temp rows draggable.
+- Range select needs an "anchor" — store last toggled id in a ref (not state),
+  else every range-select rerender re-anchors. Compute the visible order by
+  iterating COLUMNS × tasks (matches what the user sees top-down per column),
+  not by `tasks` insertion order which is mostly createdAt and would feel wrong
+  for users who manually reorder columns.
+- Cmd-click on card body should NOT open the detail Sheet — it should toggle
+  selection. Pattern: in `handleCardClick`, if `e.shiftKey || e.metaKey ||
+  e.ctrlKey`, preventDefault + stopPropagation + call onToggleSelect, return
+  early. Plain click still opens detail. Single handler, no separate keymap.
+- Global `cmd+a` keydown listener: must check `e.target` for INPUT/TEXTAREA/
+  contentEditable and bail — otherwise typing in the inline-create input
+  selects all kanban cards on every keystroke.
+- Inline input UX: keep input focused after successful submit (don't close)
+  for fast successive entry. Cancel-on-blur ONLY when value is empty —
+  otherwise accidental clicks lose typed content. Both behaviors mirror Linear.
+- Stacking two toolbars (BatchControls execute + BulkSelectionToolbar archive)
+  needs `pointer-events-none` on the outer flex-center wrapper and
+  `pointer-events-auto` on the inner pill — otherwise the wrapper eats clicks
+  for the rest of the page even though it's visually empty.
+- `Promise.allSettled` for bulk mutations: count rejected, snapshot-rollback
+  ONLY if any failed (don't rollback successes — they're confirmed by SSE).
+  For partial failures, single summary toast with "Failed N of M" beats N
+  individual error toasts (which become unreadable at scale).

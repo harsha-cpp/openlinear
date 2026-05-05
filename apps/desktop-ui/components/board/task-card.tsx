@@ -16,7 +16,7 @@ interface TaskCardProps {
   onTaskClick?: (taskId: string) => void
   executionProgress?: ExecutionProgress
   selected?: boolean
-  onToggleSelect?: (taskId: string) => void
+  onToggleSelect?: (taskId: string, modifiers?: { shift?: boolean; meta?: boolean }) => void
   selectionMode?: boolean
   isBatchTask?: boolean
   isCompletedBatchTask?: boolean
@@ -96,7 +96,13 @@ export function TaskCard({ task, onExecute, onCancel, onDelete, onMoveToInProgre
     }
   }
 
-  const handleCardClick = () => {
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (onToggleSelect && (e.shiftKey || e.metaKey || e.ctrlKey)) {
+      e.preventDefault()
+      e.stopPropagation()
+      onToggleSelect(task.id, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey })
+      return
+    }
     if (onTaskClick) {
       onTaskClick(task.id)
     }
@@ -128,7 +134,7 @@ export function TaskCard({ task, onExecute, onCancel, onDelete, onMoveToInProgre
                 "flex-shrink-0 mt-0.5",
                 "opacity-100"
               )}
-              onClick={(e) => { e.stopPropagation(); onToggleSelect?.(task.id) }}
+              onClick={(e) => { e.stopPropagation(); onToggleSelect?.(task.id, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey }) }}
             >
               <div className={cn(
                 "w-4 h-4 rounded border flex items-center justify-center cursor-pointer",

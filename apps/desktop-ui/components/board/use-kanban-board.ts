@@ -47,6 +47,7 @@ export interface UseKanbanBoardReturn {
   selectedTaskId: string | null
   taskLogs: Record<string, ExecutionLogEntry[]>
   selectedTaskIds: Set<string>
+  selectionActive: boolean
   selectingColumns: Set<string>
   activeBatch: ActiveBatch | null
   setActiveBatch: (batch: ActiveBatch | null) => void
@@ -70,10 +71,14 @@ export interface UseKanbanBoardReturn {
   handleBatchMoveToInProgress: () => Promise<void>
   handleBatchExecute: (mode: 'parallel' | 'queue') => Promise<void>
   handleCancelBatch: (batchId: string) => Promise<void>
-  toggleTaskSelect: (taskId: string) => void
+  toggleTaskSelect: (taskId: string, modifiers?: { shift?: boolean; meta?: boolean }) => void
   toggleColumnSelection: (columnId: string) => void
   toggleColumnSelectAll: (status: Task['status']) => void
+  selectAllVisible: () => void
   clearSelection: () => void
+  handleInlineCreateTask: (status: Task['status'], title: string) => Promise<void>
+  handleBulkDelete: () => Promise<void>
+  handleBulkChangeStatus: (status: Task['status']) => Promise<void>
   fetchTasks: (options?: {
     showLoading?: boolean
     allowRetry?: boolean
@@ -101,6 +106,7 @@ export function useKanbanBoard({ projectId, teamId, projects = [], searchQuery =
   const [completedBatch, setCompletedBatch] = useState<{ taskIds: string[]; prUrl: string | null; mode: string } | null>(null)
   const [showProviderSetup, setShowProviderSetup] = useState(false)
   const [pendingExecuteTaskId, setPendingExecuteTaskId] = useState<string | null>(null)
+  const lastSelectedIdRef = useRef<string | null>(null)
   const { isAuthenticated, activeRepository, refreshActiveRepository } = useAuth()
 
   const batchTaskIds = activeBatch?.tasks.map(t => t.taskId) ?? []
@@ -132,15 +138,41 @@ export function useKanbanBoard({ projectId, teamId, projects = [], searchQuery =
     })
   }, [clearColumnSelection])
 
-  const toggleTaskSelect = (taskId: string) => {
+  const toggleTaskSelect = useCallback((taskId: string, modifiers?: { shift?: boolean; meta?: boolean }) => {
     if (batchTaskIds.includes(taskId)) return
+
+    if (modifiers?.shift && lastSelectedIdRef.current) {
+      const orderedIds: string[] = []
+      for (const col of COLUMNS) {
+        for (const t of tasks) {
+          if (t.status === col.status) orderedIds.push(t.id)
+        }
+      }
+      const anchorIdx = orderedIds.indexOf(lastSelectedIdRef.current)
+      const targetIdx = orderedIds.indexOf(taskId)
+      if (anchorIdx !== -1 && targetIdx !== -1) {
+        const [from, to] = anchorIdx < targetIdx ? [anchorIdx, targetIdx] : [targetIdx, anchorIdx]
+        setSelectedTaskIds(prev => {
+          const next = new Set(prev)
+          for (let i = from; i <= to; i++) {
+            const id = orderedIds[i]
+            if (id && !batchTaskIds.includes(id)) next.add(id)
+          }
+          return next
+        })
+        lastSelectedIdRef.current = taskId
+        return
+      }
+    }
+
     setSelectedTaskIds(prev => {
       const next = new Set(prev)
       if (next.has(taskId)) next.delete(taskId)
       else next.add(taskId)
       return next
     })
-  }
+    lastSelectedIdRef.current = taskId
+  }, [batchTaskIds, tasks])
 
   const toggleColumnSelectAll = useCallback((status: Task['status']) => {
     const columnTasks = tasks.filter(task => task.status === status)
@@ -165,7 +197,10 @@ export function useKanbanBoard({ projectId, teamId, projects = [], searchQuery =
   const clearSelection = () => {
     setSelectedTaskIds(new Set())
     setSelectingColumns(new Set())
+    lastSelectedIdRef.current = null
   }
+
+  const selectionActive = selectedTaskIds.size > 0
 
   useEffect(() => {
     setSelectingColumns(prev => {
@@ -598,6 +633,103 @@ export function useKanbanBoard({ projectId, teamId, projects = [], searchQuery =
     await updateTaskStatus(todoIds, 'in_progress')
   }
 
+  const handleInlineCreateTask = useCallback(async (status: Task['status'], title: string) => {
+    const trimmed = title.trim()
+    if (!trimmed) return
+
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const now = new Date().toISOString()
+    const optimistic: Task = {
+      id: tempId,
+      title: trimmed,
+      description: null,
+      priority: 'medium',
+      status,
+      sessionId: null,
+      createdAt: now,
+      updatedAt: now,
+      labels: [],
+      executionStartedAt: null,
+      executionPausedAt: null,
+      executionElapsedMs: 0,
+      executionProgress: null,
+      prUrl: null,
+      outcome: null,
+      batchId: null,
+      inboxRead: false,
+      identifier: null,
+      number: null,
+      dueDate: null,
+    }
+
+    setTasks(prev => [...prev, optimistic])
+
+    try {
+      const created = await apiFetch<Task>('/api/tasks', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: trimmed,
+          status,
+          projectId: projectId || undefined,
+          teamId: teamId || undefined,
+        }),
+      })
+      setTasks(prev => prev.map(t => (t.id === tempId ? created : t)))
+    } catch (err) {
+      setTasks(prev => prev.filter(t => t.id !== tempId))
+      const msg = err instanceof Error ? err.message : 'Failed to create task'
+      console.error('Error creating task inline:', err)
+      toast.error(msg)
+    }
+  }, [projectId, teamId])
+
+  const handleBulkDelete = useCallback(async () => {
+    const ids = Array.from(selectedTaskIds).filter(id => !batchTaskIds.includes(id))
+    if (ids.length === 0) return
+
+    const snapshot = tasks
+    setTasks(prev => prev.filter(t => !ids.includes(t.id)))
+    clearSelection()
+
+    const results = await Promise.allSettled(
+      ids.map(id => apiFetch(`/api/tasks/${id}`, { method: 'DELETE' })),
+    )
+    const failures = results.filter(r => r.status === 'rejected').length
+    if (failures > 0) {
+      setTasks(snapshot)
+      toast.error(`Failed to delete ${failures} of ${ids.length} task${ids.length !== 1 ? 's' : ''}`)
+    } else {
+      toast.success(`Deleted ${ids.length} task${ids.length !== 1 ? 's' : ''}`)
+    }
+  }, [selectedTaskIds, tasks, batchTaskIds])
+
+  const handleBulkChangeStatus = useCallback(async (newStatus: Task['status']) => {
+    const ids = Array.from(selectedTaskIds).filter(id => !batchTaskIds.includes(id))
+    if (ids.length === 0) return
+
+    let snapshot: Task[] = []
+    setTasks(prev => {
+      snapshot = prev
+      const idSet = new Set(ids)
+      return prev.map(t => (idSet.has(t.id) ? { ...t, status: newStatus } : t))
+    })
+    clearSelection()
+
+    const results = await Promise.allSettled(
+      ids.map(id =>
+        apiFetch(`/api/tasks/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: newStatus }),
+        }),
+      ),
+    )
+    const failures = results.filter(r => r.status === 'rejected').length
+    if (failures > 0) {
+      setTasks(snapshot)
+      toast.error(`Failed to update ${failures} of ${ids.length} task${ids.length !== 1 ? 's' : ''}`)
+    }
+  }, [selectedTaskIds, batchTaskIds])
+
   const handleDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result
 
@@ -751,6 +883,14 @@ export function useKanbanBoard({ projectId, teamId, projects = [], searchQuery =
     return filteredTasks.filter((task) => task.status === status)
   }
 
+  const selectAllVisible = useCallback(() => {
+    const ids = filteredTasks
+      .filter(t => !batchTaskIds.includes(t.id))
+      .map(t => t.id)
+    if (ids.length === 0) return
+    setSelectedTaskIds(new Set(ids))
+  }, [filteredTasks, batchTaskIds])
+
   return {
     tasks,
     loading,
@@ -762,6 +902,7 @@ export function useKanbanBoard({ projectId, teamId, projects = [], searchQuery =
     selectedTaskId,
     taskLogs,
     selectedTaskIds,
+    selectionActive,
     selectingColumns,
     activeBatch,
     setActiveBatch,
@@ -788,7 +929,11 @@ export function useKanbanBoard({ projectId, teamId, projects = [], searchQuery =
     toggleTaskSelect,
     toggleColumnSelection,
     toggleColumnSelectAll,
+    selectAllVisible,
     clearSelection,
+    handleInlineCreateTask,
+    handleBulkDelete,
+    handleBulkChangeStatus,
     fetchTasks,
     showProviderSetup,
     setShowProviderSetup,
