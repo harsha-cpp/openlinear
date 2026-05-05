@@ -1,8 +1,10 @@
 import { Router, Response, NextFunction } from 'express';
 import { prisma } from '@openlinear/db';
 import { requireAuth, optionalAuth, AuthRequest } from '../middleware/auth';
+import { validateQuery, ValidatedRequest } from '../middleware/validate';
 import { getUserTeamIds } from '../services/team-scope';
 import { assertTaskOwned } from '../services/ownership';
+import { paginationQuerySchema, paginated, paginationSkipTake, PaginationQuery } from '../schemas/pagination';
 
 const router: Router = Router();
 
@@ -36,38 +38,54 @@ router.get('/count', optionalAuth, async (req: AuthRequest, res: Response, next:
   }
 });
 
-router.get('/', optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const scope = await teamScope(req.userId);
-    if (!scope) {
-      res.json([]);
-      return;
-    }
+router.get(
+  '/',
+  optionalAuth,
+  validateQuery(paginationQuerySchema),
+  async (req: AuthRequest & ValidatedRequest<unknown, PaginationQuery>, res: Response, next: NextFunction) => {
+    try {
+      const { page, pageSize } = req.validQuery!;
+      const scope = await teamScope(req.userId);
+      if (!scope) {
+        res.json(paginated([], 0, page, pageSize));
+        return;
+      }
 
-    const tasks = await prisma.task.findMany({
-      where: {
+      const where = {
         ...completedOrCancelled(),
         archived: false,
         ...scope,
-      },
-      include: {
-        labels: { include: { label: true } },
-        team: { select: { id: true, name: true, key: true, color: true } },
-        project: { select: { id: true, name: true, status: true, color: true } },
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
+      };
 
-    const flatTasks = tasks.map(task => ({
-      ...task,
-      labels: task.labels.map((tl: { label: { id: string; name: string; color: string; priority: number } }) => tl.label),
-    }));
+      const [tasks, total] = await prisma.$transaction(
+        async (tx) => {
+          const items = await tx.task.findMany({
+            where,
+            include: {
+              labels: { include: { label: true } },
+              team: { select: { id: true, name: true, key: true, color: true } },
+              project: { select: { id: true, name: true, status: true, color: true } },
+            },
+            orderBy: { updatedAt: 'desc' },
+            ...paginationSkipTake(page, pageSize),
+          });
+          const count = await tx.task.count({ where });
+          return [items, count] as const;
+        },
+        { timeout: 15000, maxWait: 5000 },
+      );
 
-    res.json(flatTasks);
-  } catch (error) {
-    next(error);
-  }
-});
+      const flatTasks = tasks.map(task => ({
+        ...task,
+        labels: task.labels.map((tl: { label: { id: string; name: string; color: string; priority: number } }) => tl.label),
+      }));
+
+      res.json(paginated(flatTasks, total, page, pageSize));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 router.patch('/read/:id', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {

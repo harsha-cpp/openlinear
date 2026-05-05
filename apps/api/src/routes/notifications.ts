@@ -3,12 +3,11 @@ import { prisma } from '@openlinear/db';
 import { z } from 'zod';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { broadcastToUser } from '../sse';
+import { paginationQuerySchema, paginated, paginationSkipTake } from '../schemas/pagination';
 
 const router: Router = Router();
 
-const listQuerySchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+const listQuerySchema = paginationQuerySchema.extend({
   unreadOnly: z
     .union([z.literal('1'), z.literal('true'), z.literal('0'), z.literal('false')])
     .optional()
@@ -29,21 +28,26 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response, next: NextF
       ...(unreadOnly ? { readAt: null } : {}),
     };
 
-    const [notifications, total, unreadCount] = await Promise.all([
-      prisma.notification.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        include: {
-          actor: { select: { id: true, username: true, avatarUrl: true } },
-        },
-      }),
-      prisma.notification.count({ where }),
-      prisma.notification.count({ where: { userId: req.userId!, readAt: null } }),
-    ]);
+    const [notifications, total, unreadCount] = await prisma.$transaction(
+      async (tx) => {
+        const items = await tx.notification.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          ...paginationSkipTake(page, pageSize),
+          include: {
+            actor: { select: { id: true, username: true, avatarUrl: true } },
+          },
+        });
+        const count = await tx.notification.count({ where });
+        const unread = await tx.notification.count({
+          where: { userId: req.userId!, readAt: null },
+        });
+        return [items, count, unread] as const;
+      },
+      { timeout: 15000, maxWait: 5000 },
+    );
 
-    res.json({ notifications, page, pageSize, total, unreadCount });
+    res.json({ ...paginated(notifications, total, page, pageSize), unreadCount });
   } catch (error) {
     next(error);
   }

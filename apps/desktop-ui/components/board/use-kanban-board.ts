@@ -321,8 +321,9 @@ export function useKanbanBoard({ projectId, teamId, projects = [], searchQuery =
       if (teamId) params.set('teamId', teamId)
       const qs = params.toString()
       const path = qs ? `/api/tasks?${qs}` : `/api/tasks`
-      const data = await apiFetch<Task[]>(path)
-      setTasks(data)
+      const data = await apiFetch<{ items: Task[] } | Task[]>(path)
+      const items = Array.isArray(data) ? data : data.items
+      setTasks(items)
       setError(null)
       retryAttemptRef.current = 0
 

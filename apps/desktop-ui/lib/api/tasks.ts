@@ -1,6 +1,18 @@
 import { apiFetch } from './fetch';
 import type { InboxCount, InboxTask, MyIssueTask } from './types';
 
+interface Paginated<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+}
+
+function unwrap<T>(data: Paginated<T> | T[]): T[] {
+  return Array.isArray(data) ? data : data.items;
+}
+
 export async function fetchMyIssues(
   filter: 'assigned' | 'created' | 'all' = 'assigned',
 ): Promise<MyIssueTask[]> {
@@ -10,7 +22,8 @@ export async function fetchMyIssues(
       : filter === 'created'
       ? '?creator=me'
       : '';
-  return apiFetch<MyIssueTask[]>(`/api/tasks${qs}`);
+  const data = await apiFetch<Paginated<MyIssueTask> | MyIssueTask[]>(`/api/tasks${qs}`);
+  return unwrap(data);
 }
 
 export async function executeTaskPublic(taskId: string): Promise<void> {
@@ -21,7 +34,8 @@ export async function executeTaskPublic(taskId: string): Promise<void> {
 }
 
 export async function fetchInboxTasks(): Promise<InboxTask[]> {
-  return apiFetch<InboxTask[]>('/api/inbox');
+  const data = await apiFetch<Paginated<InboxTask> | InboxTask[]>('/api/inbox');
+  return unwrap(data);
 }
 
 export async function fetchInboxCount(): Promise<InboxCount> {

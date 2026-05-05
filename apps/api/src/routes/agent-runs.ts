@@ -4,6 +4,7 @@ import { prisma } from '@openlinear/db';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { assertTaskOwned } from '../services/ownership';
 import { getUserTeamIds } from '../services/team-scope';
+import { paginated, paginationSkipTake } from '../schemas/pagination';
 
 const router: Router = Router();
 
@@ -11,7 +12,7 @@ const listQuerySchema = z.object({
   taskId: z.string().uuid().optional(),
   userId: z.string().min(1).optional(),
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+  pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });
 
 router.get(
@@ -45,38 +46,41 @@ router.get(
         where.userId = resolvedUserId;
         const teamIds = await getUserTeamIds(req.userId!);
         if (teamIds.length === 0) {
-          res.json({ runs: [], page, pageSize, total: 0 });
+          res.json(paginated([], 0, page, pageSize));
           return;
         }
         where.task = { teamId: { in: teamIds } };
       }
 
-      const [runs, total] = await Promise.all([
-        prisma.agentRun.findMany({
-          where,
-          orderBy: { startedAt: 'desc' },
-          skip: (page - 1) * pageSize,
-          take: pageSize,
-          select: {
-            id: true,
-            taskId: true,
-            userId: true,
-            agent: true,
-            model: true,
-            startedAt: true,
-            endedAt: true,
-            costUsd: true,
-            inputTokens: true,
-            outputTokens: true,
-            status: true,
-            prUrl: true,
-            errorMessage: true,
-          },
-        }),
-        prisma.agentRun.count({ where }),
-      ]);
+      const [runs, total] = await prisma.$transaction(
+        async (tx) => {
+          const items = await tx.agentRun.findMany({
+            where,
+            orderBy: { startedAt: 'desc' },
+            ...paginationSkipTake(page, pageSize),
+            select: {
+              id: true,
+              taskId: true,
+              userId: true,
+              agent: true,
+              model: true,
+              startedAt: true,
+              endedAt: true,
+              costUsd: true,
+              inputTokens: true,
+              outputTokens: true,
+              status: true,
+              prUrl: true,
+              errorMessage: true,
+            },
+          });
+          const count = await tx.agentRun.count({ where });
+          return [items, count] as const;
+        },
+        { timeout: 15000, maxWait: 5000 },
+      );
 
-      res.json({ runs, page, pageSize, total });
+      res.json(paginated(runs, total, page, pageSize));
     } catch (error) {
       next(error);
     }

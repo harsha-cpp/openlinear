@@ -35,10 +35,11 @@ interface AppNotification {
 }
 
 interface NotificationsListResponse {
-  notifications: AppNotification[]
+  items: AppNotification[]
   page: number
   pageSize: number
   total: number
+  hasMore: boolean
   unreadCount: number
 }
 
@@ -254,7 +255,7 @@ export default function InboxPage() {
   const loadData = useCallback(async () => {
     try {
       const res = await fetchNotifications()
-      setNotifications(res.notifications)
+      setNotifications(res.items)
       setUnreadCount(res.unreadCount)
     } catch (err) {
       console.error("Failed to load notifications:", err)

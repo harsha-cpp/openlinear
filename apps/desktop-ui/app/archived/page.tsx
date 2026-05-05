@@ -37,8 +37,8 @@ export default function ArchivedPage() {
 
   const fetchArchived = useCallback(async () => {
     try {
-      const data = await apiFetch<Task[]>('/api/tasks/archived')
-      setTasks(data)
+      const data = await apiFetch<{ items: Task[] } | Task[]>('/api/tasks/archived')
+      setTasks(Array.isArray(data) ? data : data.items)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to fetch archived tasks'
       console.error("Error fetching archived tasks:", err)

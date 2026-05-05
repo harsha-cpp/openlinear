@@ -127,8 +127,8 @@ function TeamDetailPageContent() {
     if (!teamId) return
     try {
       setIsLoadingTasks(true)
-      const data = await apiFetch<Task[]>(`/api/tasks?teamId=${teamId}`)
-      setTasks(data)
+      const data = await apiFetch<{ items: Task[] } | Task[]>(`/api/tasks?teamId=${teamId}`)
+      setTasks(Array.isArray(data) ? data : data.items)
     } catch (error) {
       console.error("Failed to fetch tasks:", error)
       if (!(error instanceof ApiError && error.status === 401)) {

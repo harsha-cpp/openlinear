@@ -39,6 +39,8 @@ export const listTasksQuerySchema = z.object({
   projectId: z.string().uuid().optional(),
   assignee: meOrUuid.optional(),
   creator: meOrUuid.optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });
 
 export type CreateTaskBody = z.infer<typeof createTaskBodySchema>;

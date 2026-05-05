@@ -21,6 +21,7 @@ import {
   UpdateTaskBody,
   ListTasksQuery,
 } from '../schemas/tasks';
+import { paginationQuerySchema, paginated, paginationSkipTake, PaginationQuery } from '../schemas/pagination';
 
 interface Label {
   id: string;
@@ -94,19 +95,34 @@ const taskInclude = {
 
 const router: Router = Router();
 
-router.get('/archived', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const teamIds = await getUserTeamIds(req.userId!);
-    const tasks = await prisma.task.findMany({
-      where: { archived: true, teamId: { in: teamIds } },
-      include: taskInclude,
-      orderBy: { updatedAt: 'desc' },
-    });
-    res.json(tasks.map(flattenLabels));
-  } catch (error) {
-    next(error);
-  }
-});
+router.get(
+  '/archived',
+  requireAuth,
+  validateQuery(paginationQuerySchema),
+  async (req: AuthRequest & ValidatedRequest<unknown, PaginationQuery>, res: Response, next: NextFunction) => {
+    try {
+      const { page, pageSize } = req.validQuery!;
+      const teamIds = await getUserTeamIds(req.userId!);
+      const where = { archived: true, teamId: { in: teamIds } };
+      const [tasks, total] = await prisma.$transaction(
+        async (tx) => {
+          const items = await tx.task.findMany({
+            where,
+            include: taskInclude,
+            orderBy: { updatedAt: 'desc' },
+            ...paginationSkipTake(page, pageSize),
+          });
+          const count = await tx.task.count({ where });
+          return [items, count] as const;
+        },
+        { timeout: 15000, maxWait: 5000 },
+      );
+      res.json(paginated(tasks.map(flattenLabels), total, page, pageSize));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 router.delete('/archived', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -140,7 +156,7 @@ router.get(
   validateQuery(listTasksQuerySchema),
   async (req: AuthRequest & ValidatedRequest<unknown, ListTasksQuery>, res: Response, next: NextFunction) => {
     try {
-      const { teamId, projectId, assignee, creator } = req.validQuery!;
+      const { teamId, projectId, assignee, creator, page, pageSize } = req.validQuery!;
 
       const userTeamIds = await getUserTeamIds(req.userId!);
       const where: Record<string, unknown> = { archived: false };
@@ -179,13 +195,21 @@ router.get(
         where.creatorId = await resolveUserFilter(creator);
       }
 
-      const tasks = await prisma.task.findMany({
-        where,
-        include: taskInclude,
-        orderBy: { createdAt: 'desc' },
-      });
+      const [tasks, total] = await prisma.$transaction(
+        async (tx) => {
+          const items = await tx.task.findMany({
+            where,
+            include: taskInclude,
+            orderBy: { createdAt: 'desc' },
+            ...paginationSkipTake(page, pageSize),
+          });
+          const count = await tx.task.count({ where });
+          return [items, count] as const;
+        },
+        { timeout: 15000, maxWait: 5000 },
+      );
 
-      res.json(tasks.map(flattenLabels));
+      res.json(paginated(tasks.map(flattenLabels), total, page, pageSize));
     } catch (error) {
       next(error);
     }
