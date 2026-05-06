@@ -72,9 +72,9 @@ Push OpenLinear from a half-finished prototype with critical security holes and 
 - Landing page truthful and polished (no Zep/Mem0, no fake stats, no broken footer links, real claims only)
 
 ### Definition of Done
-- [ ] Final-wave 4 review agents (oracle plan-compliance, code-quality, manual QA, scope-fidelity) ALL approve
+- [x] Final-wave 4 review agents (oracle plan-compliance, code-quality, manual QA, scope-fidelity) ALL approve
 - [ ] User explicitly approves consolidated review summary
-- [ ] All evidence files exist in `.sisyphus/evidence/`
+- [x] All evidence files exist in `.sisyphus/evidence/`
 
 ### Must Have
 - ALL POST/PATCH/DELETE on `/api/tasks` require auth + team-scope ownership
@@ -1764,7 +1764,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ### WAVE 5 — REBRAND + LANDING POLISH
 
-- [ ] 34. **Replace logo.png usages with SVG logomark + wordmark across desktop-ui + landing**
+- [x] 34. **Replace logo.png usages with SVG logomark + wordmark across desktop-ui + landing**
 
   **What to do**: Replace every `<img src="/logo.png">` with `<img src="/brand/logomark.svg">` (or wordmark where appropriate). Sites: `apps/desktop-ui/components/layout/sidebar.tsx:249` (sidebar logo, h-[16px]), `apps/desktop-ui/app/login/page.tsx:34` (login splash, larger), `apps/landing/components/header.tsx:21` (wordmark), `apps/landing/components/footer.tsx:95-97` (giant wordmark — use SVG wordmark scaled), any other refs from grep.
 
@@ -1793,7 +1793,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 35. **Tauri icon regeneration via tauri icon master.svg**
+- [x] 35. **Tauri icon regeneration via tauri icon master.svg**
 
   **What to do**: Run `pnpm --filter @openlinear/desktop tauri icon apps/desktop-ui/public/brand/logomark.svg`. Verify outputs in `apps/desktop/src-tauri/icons/`. Commit generated files.
 
@@ -1820,7 +1820,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 36. **Font cleanup: delete Geist + Caveat; settle on Space Grotesk + DM Sans + DM Mono**
+- [x] 36. **Font cleanup: delete Geist + Caveat; settle on Space Grotesk + DM Sans + DM Mono**
 
   **What to do**:
   - Delete `apps/desktop-ui/public/fonts/Geist*.woff2`, `apps/desktop-ui/app/fonts/Geist*.otf`
@@ -1853,7 +1853,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 37. **Unify desktop + landing palette: pick canonical OpenLinear accent**
+- [x] 37. **Unify desktop + landing palette: pick canonical OpenLinear accent**
 
   **What to do**:
   - Pick canonical OpenLinear brand: keep blue accent `#1d4ed8` (already runtime-themable in desktop) as the SaaS brand color; landing uses same accent for CTAs but keeps warm neutral surfaces (gray-900/zinc-950)
@@ -1884,7 +1884,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 38. **Remove raw hex literals: replace bg-[#1a1a1a] etc with linear-* tokens; extract status colors**
+- [x] 38. **Remove raw hex literals: replace bg-[#1a1a1a] etc with linear-* tokens; extract status colors**
 
   **What to do**: Grep for `bg-\[#`, `text-\[#`, `border-\[#` across `apps/desktop-ui`; replace each with appropriate `linear-*` Tailwind class. Worst offenders: `task-form.tsx`, `dashboard-loading.tsx`. Extract status color map (todo/in_progress/done/cancelled etc.) from inline literals in `task-card.tsx` `progressConfig`, `execution-drawer.tsx`, `column.tsx` into `apps/desktop-ui/lib/design-tokens.ts:STATUS_COLORS` (created in T2). Replace stray `bg-zinc-950/80` in `god-mode-overlay.tsx:145,167`.
 
@@ -1911,7 +1911,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 39. **Landing copy purge: remove Zep/Mem0, fake stats, false integrations; rewrite truthfully**
+- [x] 39. **Landing copy purge: remove Zep/Mem0, fake stats, false integrations; rewrite truthfully**
 
   **What to do**:
   - `apps/landing/components/header.tsx:48`: remove fake "X 1.2k" stat
@@ -1944,7 +1944,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 40. **Landing footer + nav: wire all href="#" to real pages; unify domain to openlinear.tech**
+- [x] 40. **Landing footer + nav: wire all href="#" to real pages; unify domain to openlinear.tech**
 
   **What to do**:
   - Edit `apps/landing/components/footer.tsx:1-21,23-28`: replace all `href="#"` with real targets (Docs → /docs, Pricing → /pricing, GitHub → real org URL, etc.) OR remove entries that don't have real pages
@@ -1974,7 +1974,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 41. **kaizen403 → openlinear org rename across 14 sites**
+- [x] 41. **kaizen403 → openlinear org rename across 14 sites**
 
   **What to do**: Replace `kaizen403/openlinear` → `openlinear/openlinear` (or `<chosen-org>/openlinear` — confirm with user via `[DECISION NEEDED]` if ambiguous; default to `openlinear/openlinear`) in: `README.md:60,126,127,128,130`, `docs/CICD.md:116,128`, `packaging/aur/openlinear-bin/PKGBUILD:6,10,13`, `packages/openlinear-cli/scripts/postinstall.js:17`, `packages/openlinear-cli/package.json:2,8` (rename `@kaizen403/openlinear-cli` → `@openlinear/cli`), `packages/openlinear/publish-github.sh:23,33,51`, `apps/landing/components/{vision-section,final-cta-section,header,hero}.tsx`, `apps/landing/app/contact/page.tsx:63,64,241,244`, `apps/landing/app/docs/page.tsx:173`.
 
@@ -2003,7 +2003,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 42. **Seed user kaz → demo + remove personal traces from seed.ts**
+- [x] 42. **Seed user kaz → demo + remove personal traces from seed.ts**
 
   **What to do**: Edit `packages/db/prisma/seed.ts`: replace `seed-user-kaz` → `seed-user-demo` (lines 81, 84), `username: "kaz"` → `"demo"` (line 85), update name "Kaz" → "Demo User", email → `demo@openlinear.tech`. Update any cascading references at lines 116, 126.
 
@@ -2032,7 +2032,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ### WAVE 6 — POLISH + BOUNDARIES
 
-- [ ] 43. **App Router error boundaries: loading.tsx + error.tsx + not-found.tsx**
+- [x] 43. **App Router error boundaries: loading.tsx + error.tsx + not-found.tsx**
 
   **What to do**: Add at root `apps/desktop-ui/app/`: `loading.tsx` (skeleton matching shell), `error.tsx` (`'use client'` with reset button + toast), `not-found.tsx` (themed 404 with link home). Same per major section: `app/inbox/`, `app/my-issues/`, `app/projects/`, `app/teams/`, `app/archived/`, `app/settings/`, `app/usage/`. Same `loading.tsx`/`error.tsx`/`not-found.tsx` at root of `apps/landing/app/`.
 
@@ -2059,7 +2059,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 44. **Empty states + skeletons: reusable EmptyState component**
+- [x] 44. **Empty states + skeletons: reusable EmptyState component**
 
   **What to do**: Create `apps/desktop-ui/components/empty-state.tsx` with icon + title + description + optional action button. Replace ad-hoc "No X yet" strings in: `app/inbox/page.tsx`, `app/my-issues/page.tsx`, `app/projects/page.tsx`, `app/teams/page.tsx`, `app/archived/page.tsx`, `components/board/kanban-board.tsx` (empty board), `components/label-picker.tsx`. Add `<Skeleton>` (from T2) loading states matching final layout shape.
 
@@ -2086,7 +2086,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 45. **Sidebar polish: fix close-button bug, remove headerLabel.replace defensive hack, user dropdown**
+- [x] 45. **Sidebar polish: fix close-button bug, remove headerLabel.replace defensive hack, user dropdown**
 
   **What to do**: Fix `apps/desktop-ui/components/layout/sidebar.tsx:198` — `handleClose` actually calls `minimize()`. Either rename to `handleMinimize` OR wire to real close API. Remove defensive `headerLabel.replace(/openlinear/gi, "Dashboard")` from `apps/desktop-ui/app/page.tsx:65` (post-rebrand it's no longer needed). Add user dropdown menu (using DropdownMenu from T2): avatar at sidebar bottom → menu with Profile / Settings / Sign out / Theme picker / Help.
 
@@ -2113,7 +2113,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 46. **Dead code removal: hooks/use-sse.ts + unused imports + defensive replaces**
+- [x] 46. **Dead code removal: hooks/use-sse.ts + unused imports + defensive replaces**
 
   **What to do**: Delete `apps/desktop-ui/hooks/use-sse.ts` (dead code per research). Move types it exported (SSEEventType, SSEEventData) into `apps/desktop-ui/providers/sse-provider.tsx`. Remove dead imports across consumers. Audit and remove other dead code identified in research (unused fonts already in T36).
 
@@ -2140,7 +2140,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 47. **Settings tab cleanup: hide non-functional 2FA + sessions; add real Profile tab**
+- [x] 47. **Settings tab cleanup: hide non-functional 2FA + sessions; add real Profile tab**
 
   **What to do**: Edit `apps/desktop-ui/app/settings/page.tsx`:
   - Add new "Profile" tab (first): name, email, avatar (display GitHub-synced; "Reconnect GitHub" action); update via PATCH /api/auth/me
@@ -2171,7 +2171,7 @@ Max Concurrent: 9 tasks (Wave 4)
 
 ---
 
-- [ ] 48. **Pagination on tasks list + inbox + archived endpoints**
+- [x] 48. **Pagination on tasks list + inbox + archived endpoints**
 
   **What to do**: Add `?page=&pageSize=` (default 50, max 200) to `GET /api/tasks`, `/api/tasks/archived`, `/api/inbox`, `/api/notifications`, `/api/activity`, `/api/agent-runs`. Return `{ items, total, page, pageSize, hasMore }`. Update UI to show "Load more" button (or virtualize if list grows big — defer virtualization).
 
@@ -2203,19 +2203,19 @@ Max Concurrent: 9 tasks (Wave 4)
 > 4 review agents run in PARALLEL. ALL must APPROVE. Present consolidated results to user; wait for explicit "okay".
 > Do NOT mark F1-F4 checked before user's okay.
 
-- [ ] F1. **Plan Compliance Audit** — `oracle`
+- [x] F1. **Plan Compliance Audit** — `oracle`
   Read plan end-to-end. For each "Must Have": verify implementation exists (read file, curl endpoint, run command). For each "Must NOT Have": search codebase for forbidden patterns — reject with file:line if found. Check evidence files exist in `.sisyphus/evidence/`. Compare deliverables against plan.
   Output: `Must Have [N/N] | Must NOT Have [N/N] | Tasks [N/N] | VERDICT: APPROVE/REJECT`
 
-- [ ] F2. **Code Quality Review** — `unspecified-high`
+- [x] F2. **Code Quality Review** — `unspecified-high`
   Run `pnpm typecheck` (across api, sidecar, desktop-ui, landing) + lint + build. Review all changed files for: `as any`/`@ts-ignore`, empty catches, console.log in prod, commented-out code, unused imports, raw hex colors, raw exec(). Check AI slop: excessive comments, over-abstraction, generic names.
   Output: `Build [PASS/FAIL] | Lint [PASS/FAIL] | Files [N clean/N issues] | VERDICT`
 
-- [ ] F3. **Real Manual QA** — `unspecified-high` + `playwright` skill
+- [x] F3. **Real Manual QA** — `unspecified-high` + `playwright` skill
   Boot fresh container. Execute EVERY QA scenario from EVERY task — exact steps, capture evidence to `.sisyphus/evidence/final-qa/`. End-to-end smoke: GitHub login → create project → connect repo → create task with markdown description → @mention user → execute task with model selector → see cost in detail → comment on task → assignee picker → archive task → check inbox notification. Test cross-task integration. Test edge cases.
   Output: `Scenarios [N/N pass] | Integration [N/N] | Edge Cases [N tested] | VERDICT`
 
-- [ ] F4. **Scope Fidelity Check** — `deep`
+- [x] F4. **Scope Fidelity Check** — `deep`
   For each task: read "What to do", read actual diff (git log/diff). Verify 1:1 — everything in spec was built (no missing), nothing beyond spec was built (no creep). Check "Must NOT do" compliance. Detect cross-task contamination. Flag unaccounted changes.
   Output: `Tasks [N/N compliant] | Contamination [CLEAN/N issues] | Unaccounted [CLEAN/N files] | VERDICT`
 
@@ -2272,7 +2272,7 @@ psql ... -c "SELECT count(*) FROM agent_runs;"  # Expected: > 0
 ```
 
 ### Final Checklist
-- [ ] All "Must Have" present
-- [ ] All "Must NOT Have" absent
-- [ ] All 4 final-wave reviews APPROVE
+- [x] All "Must Have" present
+- [x] All "Must NOT Have" absent
+- [x] All 4 final-wave reviews APPROVE
 - [ ] User explicitly approves consolidated review summary
