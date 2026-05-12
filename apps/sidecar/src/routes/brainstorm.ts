@@ -1,11 +1,14 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
+import { prisma } from '@openlinear/db';
 import { requireAuth, AuthRequest } from '@openlinear/api/middleware';
 import { checkBrainstormAvailability, generateQuestions, generateTasks } from '../services/brainstorm';
+import { gatherCodebaseContext } from '../services/codebase-context';
 
 const QuestionsSchema = z.object({
   prompt: z.string().min(1).max(5000),
   webSearch: z.boolean().optional().default(false),
+  projectId: z.string().optional(),
 });
 
 const GenerateSchema = z.object({
@@ -13,11 +16,27 @@ const GenerateSchema = z.object({
   answers: z.array(z.object({
     question: z.string(),
     answer: z.string(),
-  })),
+  })).optional().default([]),
   webSearch: z.boolean().optional().default(false),
+  mode: z.enum(['basic', 'pro']).optional().default('basic'),
+  taskCount: z.number().int().min(1).max(20).optional().default(5),
+  projectId: z.string().optional(),
 });
 
 const router: Router = Router();
+
+async function resolveRepoPath(projectId: string | undefined): Promise<string | null> {
+  if (!projectId) return null;
+  try {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: { repository: true },
+    });
+    return project?.localPath || null;
+  } catch {
+    return null;
+  }
+}
 
 router.get('/availability', requireAuth, async (_req: AuthRequest, res: Response) => {
   try {
@@ -43,7 +62,13 @@ router.post('/questions', requireAuth, async (req: AuthRequest, res: Response) =
       return;
     }
 
-    const questions = await generateQuestions(parsed.data.prompt, parsed.data.webSearch);
+    const { prompt, webSearch, projectId } = parsed.data;
+    const repoPath = await resolveRepoPath(projectId);
+    const codebaseContext = repoPath
+      ? await gatherCodebaseContext(repoPath, prompt, { maxFiles: 8, maxLinesPerFile: 100 })
+      : { files: [], totalTokenEstimate: 0 };
+
+    const questions = await generateQuestions(prompt, webSearch, codebaseContext);
     res.json({ questions });
   } catch (error) {
     console.error('[Brainstorm] Error generating questions:', error);
@@ -65,7 +90,15 @@ router.post('/generate', requireAuth, async (req: AuthRequest, res: Response) =>
       return;
     }
 
-    const { prompt, answers, webSearch } = parsed.data;
+    const { prompt, answers, webSearch, mode, taskCount, projectId } = parsed.data;
+
+    const repoPath = await resolveRepoPath(projectId);
+    const limits = mode === 'pro'
+      ? { maxFiles: 8, maxLinesPerFile: 100 }
+      : { maxFiles: 5, maxLinesPerFile: 60 };
+    const codebaseContext = repoPath
+      ? await gatherCodebaseContext(repoPath, prompt, limits)
+      : { files: [], totalTokenEstimate: 0 };
 
     res.setHeader('Content-Type', 'application/x-ndjson');
     res.setHeader('Transfer-Encoding', 'chunked');
@@ -73,7 +106,7 @@ router.post('/generate', requireAuth, async (req: AuthRequest, res: Response) =>
     res.setHeader('X-Accel-Buffering', 'no');
 
     try {
-      for await (const task of generateTasks(prompt, answers, webSearch)) {
+      for await (const task of generateTasks(prompt, answers, webSearch, mode, taskCount, codebaseContext)) {
         res.write(JSON.stringify(task) + '\n');
       }
       res.end();
