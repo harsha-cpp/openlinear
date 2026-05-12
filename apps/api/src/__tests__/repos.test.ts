@@ -11,12 +11,14 @@ vi.mock('../services/github', async (importOriginal) => {
   return {
     ...actual,
     getGitHubRepos: vi.fn(),
+    getUserById: vi.fn(),
+    getDesktopGitHubAuthSource: vi.fn(),
   };
 });
 
 import { createApp } from '../app';
 import { getLegacyTokenForOperation } from '../services/auth-migration';
-import { getGitHubRepos } from '../services/github';
+import { getGitHubRepos, getUserById, getDesktopGitHubAuthSource } from '../services/github';
 
 const JWT_SECRET = 'openlinear-dev-secret-change-in-production';
 
@@ -32,7 +34,9 @@ describe('Repos API', () => {
   });
 
   it('returns 403 when no legacy token exists for GitHub repo listing', async () => {
+    vi.mocked(getUserById).mockResolvedValue({ githubId: 12345 } as any);
     vi.mocked(getLegacyTokenForOperation).mockResolvedValue(null);
+    vi.mocked(getDesktopGitHubAuthSource).mockReturnValue(null);
 
     const res = await request(app)
       .get('/api/repos/github')
@@ -56,7 +60,9 @@ describe('Repos API', () => {
       },
     ];
 
+    vi.mocked(getUserById).mockResolvedValue({ githubId: 12345 } as any);
     vi.mocked(getLegacyTokenForOperation).mockResolvedValue('gho_legacy_token');
+    vi.mocked(getDesktopGitHubAuthSource).mockReturnValue(null);
     vi.mocked(getGitHubRepos).mockResolvedValue(repos);
 
     const res = await request(app)

@@ -7,7 +7,7 @@ export function isDesktopRuntime(): boolean {
   }
 
   const hostname = window.location.hostname;
-  const userAgent = navigator.userAgent.toLowerCase();
+  const userAgent = window.navigator?.userAgent?.toLowerCase() ?? '';
   
   // Check for Tauri-specific globals
   const hasTauriGlobal = '__TAURI_INTERNALS__' in window || '__TAURI__' in window;
@@ -49,8 +49,14 @@ function getClientHeader(): HeadersInit {
   return isDesktopRuntime() ? { 'x-openlinear-client': 'desktop' } : {};
 }
 
+export function getAuthToken(): string | null {
+  return typeof window !== 'undefined' && window.localStorage
+    ? window.localStorage.getItem('token')
+    : null;
+}
+
 export function getAuthHeader(): HeadersInit {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = getAuthToken();
   return {
     ...getClientHeader(),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),

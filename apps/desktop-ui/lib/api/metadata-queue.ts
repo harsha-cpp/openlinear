@@ -1,4 +1,4 @@
-import { API_URL, getAuthHeader } from './client';
+import { API_URL, getAuthHeader, getAuthToken } from './client';
 
 export interface ExecutionMetadataSync {
   version?: string;
@@ -24,8 +24,34 @@ export interface QueuedMetadataEvent {
 }
 
 const QUEUE_STORAGE_KEY = 'openlinear-metadata-queue';
+const DEVICE_ID_STORAGE_KEY = 'openlinear-device-id';
 const MAX_RETRIES = 10;
 const BASE_BACKOFF_MS = 1000;
+
+function randomId(): string {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).substring(2);
+}
+
+async function hmacSha256Hex(secret: string, message: string): Promise<string> {
+  if (typeof crypto === 'undefined' || !crypto.subtle) {
+    throw new Error('Web Crypto API is unavailable');
+  }
+
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
+  return Array.from(new Uint8Array(signature))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
 
 export type SyncStatus = 'idle' | 'pending' | 'syncing' | 'synced' | 'error';
 
@@ -43,7 +69,10 @@ export class MetadataQueue {
   private taskStates: Record<string, TaskSyncState> = {};
   
   // For testing
-  public fetchFn: typeof fetch = typeof window !== 'undefined' ? window.fetch.bind(window) : fetch;
+  public fetchFn: typeof fetch =
+    typeof window !== 'undefined' && typeof window.fetch === 'function'
+      ? window.fetch.bind(window)
+      : fetch;
   public localStorageMock: Record<string, string> = {};
 
   constructor() {
@@ -56,17 +85,26 @@ export class MetadataQueue {
 
   private getStorageItem(key: string): string | null {
     if (typeof window !== 'undefined' && window.localStorage) {
-      return localStorage.getItem(key);
+      return window.localStorage.getItem(key);
     }
     return this.localStorageMock[key] || null;
   }
 
   private setStorageItem(key: string, value: string) {
     if (typeof window !== 'undefined' && window.localStorage) {
-      localStorage.setItem(key, value);
+      window.localStorage.setItem(key, value);
     } else {
       this.localStorageMock[key] = value;
     }
+  }
+
+  private getDeviceId(): string {
+    const existing = this.getStorageItem(DEVICE_ID_STORAGE_KEY);
+    if (existing) return existing;
+
+    const deviceId = randomId();
+    this.setStorageItem(DEVICE_ID_STORAGE_KEY, deviceId);
+    return deviceId;
   }
 
   private loadQueue() {
@@ -186,7 +224,7 @@ export class MetadataQueue {
     } else {
       // Add new event
       this.queue.push({
-        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2),
+        id: randomId(),
         timestamp: Date.now(),
         retryCount: 0,
         payload: sanitizedPayload
@@ -270,13 +308,34 @@ export class MetadataQueue {
         endpoint = '/api/execution/metadata/finish';
       }
 
+      const method = endpoint === '/api/execution/metadata/progress' ? 'PUT' : 'POST';
+      const body = JSON.stringify(serverPayload);
+      const token = getAuthToken();
+      const provenanceHeaders: HeadersInit = {};
+
+      if (token) {
+        const timestamp = Date.now().toString();
+        const nonce = randomId();
+        const signature = await hmacSha256Hex(
+          token,
+          `${method}:${endpoint}:${timestamp}:${nonce}:${body}`,
+        );
+        Object.assign(provenanceHeaders, {
+          'x-device-id': this.getDeviceId(),
+          'x-timestamp': timestamp,
+          'x-nonce': nonce,
+          'x-signature': signature,
+        });
+      }
+
       const res = await this.fetchFn(`${API_URL}${endpoint}`, {
-        method: endpoint === '/api/execution/metadata/progress' ? 'PUT' : 'POST',
+        method,
         headers: {
           'Content-Type': 'application/json',
           ...getAuthHeader(),
+          ...provenanceHeaders,
         },
-        body: JSON.stringify(serverPayload),
+        body,
       });
 
       // If 400 or 401, we might want to drop it or handle it differently, 

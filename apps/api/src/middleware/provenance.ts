@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
-import { prisma } from '@openlinear/db';
 
 // In-memory store for nonces to prevent replay attacks (in production, use Redis)
 const usedNonces = new Set<string>();
@@ -12,7 +11,7 @@ export async function verifyDeviceSignature(req: Request, res: Response, next: N
   const signature = req.headers['x-signature'] as string;
   const authHeader = req.headers.authorization;
 
-  if (!deviceId || !nonce || !timestamp || !signature || !authHeader) {
+  if (!deviceId || !nonce || !timestamp || !signature || !authHeader?.startsWith('Bearer ')) {
     return res.status(400).json({ error: 'Missing provenance headers' });
   }
 
@@ -40,7 +39,9 @@ export async function verifyDeviceSignature(req: Request, res: Response, next: N
     .update(payloadToSign)
     .digest('hex');
 
-  if (signature !== expectedSignature) {
+  const received = Buffer.from(signature, 'hex');
+  const expected = Buffer.from(expectedSignature, 'hex');
+  if (received.length !== expected.length || !crypto.timingSafeEqual(received, expected)) {
     return res.status(401).json({ error: 'Invalid signature' });
   }
 

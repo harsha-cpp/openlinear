@@ -16,7 +16,7 @@ let serverHandle: { url: string; close(): void } | null = null;
 // 1. OPENCODE_BIN env var override
 // 2. Bundled sidecar next to this binary (Tauri target-triple naming)
 // 3. Fallback to system PATH (dev mode)
-function resolveOpencodeBinary(): string {
+export function resolveOpencodeBinary(): string {
   if (process.env.OPENCODE_BIN) {
     return process.env.OPENCODE_BIN;
   }

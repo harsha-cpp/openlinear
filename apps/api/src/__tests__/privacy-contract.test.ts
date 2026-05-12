@@ -7,7 +7,7 @@ import crypto from 'crypto';
 
 const JWT_SECRET = 'openlinear-dev-secret-change-in-production';
 
-function generateSignature(method: string, url: string, timestamp: string, nonce: string, body: any, token: string) {
+function generateSignature(method: string, url: string, timestamp: string, nonce: string, body: Record<string, unknown>, token: string) {
   const payloadToSign = `${method}:${url}:${timestamp}:${nonce}:${JSON.stringify(body)}`;
   return crypto.createHmac('sha256', token).update(payloadToSign).digest('hex');
 }
@@ -79,34 +79,37 @@ describe('Privacy Contract Tests', () => {
   });
 
   const endpoints = [
-    { method: 'POST', url: '/api/execution/metadata/start' },
-    { method: 'PUT', url: '/api/execution/metadata/progress' },
-    { method: 'POST', url: '/api/execution/metadata/finish' },
+    { method: 'POST', requestMethod: 'post' as const, url: '/api/execution/metadata/start' },
+    { method: 'PUT', requestMethod: 'put' as const, url: '/api/execution/metadata/progress' },
+    { method: 'POST', requestMethod: 'post' as const, url: '/api/execution/metadata/finish' },
   ];
 
+  function signedRequest(method: 'POST' | 'PUT', requestMethod: 'post' | 'put', url: string, payload: Record<string, unknown>) {
+    const timestamp = Date.now().toString();
+    const nonce = crypto.randomUUID();
+    const signature = generateSignature(method, url, timestamp, nonce, payload, token);
+
+    return request(app)
+      [requestMethod](url)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-device-id', 'privacy-test-device')
+      .set('x-timestamp', timestamp)
+      .set('x-nonce', nonce)
+      .set('x-signature', signature)
+      .send(payload);
+  }
+
   describe('Allowed payload pass cases', () => {
-    endpoints.forEach(({ method, url }) => {
-      it(`should accept allowed metadata payload for ${method} ${url}`, async () => {
+    endpoints.forEach(({ method, requestMethod, url }) => {
+      it(`accepts allowed metadata payload for ${method} ${url}`, async () => {
         const payload = {
           taskId: task.id,
-          runId: 'run_privacy_123',
+          runId: `run_privacy_${method}_${requestMethod}`,
           status: 'running',
           durationMs: 1000,
         };
 
-        const timestamp = Date.now().toString();
-        const nonce = crypto.randomUUID();
-        const signature = generateSignature(method, url, timestamp, nonce, payload, token);
-
-        const req = request(app)[method.toLowerCase() as 'post' | 'put'](url)
-          .set('Authorization', `Bearer ${token}`)
-          .set('x-device-id', 'test-device')
-          .set('x-timestamp', timestamp)
-          .set('x-nonce', nonce)
-          .set('x-signature', signature)
-          .send(payload);
-
-        const response = await req;
+        const response = await signedRequest(method as 'POST' | 'PUT', requestMethod, url, payload);
         expect(response.status).toBe(200);
         expect(response.body.success).toBe(true);
       });
@@ -124,29 +127,17 @@ describe('Privacy Contract Tests', () => {
       { field: 'localPath', value: '/home/user/.config/openlinear' },
     ];
 
-    endpoints.forEach(({ method, url }) => {
+    endpoints.forEach(({ method, requestMethod, url }) => {
       forbiddenPayloads.forEach(({ field, value }) => {
-        it(`should reject payload with forbidden field '${field}' for ${method} ${url}`, async () => {
+        it(`rejects payload with forbidden field '${field}' for ${method} ${url}`, async () => {
           const payload = {
             taskId: task.id,
-            runId: 'run_privacy_123',
+            runId: `run_privacy_${field}`,
             status: 'running',
             [field]: value,
           };
 
-          const timestamp = Date.now().toString();
-          const nonce = crypto.randomUUID();
-          const signature = generateSignature(method, url, timestamp, nonce, payload, token);
-
-          const req = request(app)[method.toLowerCase() as 'post' | 'put'](url)
-            .set('Authorization', `Bearer ${token}`)
-            .set('x-device-id', 'test-device')
-            .set('x-timestamp', timestamp)
-            .set('x-nonce', nonce)
-            .set('x-signature', signature)
-            .send(payload);
-
-          const response = await req;
+          const response = await signedRequest(method as 'POST' | 'PUT', requestMethod, url, payload);
           expect(response.status).toBe(400);
           expect(response.body.code).toBe('FORBIDDEN_FIELDS');
         });

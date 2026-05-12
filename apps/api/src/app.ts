@@ -10,6 +10,7 @@ import reposRouter from './routes/repos';
 import teamsRouter from './routes/teams';
 import projectsRouter from './routes/projects';
 import inboxRouter from './routes/inbox';
+import executionMetadataRouter from './routes/execution-metadata';
 import { clients, SSEClient } from './sse';
 
 export function createApp(): Application {
@@ -47,7 +48,16 @@ export function createApp(): Application {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-openlinear-client', 'x-github-token'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-openlinear-client',
+      'x-github-token',
+      'x-device-id',
+      'x-timestamp',
+      'x-nonce',
+      'x-signature',
+    ],
   }));
   app.use(express.json());
   app.use(cookieParser());
@@ -60,6 +70,7 @@ export function createApp(): Application {
   app.use('/api/teams', teamsRouter);
   app.use('/api/projects', projectsRouter);
   app.use('/api/inbox', inboxRouter);
+  app.use('/api/execution/metadata', executionMetadataRouter);
 
   app.get('/api/install', (_req: Request, res: Response) => {
     res.status(410).json({

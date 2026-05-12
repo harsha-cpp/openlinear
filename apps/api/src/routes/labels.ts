@@ -75,7 +75,7 @@ router.patch('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
     broadcast('label:updated', label);
     res.json(label);
   } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes('Record to update not found')) {
+    if (error instanceof Error && error.message.includes('No record was found for an update')) {
       res.status(404).json({ error: 'Label not found' });
       return;
     }
@@ -99,7 +99,7 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
     broadcast('label:deleted', { id });
     res.status(204).send();
   } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes('Record to delete does not exist')) {
+    if (error instanceof Error && error.message.includes('No record was found for a delete')) {
       res.status(404).json({ error: 'Label not found' });
       return;
     }
@@ -162,7 +162,7 @@ router.delete('/tasks/:id/labels/:labelId', async (req: Request, res: Response) 
     broadcast('task:label:removed', { taskId, labelId });
     res.status(204).send();
   } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes('Record to delete does not exist')) {
+    if (error instanceof Error && error.message.includes('No record was found for a delete')) {
       res.status(404).json({ error: 'Label assignment not found' });
       return;
     }
