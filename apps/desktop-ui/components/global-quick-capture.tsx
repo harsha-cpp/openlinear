@@ -4,10 +4,13 @@ import { useState, useRef, useCallback, useEffect } from "react"
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
 import {
   Plus,
-  Sparkles,
   X,
   Globe,
   Mic,
+  Zap,
+  FlaskConical,
+  Loader2,
+  Lock,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { BRAND_COLORS } from "@/lib/design-tokens"
@@ -16,6 +19,7 @@ import { fetchProjects } from "@/lib/api/projects"
 import type { Project } from "@/lib/api/types"
 import { getApiUrl, getAuthHeader } from "@/lib/api/client"
 import { ApiError } from "@/lib/api/fetch"
+import { isWhisperHallucination } from "@/lib/audio-utils"
 import { toast } from "sonner"
 
 // ---------------------------------------------------------------------------
@@ -30,34 +34,13 @@ interface GeneratedTask {
   selected: boolean
 }
 
+type BrainstormMode = "basic" | "pro"
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 const SPRING = { type: "spring" as const, stiffness: 300, damping: 30 }
-
-const WHISPER_HALLUCINATIONS = new Set([
-  'thank you',
-  'thanks for watching',
-  'thank you for watching',
-  'thanks for listening',
-  'thank you for listening',
-  'bye',
-  'bye bye',
-  'goodbye',
-  'you',
-  'the end',
-  'subtitles by',
-  'subscribe',
-  'like and subscribe',
-])
-
-function isWhisperHallucination(text: string): boolean {
-  const normalized = text.toLowerCase().replace(/[.,!?;:'"]/g, '').trim()
-  if (normalized.length === 0) return true
-  if (normalized.length < 3) return true
-  return WHISPER_HALLUCINATIONS.has(normalized)
-}
 
 const PRIORITY_COLORS: Record<GeneratedTask["priority"], string> = {
   high: "border-red-700/40",
@@ -71,10 +54,25 @@ const PRIORITY_DOTS: Record<GeneratedTask["priority"], string> = {
   low: "bg-emerald-700",
 }
 
+const MIN_TASKS = 2
+const MAX_TASKS = 15
+const DEFAULT_TASKS = 5
 
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
+
+function Spinner({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-block h-3 w-3 rounded-full border border-zinc-700 border-t-zinc-300 animate-spin",
+        className,
+      )}
+      aria-hidden
+    />
+  )
+}
 
 function SkeletonCard() {
   return (
@@ -115,14 +113,12 @@ function TaskCard({
       className={cn(
         "group relative rounded-lg border border-white/[0.06] bg-zinc-900/60 backdrop-blur-sm",
         "border-l-2",
-        // CSS-only hover: GPU-accelerated (no layout/paint)
         "transition-opacity hover:border-white/10",
         PRIORITY_COLORS[task.priority],
         !task.selected && "opacity-50"
       )}
     >
       <div className="p-4 space-y-2">
-        {/* Header row with checkbox */}
         <div className="flex items-start gap-2.5">
           <input
             type="checkbox"
@@ -135,12 +131,10 @@ function TaskCard({
           </h4>
         </div>
 
-        {/* Description */}
         <p className="pl-[22px] text-[11px] leading-relaxed text-zinc-500">
           {task.description}
         </p>
 
-        {/* Priority badge */}
         <div className="flex items-center gap-1.5 pl-[22px]">
           <span
             className={cn(
@@ -157,6 +151,99 @@ function TaskCard({
   )
 }
 
+function ModeToggle({
+  mode,
+  onChange,
+  proAvailable,
+}: {
+  mode: BrainstormMode
+  onChange: (m: BrainstormMode) => void
+  proAvailable: boolean
+}) {
+  return (
+    <div className="flex items-center gap-1 rounded-md bg-white/[0.03] border border-white/[0.06] p-1">
+      <button
+        type="button"
+        onClick={() => onChange("basic")}
+        className={cn(
+          "flex flex-1 items-center justify-center gap-1.5 rounded px-2.5 py-1.5 text-[11px] font-medium transition-colors",
+          mode === "basic"
+            ? "bg-white/[0.08] text-zinc-100"
+            : "text-zinc-500 hover:text-zinc-300",
+        )}
+      >
+        <Zap className="h-3 w-3" />
+        Quick
+      </button>
+      <button
+        type="button"
+        onClick={() => proAvailable && onChange("pro")}
+        disabled={!proAvailable}
+        title={proAvailable ? "Deep Research" : "Deep Research not available"}
+        className={cn(
+          "flex flex-1 items-center justify-center gap-1.5 rounded px-2.5 py-1.5 text-[11px] font-medium transition-colors",
+          mode === "pro"
+            ? "bg-white/[0.08] text-zinc-100"
+            : "text-zinc-500 hover:text-zinc-300",
+          !proAvailable && "opacity-50 cursor-not-allowed hover:text-zinc-500",
+        )}
+      >
+        {proAvailable ? (
+          <FlaskConical className="h-3 w-3" />
+        ) : (
+          <Lock className="h-3 w-3" />
+        )}
+        Deep Research
+      </button>
+    </div>
+  )
+}
+
+function ScopeSlider({
+  value,
+  onChange,
+}: {
+  value: number
+  onChange: (v: number) => void
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label className="text-[11px] text-zinc-500 font-medium">Scope</label>
+        <span className="text-[11px] text-zinc-400 tabular-nums">~{value} tasks</span>
+      </div>
+      <div className="flex items-center gap-2.5">
+        <span className="text-[10px] text-zinc-700 tabular-nums w-3 text-right">{MIN_TASKS}</span>
+        <input
+          type="range"
+          min={MIN_TASKS}
+          max={MAX_TASKS}
+          step={1}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className={cn(
+            "flex-1 h-1 appearance-none rounded-full bg-white/[0.06] outline-none cursor-pointer",
+            "[&::-webkit-slider-thumb]:appearance-none",
+            "[&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3",
+            "[&::-webkit-slider-thumb]:rounded-full",
+            "[&::-webkit-slider-thumb]:bg-zinc-300",
+            "[&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-white/20",
+            "[&::-webkit-slider-thumb]:shadow-[0_0_0_3px_rgba(255,255,255,0.04)]",
+            "[&::-webkit-slider-thumb]:cursor-pointer",
+            "[&::-webkit-slider-thumb]:transition-transform",
+            "[&::-webkit-slider-thumb]:hover:scale-110",
+            "[&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3",
+            "[&::-moz-range-thumb]:rounded-full",
+            "[&::-moz-range-thumb]:bg-zinc-300",
+            "[&::-moz-range-thumb]:border-0",
+            "[&::-moz-range-thumb]:cursor-pointer",
+          )}
+        />
+        <span className="text-[10px] text-zinc-700 tabular-nums w-5">{MAX_TASKS}</span>
+      </div>
+    </div>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -179,15 +266,18 @@ export function GlobalQuickCapture() {
   const [isRecording, setIsRecording] = useState(false)
   const [micSupported, setMicSupported] = useState(true)
   const [webSearchAvailable, setWebSearchAvailable] = useState(false)
+  const [proAvailable, setProAvailable] = useState(false)
+  const [mode, setMode] = useState<BrainstormMode>("basic")
+  const [taskCount, setTaskCount] = useState<number>(DEFAULT_TASKS)
   const inputRef = useRef<HTMLInputElement>(null)
   const sidebarRef = useRef<HTMLDivElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const recordingStartRef = useRef<number>(0)
-  // Focus input when entering input phase
+
+  // Focus input when entering input/stream phase
   useEffect(() => {
     if (phase === "input" || phase === "stream") {
-      // Small delay to wait for animation
       const timeout = setTimeout(() => {
         inputRef.current?.focus()
       }, 100)
@@ -195,92 +285,28 @@ export function GlobalQuickCapture() {
     }
   }, [phase])
 
-  // Check brainstorm availability when panel opens
+  // Check availability + fetch projects when panel opens
   useEffect(() => {
     if (phase === "input") {
       checkBrainstormAvailability()
         .then((result) => {
           setBrainstormAvailable(result.available)
           setWebSearchAvailable(result.webSearchAvailable ?? false)
+          setProAvailable(result.proAvailable ?? false)
         })
         .catch(() => {
           setBrainstormAvailable(false)
           setWebSearchAvailable(false)
+          setProAvailable(false)
         })
+
+      fetchProjects().then(setProjects).catch(console.error)
     }
   }, [phase])
 
   // Detect MediaRecorder support
   useEffect(() => {
     setMicSupported(!!navigator.mediaDevices?.getUserMedia)
-  }, [])
-
-  // Click outside to close
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (
-        phase !== "ghost" &&
-        sidebarRef.current &&
-        !sidebarRef.current.contains(e.target as Node)
-      ) {
-        handleClose()
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [phase])
-
-  // Escape to close
-  useEffect(() => {
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        handleClose()
-      }
-    }
-    window.addEventListener("keydown", handleKey)
-    return () => window.removeEventListener("keydown", handleKey)
-  }, [])
-
-  useEffect(() => {
-    function handleBrainstorm(e: Event) {
-      const raw = (e as CustomEvent).detail
-      const parsed = typeof raw === 'string'
-        ? { query: raw, webSearch: false }
-        : raw as { query: string; webSearch: boolean }
-      if (!parsed.query) return
-
-      setQuery(parsed.query)
-      setWebSearchEnabled(parsed.webSearch)
-      setPhase("input")
-      // Auto-submit after setting query
-      setTimeout(async () => {
-        setQuestionsLoading(true)
-        try {
-          const availability = await checkBrainstormAvailability()
-          if (!availability.available) {
-            setQuestionsLoading(false)
-            return
-          }
-          const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("Questions generation timed out")), 30000)
-          )
-          const generatedQuestions = await Promise.race([
-            generateBrainstormQuestions(parsed.query, parsed.webSearch),
-            timeoutPromise,
-          ])
-          setQuestions(generatedQuestions)
-          setAnswers({})
-          setPhase("questions")
-        } catch (err) {
-          console.error("Failed to generate questions:", err)
-        } finally {
-          setQuestionsLoading(false)
-        }
-      }, 100)
-    }
-
-    window.addEventListener("brainstorm-query", handleBrainstorm)
-    return () => window.removeEventListener("brainstorm-query", handleBrainstorm)
   }, [])
 
   const handleClose = useCallback(() => {
@@ -297,15 +323,159 @@ export function GlobalQuickCapture() {
     setStreamingDone(false)
     setBrainstormAvailable(null)
     setWebSearchEnabled(false)
+    setMode("basic")
+    setTaskCount(DEFAULT_TASKS)
   }, [])
+
+  // Click outside to close
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        phase !== "ghost" &&
+        sidebarRef.current &&
+        !sidebarRef.current.contains(e.target as Node)
+      ) {
+        handleClose()
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [phase, handleClose])
+
+  // Escape to close
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        handleClose()
+      }
+    }
+    window.addEventListener("keydown", handleKey)
+    return () => window.removeEventListener("keydown", handleKey)
+  }, [handleClose])
+
+  const startStreaming = useCallback(
+    async (
+      promptText: string,
+      answersArray: { question: string; answer: string }[],
+      streamMode: BrainstormMode,
+    ) => {
+      setStreamingDone(false)
+
+      await streamBrainstormTasks(
+        promptText,
+        answersArray,
+        (task: BrainstormTask) => {
+          const generatedTask: GeneratedTask = {
+            id: `task-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            title: task.title,
+            description: task.description,
+            priority: task.priority,
+            selected: true,
+          }
+          setTasks((prev) => [...prev, generatedTask])
+          setLoading(false)
+        },
+        () => {
+          setLoading(false)
+          setStreamingDone(true)
+        },
+        (error) => {
+          console.error("Stream error:", error)
+          setLoading(false)
+          setStreamingDone(true)
+        },
+        {
+          webSearch: webSearchEnabled,
+          mode: streamMode,
+          taskCount,
+          projectId: selectedProjectId ?? undefined,
+        },
+      )
+    },
+    [webSearchEnabled, taskCount, selectedProjectId],
+  )
+
+  // Inbound: external brainstorm-query event (from god-mode)
+  useEffect(() => {
+    function handleBrainstorm(e: Event) {
+      const raw = (e as CustomEvent).detail
+      const parsed =
+        typeof raw === "string"
+          ? { query: raw, webSearch: false, mode: "basic" as BrainstormMode }
+          : (raw as { query: string; webSearch: boolean; mode?: BrainstormMode })
+      if (!parsed.query) return
+
+      const incomingMode: BrainstormMode = parsed.mode ?? "basic"
+      setQuery(parsed.query)
+      setWebSearchEnabled(parsed.webSearch)
+      setMode(incomingMode)
+      setPhase("input")
+
+      setTimeout(async () => {
+        const availability = await checkBrainstormAvailability()
+        if (!availability.available) return
+
+        if (incomingMode === "basic") {
+          setPhase("stream")
+          setLoading(true)
+          setTasks([])
+          startStreaming(parsed.query, [], "basic")
+          return
+        }
+
+        setQuestionsLoading(true)
+        try {
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Questions generation timed out")), 30000),
+          )
+          const generatedQuestions = await Promise.race([
+            generateBrainstormQuestions(parsed.query, parsed.webSearch, selectedProjectId ?? undefined),
+            timeoutPromise,
+          ])
+          setQuestions(generatedQuestions)
+          setAnswers({})
+          setPhase("questions")
+        } catch (err) {
+          console.error("Failed to generate questions:", err)
+        } finally {
+          setQuestionsLoading(false)
+        }
+      }, 100)
+    }
+
+    window.addEventListener("brainstorm-query", handleBrainstorm)
+    return () => window.removeEventListener("brainstorm-query", handleBrainstorm)
+  }, [startStreaming, selectedProjectId])
 
   const handleGhostClick = useCallback(() => {
     setPhase("input")
   }, [])
 
+  // Switching mode: if currently in questions phase and downgrading to basic, reset
+  const handleModeChange = useCallback((next: BrainstormMode) => {
+    setMode(next)
+    if (next === "basic") {
+      setQuestions([])
+      setAnswers({})
+      if (phase === "questions") {
+        setPhase("input")
+      }
+    }
+  }, [phase])
+
   const handleSubmit = useCallback(async () => {
     if (!query.trim()) return
 
+    if (mode === "basic") {
+      // Skip questions; stream directly.
+      setPhase("stream")
+      setLoading(true)
+      setTasks([])
+      await startStreaming(query, [], "basic")
+      return
+    }
+
+    // Pro mode: generate clarifying questions first.
     setQuestionsLoading(true)
     try {
       const availability = await checkBrainstormAvailability()
@@ -314,10 +484,10 @@ export function GlobalQuickCapture() {
         return
       }
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Questions generation timed out")), 30000)
+        setTimeout(() => reject(new Error("Questions generation timed out")), 30000),
       )
       const generatedQuestions = await Promise.race([
-        generateBrainstormQuestions(query, webSearchEnabled),
+        generateBrainstormQuestions(query, webSearchEnabled, selectedProjectId ?? undefined),
         timeoutPromise,
       ])
       setQuestions(generatedQuestions)
@@ -328,47 +498,13 @@ export function GlobalQuickCapture() {
     } finally {
       setQuestionsLoading(false)
     }
-  }, [query, webSearchEnabled])
+  }, [query, mode, webSearchEnabled, selectedProjectId, startStreaming])
 
   const handleToggle = useCallback((id: string) => {
     setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, selected: !t.selected } : t))
+      prev.map((t) => (t.id === id ? { ...t, selected: !t.selected } : t)),
     )
   }, [])
-
-  const startStreaming = useCallback(async () => {
-    setStreamingDone(false)
-
-    const answersArray = Object.entries(answers)
-      .filter(([, v]) => v.trim())
-      .map(([question, answer]) => ({ question, answer }))
-
-    await streamBrainstormTasks(
-      query,
-      answersArray,
-      (task: BrainstormTask) => {
-        const generatedTask: GeneratedTask = {
-          id: `task-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          title: task.title,
-          description: task.description,
-          priority: task.priority,
-          selected: true,
-        }
-        setTasks((prev) => [...prev, generatedTask])
-        setLoading(false)
-      },
-      () => {
-        setLoading(false)
-        setStreamingDone(true)
-      },
-      (error) => {
-        console.error("Stream error:", error)
-        setLoading(false)
-        setStreamingDone(true)
-      },
-      webSearchEnabled
-    )
-  }, [query, answers, webSearchEnabled])
 
   const handleAddToProject = useCallback(async () => {
     if (!selectedProjectId) return
@@ -392,7 +528,7 @@ export function GlobalQuickCapture() {
           if (!res.ok) {
             let message = `HTTP ${res.status}`
             try {
-              const body = await res.json() as { error?: string }
+              const body = (await res.json()) as { error?: string }
               if (body?.error) message = body.error
             } catch {
               // ignore parse errors
@@ -400,10 +536,12 @@ export function GlobalQuickCapture() {
             throw new Error(message)
           }
           return task
-        })
+        }),
       )
 
-      const succeeded = results.filter((r: PromiseSettledResult<GeneratedTask>) => r.status === "fulfilled").length
+      const succeeded = results.filter(
+        (r: PromiseSettledResult<GeneratedTask>) => r.status === "fulfilled",
+      ).length
       const failed = results.length - succeeded
 
       if (failed === 0) {
@@ -412,7 +550,6 @@ export function GlobalQuickCapture() {
         return
       }
 
-      // Surface each failure individually so users can see which titles failed.
       results.forEach((r: PromiseSettledResult<GeneratedTask>, idx: number) => {
         if (r.status === "rejected") {
           const reason = r.reason instanceof Error ? r.reason.message : "Unknown error"
@@ -424,18 +561,11 @@ export function GlobalQuickCapture() {
       )
       setInserting(false)
     } catch (err) {
-      // Defensive: Promise.allSettled doesn't throw, but keep a fallback.
       const msg = err instanceof ApiError ? err.message : "Could not reach OpenLinear server."
       toast.error(`Failed to add tasks: ${msg}`)
       setInserting(false)
     }
   }, [tasks, selectedProjectId, handleClose])
-
-  useEffect(() => {
-    if (phase === "stream") {
-      fetchProjects().then(setProjects).catch(console.error)
-    }
-  }, [phase])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -444,8 +574,10 @@ export function GlobalQuickCapture() {
         handleSubmit()
       }
     },
-    [handleSubmit]
+    [handleSubmit],
   )
+
+  const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null
 
   // --------------------------------------------------
   // Render
@@ -474,7 +606,7 @@ export function GlobalQuickCapture() {
               "hover:w-4 hover:bg-white/[0.14]",
               "border-l border-t border-b border-white/[0.12]",
               "shadow-[-4px_0_20px_rgba(0,0,0,0.4)]",
-              "transition-all duration-300 ease-out"
+              "transition-all duration-300 ease-out",
             )}
           />
         )}
@@ -486,7 +618,6 @@ export function GlobalQuickCapture() {
       <AnimatePresence>
         {phase !== "ghost" && (
           <>
-            {/* Backdrop */}
             <motion.div
               key="backdrop"
               initial={{ opacity: 0 }}
@@ -496,7 +627,6 @@ export function GlobalQuickCapture() {
               className="fixed inset-0 z-[9998] bg-black/40"
             />
 
-            {/* Sidebar panel */}
             <motion.div
               key="sidebar"
               ref={sidebarRef}
@@ -504,7 +634,10 @@ export function GlobalQuickCapture() {
               animate={{
                 x: 0,
                 opacity: 1,
-                width: phase === "stream" || phase === "questions" ? "min(400px, 100vw)" : "min(360px, 100vw)",
+                width:
+                  phase === "stream" || phase === "questions"
+                    ? "min(400px, 100vw)"
+                    : "min(380px, 100vw)",
               }}
               exit={{ x: "100%", opacity: 0 }}
               transition={SPRING}
@@ -513,7 +646,7 @@ export function GlobalQuickCapture() {
                 "flex flex-col",
                 "backdrop-blur-xl",
                 "border-l border-white/10",
-                "shadow-[-8px_0_30px_rgba(0,0,0,0.5)]"
+                "shadow-[-8px_0_30px_rgba(0,0,0,0.5)]",
               )}
               style={{ backgroundColor: `${BRAND_COLORS.overlaySurface}cc` }}
             >
@@ -527,7 +660,7 @@ export function GlobalQuickCapture() {
                     by
                   </span>
                   <span className="text-[14px] font-medium tracking-wider text-zinc-500 uppercase">
-            OpenLinear
+                    OpenLinear
                   </span>
                 </div>
                 <button
@@ -549,70 +682,91 @@ export function GlobalQuickCapture() {
                 />
               )}
 
-              {/* ---------- Stream content ---------- */}
+              {/* ---------- Body ---------- */}
               <div className="flex-1 overflow-y-auto px-4 pt-3 pb-6">
                 <AnimatePresence mode="wait">
-                  {phase === "stream" && loading && (
+                  {/* ============= INPUT PHASE ============= */}
+                  {phase === "input" && (
                     <motion.div
-                      key="skeletons"
-                      initial={{ opacity: 0, y: 12 }}
+                      key="empty"
+                      initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -8 }}
-                      transition={SPRING}
-                      className="space-y-3"
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ ...SPRING, delay: 0.05 }}
+                      className="flex flex-col px-1 space-y-5"
                     >
-                      {/* Loading header */}
-                      <div className="flex items-center gap-2 pb-2">
-                        <motion.div
-                          animate={{ rotate: 360 }}
-                          transition={{
-                            repeat: Infinity,
-                            duration: 2,
-                            ease: "linear",
-                          }}
+                      {brainstormAvailable === false && (
+                        <div className="rounded-lg bg-yellow-900/20 border border-yellow-700/30 px-4 py-2.5">
+                          <p className="text-[11px] text-yellow-400/90 leading-relaxed">
+                            AI provider not configured. Set{" "}
+                            <code className="text-yellow-300 font-mono">BRAINSTORM_API_KEY</code> in
+                            your <code className="text-yellow-300 font-mono">.env</code> file.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Mode toggle */}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] text-zinc-500 font-medium">Mode</label>
+                        <ModeToggle
+                          mode={mode}
+                          onChange={handleModeChange}
+                          proAvailable={proAvailable}
+                        />
+                      </div>
+
+                      {/* Scope slider */}
+                      <ScopeSlider value={taskCount} onChange={setTaskCount} />
+
+                      {/* Project select */}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] text-zinc-500 font-medium">Project</label>
+                        <select
+                          value={selectedProjectId || ""}
+                          onChange={(e) => setSelectedProjectId(e.target.value || null)}
+                          className="w-full bg-zinc-900/80 border border-white/[0.06] rounded-md px-3 py-2 text-[12px] text-zinc-200 outline-none focus:border-white/[0.12] appearance-none cursor-pointer"
                         >
-                          <Sparkles className="h-3 w-3 text-zinc-600" />
-                        </motion.div>
-                        <span className="text-[11px] text-zinc-600">
-                          Generating tasks...
-                        </span>
+                          <option value="">Select project...</option>
+                          {projects.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                      <SkeletonCard />
-                      <SkeletonCard />
-                      <SkeletonCard />
+
+                      {/* Step instructions */}
+                      <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] px-4 py-3 space-y-2">
+                        <div className="flex items-center gap-2.5 text-left">
+                          <span className="text-[11px] font-mono text-zinc-500 shrink-0">1</span>
+                          <span className="text-[12px] text-zinc-400 leading-snug">
+                            Describe what you want to build
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2.5 text-left">
+                          <span className="text-[11px] font-mono text-zinc-500 shrink-0">2</span>
+                          <span className="text-[12px] text-zinc-400 leading-snug">
+                            AI analyzes your codebase and generates tasks
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2.5 text-left">
+                          <span className="text-[11px] font-mono text-zinc-500 shrink-0">3</span>
+                          <span className="text-[12px] text-zinc-400 leading-snug">
+                            Select and add tasks to your project
+                          </span>
+                        </div>
+                      </div>
+
+                      {questionsLoading && (
+                        <div className="flex items-center gap-2 justify-center">
+                          <Spinner />
+                          <span className="text-[11px] text-zinc-600">Preparing...</span>
+                        </div>
+                      )}
                     </motion.div>
                   )}
 
-                  {phase === "stream" && !loading && tasks.length > 0 && (
-                    <motion.div
-                      key="tasks"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="space-y-2.5"
-                    >
-                      {/* Result header */}
-                      <div className="flex items-center justify-between pb-1">
-                        <span className="text-[11px] font-medium text-zinc-500">
-                          {tasks.length} task{tasks.length !== 1 && "s"} generated
-                        </span>
-                        <span className="text-[10px] text-zinc-700">
-                          from &quot;{query.slice(0, 32)}
-                          {query.length > 32 && "..."}&quot;
-                        </span>
-                      </div>
-
-                      <AnimatePresence>
-                        {tasks.map((task) => (
-                          <TaskCard
-                            key={task.id}
-                            task={task}
-                            onToggle={handleToggle}
-                          />
-                        ))}
-                      </AnimatePresence>
-                    </motion.div>
-                  )}
-
+                  {/* ============= QUESTIONS PHASE (PRO) ============= */}
                   {phase === "questions" && (
                     <motion.div
                       key="questions"
@@ -625,17 +779,27 @@ export function GlobalQuickCapture() {
                       <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] px-4 py-3">
                         <p className="text-[11px] text-zinc-600 mb-1">Your prompt</p>
                         <p className="text-[13px] text-zinc-300 leading-relaxed">{query}</p>
+                        <div className="mt-2 flex items-center gap-2 text-[10px] text-zinc-600">
+                          <span className="inline-flex items-center gap-1 rounded bg-white/[0.04] px-1.5 py-0.5">
+                            <FlaskConical className="h-2.5 w-2.5" />
+                            Deep Research
+                          </span>
+                          <span>~{taskCount} tasks</span>
+                          {selectedProject && (
+                            <>
+                              <span>•</span>
+                              <span className="truncate">{selectedProject.name}</span>
+                            </>
+                          )}
+                        </div>
                       </div>
 
                       {questionsLoading ? (
                         <div className="flex items-center gap-2 py-8 justify-center">
-                          <motion.div
-                            animate={{ rotate: 360 }}
-                            transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-                          >
-                            <Sparkles className="h-3 w-3 text-zinc-600" />
-                          </motion.div>
-                          <span className="text-[11px] text-zinc-600">Generating questions...</span>
+                          <Spinner />
+                          <span className="text-[11px] text-zinc-600">
+                            Generating questions...
+                          </span>
                         </div>
                       ) : (
                         <>
@@ -660,7 +824,10 @@ export function GlobalQuickCapture() {
                                   type="text"
                                   value={answers[question] || ""}
                                   onChange={(e) =>
-                                    setAnswers((prev) => ({ ...prev, [question]: e.target.value }))
+                                    setAnswers((prev) => ({
+                                      ...prev,
+                                      [question]: e.target.value,
+                                    }))
                                   }
                                   placeholder="Your answer..."
                                   className="w-full ml-5 bg-zinc-900/80 border border-white/[0.06] rounded-md px-3 py-2 text-[13px] text-zinc-200 placeholder:text-zinc-700 outline-none focus:border-white/[0.12] transition-colors"
@@ -682,15 +849,20 @@ export function GlobalQuickCapture() {
                             </button>
                             <button
                               onClick={() => {
+                                const answersArray = Object.entries(answers)
+                                  .filter(([, v]) => v.trim())
+                                  .map(([question, answer]) => ({ question, answer }))
                                 setPhase("stream")
                                 setLoading(true)
                                 setTasks([])
-                                startStreaming()
+                                startStreaming(query, answersArray, "pro")
                               }}
-                              disabled={Object.values(answers).filter(a => a.trim()).length === 0}
+                              disabled={
+                                Object.values(answers).filter((a) => a.trim()).length === 0
+                              }
                               className="flex items-center gap-1.5 rounded-md bg-white/[0.08] px-3 py-1.5 text-[12px] font-medium text-zinc-300 hover:bg-white/[0.12] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                             >
-                              <Sparkles className="h-3 w-3" />
+                              <FlaskConical className="h-3 w-3" />
                               Generate Tasks
                             </button>
                           </div>
@@ -699,57 +871,54 @@ export function GlobalQuickCapture() {
                     </motion.div>
                   )}
 
-                  {phase === "input" && (
+                  {/* ============= STREAM PHASE ============= */}
+                  {phase === "stream" && loading && (
                     <motion.div
-                      key="empty"
-                      initial={{ opacity: 0, y: 10 }}
+                      key="skeletons"
+                      initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -6 }}
-                      transition={{ ...SPRING, delay: 0.1 }}
-                      className="flex flex-col items-center justify-center pt-10 text-center px-6"
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={SPRING}
+                      className="space-y-3"
                     >
-                      {brainstormAvailable === false && (
-                        <div className="w-full max-w-[280px] rounded-lg bg-yellow-900/20 border border-yellow-700/30 px-4 py-2.5 mb-4">
-                          <p className="text-[11px] text-yellow-400/90 leading-relaxed">
-                            AI provider not configured. Set <code className="text-yellow-300 font-mono">BRAINSTORM_API_KEY</code> in your <code className="text-yellow-300 font-mono">.env</code> file.
-                          </p>
-                        </div>
-                      )}
-
-                      <span className="text-[26px] font-bold tracking-tight bg-gradient-to-r from-white via-white to-zinc-300 bg-clip-text text-transparent">
-                        Brainstorm
-                      </span>
-
-                      <p className="text-[13px] text-zinc-400 max-w-[280px] leading-relaxed mt-3">
-                        Describe a goal — AI turns it into actionable tasks for your board.
-                      </p>
-
-                      <div className="mt-5 w-full max-w-[280px] rounded-lg bg-white/[0.03] border border-white/[0.06] px-4 py-3 space-y-2">
-                        <div className="flex items-center gap-2.5 text-left">
-                          <span className="text-[11px] font-mono text-zinc-500 shrink-0">1</span>
-                          <span className="text-[12px] text-zinc-400 leading-snug">
-                            Type what you want to build or fix
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2.5 text-left">
-                          <span className="text-[11px] font-mono text-zinc-500 shrink-0">2</span>
-                          <span className="text-[12px] text-zinc-400 leading-snug">
-                            AI breaks it into prioritized tasks
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2.5 text-left">
-                          <span className="text-[11px] font-mono text-zinc-500 shrink-0">3</span>
-                          <span className="text-[12px] text-zinc-400 leading-snug">
-                            Insert the ones you want into your board
-                          </span>
-                        </div>
+                      <div className="flex items-center gap-2 pb-2">
+                        <Spinner />
+                        <span className="text-[11px] text-zinc-600">Generating tasks...</span>
                       </div>
+                      <SkeletonCard />
+                      <SkeletonCard />
+                      <SkeletonCard />
+                    </motion.div>
+                  )}
+
+                  {phase === "stream" && !loading && tasks.length > 0 && (
+                    <motion.div
+                      key="tasks"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="space-y-2.5"
+                    >
+                      <div className="flex items-center justify-between pb-1">
+                        <span className="text-[11px] font-medium text-zinc-500">
+                          {tasks.length} task{tasks.length !== 1 && "s"} generated
+                        </span>
+                        <span className="text-[10px] text-zinc-700">
+                          from &quot;{query.slice(0, 32)}
+                          {query.length > 32 && "..."}&quot;
+                        </span>
+                      </div>
+
+                      <AnimatePresence>
+                        {tasks.map((task) => (
+                          <TaskCard key={task.id} task={task} onToggle={handleToggle} />
+                        ))}
+                      </AnimatePresence>
                     </motion.div>
                   )}
                 </AnimatePresence>
               </div>
 
-              {/* ---------- Bottom status bar ---------- */}
+              {/* ---------- Bottom action bar (stream done) ---------- */}
               <AnimatePresence>
                 {phase === "stream" && streamingDone && tasks.length > 0 && (
                   <motion.div
@@ -757,24 +926,8 @@ export function GlobalQuickCapture() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 8 }}
                     transition={SPRING}
-                    className="border-t border-white/[0.06] px-4 py-3 space-y-3"
+                    className="border-t border-white/[0.06] px-4 py-3"
                   >
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] text-zinc-500 font-medium">Add to project</label>
-                      <select
-                        value={selectedProjectId || ""}
-                        onChange={(e) => setSelectedProjectId(e.target.value || null)}
-                        className="w-full bg-zinc-900 border border-white/[0.08] rounded-md px-3 py-2 text-[13px] text-zinc-200 outline-none focus:border-white/[0.12] appearance-none cursor-pointer"
-                      >
-                        <option value="">Select a project...</option>
-                        {projects.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] text-zinc-600">
                         {tasks.filter((t) => t.selected).length}/{tasks.length} selected
@@ -798,16 +951,16 @@ export function GlobalQuickCapture() {
                             !selectedProjectId ||
                             tasks.filter((t) => t.selected).length === 0
                           }
+                          title={
+                            !selectedProjectId
+                              ? "Select a project first"
+                              : undefined
+                          }
                           className="flex items-center gap-1.5 rounded-md bg-white/[0.08] px-3 py-1.5 text-[12px] font-medium text-zinc-300 hover:bg-white/[0.12] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                         >
                           {inserting ? (
                             <>
-                              <motion.div
-                                animate={{ rotate: 360 }}
-                                transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                              >
-                                <Sparkles className="h-3 w-3" />
-                              </motion.div>
+                              <Loader2 className="h-3 w-3 animate-spin" />
                               Adding...
                             </>
                           ) : (
@@ -833,7 +986,7 @@ export function GlobalQuickCapture() {
                     "px-4 py-3",
                     "transition-shadow duration-300",
                     "focus-within:shadow-[0_0_0_1px_rgba(255,255,255,0.1),0_0_20px_rgba(255,255,255,0.04)]",
-                    "focus-within:border-white/[0.12]"
+                    "focus-within:border-white/[0.12]",
                   )}
                 >
                   <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.06]">
@@ -851,18 +1004,18 @@ export function GlobalQuickCapture() {
                       "flex-1 bg-transparent text-[16px] text-zinc-200",
                       "placeholder:text-zinc-600",
                       "outline-none border-none",
-                      "caret-zinc-400"
+                      "caret-zinc-400",
                     )}
                   />
 
-                  {webSearchAvailable && (
+                  {webSearchAvailable && mode === "pro" && (
                     <button
                       onClick={() => setWebSearchEnabled((prev) => !prev)}
                       className={cn(
                         "flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-colors",
                         webSearchEnabled
                           ? "text-blue-400 bg-blue-500/10"
-                          : "text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.04]"
+                          : "text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.04]",
                       )}
                       aria-label="Toggle web search"
                     >
@@ -920,7 +1073,7 @@ export function GlobalQuickCapture() {
                       isRecording
                         ? "text-red-400 animate-pulse"
                         : "text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.04]",
-                      !micSupported && "opacity-40 cursor-not-allowed"
+                      !micSupported && "opacity-40 cursor-not-allowed",
                     )}
                     aria-label={isRecording ? "Stop recording" : "Start voice input"}
                   >

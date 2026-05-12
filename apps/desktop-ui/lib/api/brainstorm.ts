@@ -11,6 +11,7 @@ export interface BrainstormAvailability {
   provider?: string;
   error?: string;
   webSearchAvailable?: boolean;
+  proAvailable?: boolean;
 }
 
 export async function checkBrainstormAvailability(): Promise<BrainstormAvailability> {
@@ -26,11 +27,12 @@ export async function checkBrainstormAvailability(): Promise<BrainstormAvailabil
 export async function generateBrainstormQuestions(
   prompt: string,
   webSearch: boolean = false,
+  projectId?: string,
 ): Promise<string[]> {
   const data = await apiFetch<{ questions: string[] }>('/api/brainstorm/questions', {
     method: 'POST',
     sidecar: true,
-    body: JSON.stringify({ prompt, webSearch }),
+    body: JSON.stringify({ prompt, webSearch, projectId }),
   });
   return data.questions;
 }
@@ -41,14 +43,26 @@ export async function streamBrainstormTasks(
   onTask: (task: BrainstormTask) => void,
   onDone: () => void,
   onError: (message: string) => void,
-  webSearch: boolean = false,
+  opts: {
+    webSearch?: boolean;
+    mode?: 'basic' | 'pro';
+    taskCount?: number;
+    projectId?: string;
+  },
 ): Promise<void> {
   let res: Response;
   try {
     res = await apiFetchRaw('/api/brainstorm/generate', {
       method: 'POST',
       sidecar: true,
-      body: JSON.stringify({ prompt, answers, webSearch }),
+      body: JSON.stringify({
+        prompt,
+        answers,
+        webSearch: opts.webSearch,
+        mode: opts.mode,
+        taskCount: opts.taskCount,
+        projectId: opts.projectId,
+      }),
     });
   } catch (err) {
     if (err instanceof ApiError || err instanceof NetworkError) {
