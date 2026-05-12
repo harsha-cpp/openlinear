@@ -11,31 +11,9 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { checkBrainstormAvailability, transcribeAudio } from "@/lib/api/brainstorm"
+import { isWhisperHallucination } from "@/lib/audio-utils"
 
 type OverlayState = "idle" | "pill"
-
-const WHISPER_HALLUCINATIONS = new Set([
-  'thank you',
-  'thanks for watching',
-  'thank you for watching',
-  'thanks for listening',
-  'thank you for listening',
-  'bye',
-  'bye bye',
-  'goodbye',
-  'you',
-  'the end',
-  'subtitles by',
-  'subscribe',
-  'like and subscribe',
-])
-
-function isWhisperHallucination(text: string): boolean {
-  const normalized = text.toLowerCase().replace(/[.,!?;:'"]/g, '').trim()
-  if (normalized.length === 0) return true
-  if (normalized.length < 3) return true
-  return WHISPER_HALLUCINATIONS.has(normalized)
-}
 
 const SPRING = { type: "spring" as const, stiffness: 300, damping: 30 }
 
@@ -109,7 +87,7 @@ export function GodModeOverlay() {
     if (!trimmed) return
 
     window.dispatchEvent(
-      new CustomEvent("brainstorm-query", { detail: { query: trimmed, webSearch: webSearchEnabled } })
+      new CustomEvent("brainstorm-query", { detail: { query: trimmed, webSearch: webSearchEnabled, mode: 'basic' } })
     )
 
     setState("idle")
