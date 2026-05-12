@@ -62,8 +62,10 @@ function makeRateLimiter(windowMs: number, max: number, name: string): RateLimit
     limit: max,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
-    // Skip Server-Sent Events — long-lived connections must never be rate-limited
-    skip: (req) => req.path === '/api/events' || req.path.startsWith('/api/events'),
+    skip: (req) => {
+      if (process.env.NODE_ENV === 'test') return true;
+      return req.path === '/api/events' || req.path.startsWith('/api/events');
+    },
     handler: (req, res) => {
       res.status(429).json({
         error: 'rate_limited',

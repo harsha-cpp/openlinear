@@ -1,5 +1,5 @@
 import { Router, Response, NextFunction } from 'express';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { prisma } from '@openlinear/db';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getUserTeamIds } from '../services/team-scope';
@@ -7,15 +7,20 @@ import { SearchQuerySchema } from '../schemas/search';
 
 const router: Router = Router();
 
-// Per-user rate limit: 30 req/min, keyed off authenticated userId
+// Per-user rate limit: 30 req/min, keyed off authenticated userId.
+// Falls back to the express-rate-limit ipKeyGenerator helper, which
+// normalizes IPv6 addresses to a /64 subnet so individual IPv6 clients
+// can't bypass the limit by rotating addresses.
 const searchLimiter = rateLimit({
   windowMs: 60_000,
   limit: 30,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
   keyGenerator: (req) => {
     const userId = (req as AuthRequest).userId;
-    return userId ?? req.ip ?? 'anonymous';
+    if (userId) return userId;
+    return ipKeyGenerator(req.ip ?? '', 56);
   },
   handler: (_req, res) => {
     res.status(429).json({

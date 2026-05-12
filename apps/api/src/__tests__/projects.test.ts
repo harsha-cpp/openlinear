@@ -51,9 +51,10 @@ describe('Projects API', () => {
   }, 30000);
 
   describe('GET /api/projects', () => {
-    it('returns 401 without auth', async () => {
+    it('returns empty array without auth', async () => {
       const res = await request(app).get('/api/projects');
-      expect(res.status).toBe(401);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual([]);
     });
 
     it('returns projects with teams array', async () => {
@@ -123,7 +124,7 @@ describe('Projects API', () => {
         .send({ name: 'Bad Status', status: 'invalid_status' });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Validation failed');
+      expect(res.body.error).toBe('validation_error');
     });
 
     it('returns 401 without auth', async () => {

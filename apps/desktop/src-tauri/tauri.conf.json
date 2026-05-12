@@ -38,16 +38,7 @@
       "dmg": {
         "windowSize": { "width": 540, "height": 400 }
       },
-      "infoPlist": {
-        "CFBundleURLTypes": [
-          {
-            "CFBundleURLName": "com.openlinear.app",
-            "CFBundleURLSchemes": ["openlinear"]
-          }
-        ],
-        "LSMinimumSystemVersion": "10.15",
-        "NSHighResolutionCapable": true
-      }
+      "infoPlist": "Info.plist"
     },
     "linux": {
       "appimage": { "bundleMediaFramework": false },

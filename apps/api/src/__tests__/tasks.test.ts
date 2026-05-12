@@ -74,8 +74,9 @@ describe('Tasks API', () => {
         .set('Authorization', `Bearer ${authToken}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.length).toBeGreaterThanOrEqual(1);
-      expect(res.body.some((t: { title: string }) => t.title === 'Test Task')).toBe(true);
+      expect(Array.isArray(res.body.items)).toBe(true);
+      expect(res.body.items.length).toBeGreaterThanOrEqual(1);
+      expect(res.body.items.some((t: { title: string }) => t.title === 'Test Task')).toBe(true);
     });
 
     it('filters tasks by teamId when caller is a member', async () => {
@@ -91,7 +92,7 @@ describe('Tasks API', () => {
         .set('Authorization', `Bearer ${authToken}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.some((t: { title: string }) => t.title === 'Team Task')).toBe(true);
+      expect(res.body.items.some((t: { title: string }) => t.title === 'Team Task')).toBe(true);
     });
 
     it('rejects teamId filter when caller is not a member', async () => {
@@ -114,16 +115,14 @@ describe('Tasks API', () => {
       expect(res.status).toBe(401);
     });
 
-    it('creates a new task without teamId (backward compat)', async () => {
+    it('rejects creating a task with no team or project', async () => {
       const res = await request(app)
         .post('/api/tasks')
         .set('Authorization', `Bearer ${authToken}`)
         .send({ title: 'No Team Task' });
 
-      expect(res.status).toBe(201);
-      expect(res.body.teamId).toBeNull();
-      expect(res.body.identifier).toBeNull();
-      expect(res.body.number).toBeNull();
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('validation_error');
     });
 
     it('creates a task with teamId and generates identifier', async () => {
@@ -174,7 +173,8 @@ describe('Tasks API', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .send({ title: 'Forbidden', teamId: otherTeam.id });
 
-      expect(res.status).toBe(403);
+      // Membership-existence is collapsed to 404 to avoid leaking which teams exist.
+      expect(res.status).toBe(404);
       expect(res.body.code).toBe('OWNERSHIP_REQUIRED');
     });
 
@@ -185,7 +185,7 @@ describe('Tasks API', () => {
         .send({ title: '' });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Validation failed');
+      expect(res.body.error).toBe('validation_error');
     });
   });
 

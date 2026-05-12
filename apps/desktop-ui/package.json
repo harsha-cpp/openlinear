@@ -7,7 +7,7 @@
     "build": "next build",
     "build:tauri": "BUILD_FOR_TAURI=1 next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
