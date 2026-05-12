@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
+import type { CodebaseContext } from './codebase-context';
 
 export interface BrainstormTask {
   title: string;
@@ -7,18 +8,73 @@ export interface BrainstormTask {
   priority: 'low' | 'medium' | 'high';
 }
 
-const QUESTIONS_SYSTEM_PROMPT =
-  "You are a project planning assistant. Given the user's idea, generate 3-5 specific clarifying questions to better understand the scope, technical approach, priority, and constraints. Return ONLY a JSON array of question strings. No other text.";
+export type BrainstormMode = 'basic' | 'pro';
 
-const TASKS_SYSTEM_PROMPT =
-  "You are a project planning assistant. Based on the user's idea and their answers to clarifying questions, generate 3-10 specific, actionable development tasks. Output each task as a JSON object on its own line (NDJSON format). Each object must have: title (string, concise action item), description (string, 1-2 sentences explaining why/what), priority (string, one of: low, medium, high). Output ONLY the JSON objects, one per line. No other text.";
+function formatContextForPrompt(ctx: CodebaseContext): string {
+  if (ctx.files.length === 0) return 'No codebase context available.';
+  return ctx.files.map((f) => `--- ${f.path} ---\n${f.snippet}`).join('\n\n');
+}
+
+function buildBasicTasksPrompt(ctx: CodebaseContext, taskCount: number): string {
+  return `You are a senior software engineer breaking down a development goal into actionable tasks.
+
+<codebase_context>
+${formatContextForPrompt(ctx)}
+</codebase_context>
+
+Based on the codebase context and user's goal, generate approximately ${taskCount} tasks. Use the task count as a granularity guide — fewer means higher-level, more means finer-grained subtasks. You may go slightly above or below.
+
+Each task must reference specific files, functions, or patterns from the codebase when relevant. Output each task as a JSON object on its own line (NDJSON). Each object must have:
+- title (string, concise action starting with a verb)
+- description (string, 1-3 sentences explaining what to do and why, referencing specific files/functions)
+- priority (string: "high", "medium", or "low")
+
+Output ONLY JSON objects, one per line. No markdown, no commentary.`;
+}
+
+function buildProTasksPrompt(ctx: CodebaseContext, taskCount: number): string {
+  return `You are a principal engineer creating a comprehensive development plan. You have deep knowledge of software architecture and can create thorough, well-ordered task breakdowns.
+
+<codebase_context>
+${formatContextForPrompt(ctx)}
+</codebase_context>
+
+Based on the codebase context, the user's goal, their answers to clarifying questions, and any web research context, generate approximately ${taskCount} tasks. Use the task count as a granularity guide.
+
+Each task must:
+- Reference specific files, functions, or modules from the codebase
+- Include clear acceptance criteria in the description
+- Be ordered logically (dependencies first)
+- Consider edge cases, error handling, and testing
+
+Output each task as a JSON object on its own line (NDJSON). Each object must have:
+- title (string, concise action starting with a verb)
+- description (string, 2-4 sentences with specific file references, acceptance criteria)
+- priority (string: "high", "medium", or "low")
+
+Output ONLY JSON objects, one per line. No markdown, no commentary.`;
+}
+
+function buildProQuestionsPrompt(ctx: CodebaseContext): string {
+  return `You are a principal engineer helping to scope a development task. You have access to the project's codebase structure.
+
+<codebase_context>
+${formatContextForPrompt(ctx)}
+</codebase_context>
+
+Given the user's goal, generate 3-5 specific clarifying questions that reference actual files, patterns, or architectural decisions visible in the codebase. The questions should help determine scope, approach, and constraints. Return ONLY a JSON array of question strings. No other text.`;
+}
 
 function getProvider(): string {
   return process.env.BRAINSTORM_PROVIDER || 'openai';
 }
 
-function getModel(): string {
+function getModel(mode: BrainstormMode): string {
   const provider = getProvider();
+  if (mode === 'pro') {
+    if (process.env.BRAINSTORM_PRO_MODEL) return process.env.BRAINSTORM_PRO_MODEL;
+    return provider === 'anthropic' ? 'claude-sonnet-4-20250514' : 'gpt-4o';
+  }
   if (process.env.BRAINSTORM_MODEL) return process.env.BRAINSTORM_MODEL;
   return provider === 'anthropic' ? 'claude-sonnet-4-20250514' : 'gpt-4o-mini';
 }
@@ -41,25 +97,43 @@ export function checkBrainstormAvailability(): {
   available: boolean;
   provider: string;
   webSearchAvailable: boolean;
+  proAvailable: boolean;
   error?: string;
 } {
   if (!process.env.BRAINSTORM_API_KEY) {
-    return { available: false, provider: '', webSearchAvailable: false, error: 'BRAINSTORM_API_KEY not configured' };
+    return {
+      available: false,
+      provider: '',
+      webSearchAvailable: false,
+      proAvailable: false,
+      error: 'BRAINSTORM_API_KEY not configured',
+    };
   }
   const provider = getProvider();
-  return { available: true, provider, webSearchAvailable: provider === 'openai' };
+  const proAvailable = Boolean(process.env.BRAINSTORM_PRO_MODEL || process.env.BRAINSTORM_API_KEY);
+  return {
+    available: true,
+    provider,
+    webSearchAvailable: provider === 'openai',
+    proAvailable,
+  };
 }
 
-export async function generateQuestions(prompt: string, webSearch: boolean = false): Promise<string[]> {
+export async function generateQuestions(
+  prompt: string,
+  webSearch: boolean,
+  codebaseContext: CodebaseContext,
+): Promise<string[]> {
   const provider = getProvider();
-  const model = getModel();
+  const model = getModel('pro');
+  const systemPrompt = buildProQuestionsPrompt(codebaseContext);
 
   if (provider === 'anthropic') {
     const client = createAnthropicClient();
     const response = await client.messages.create({
       model,
       max_tokens: 1024,
-      system: QUESTIONS_SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: [{ role: 'user', content: prompt }],
     });
 
@@ -77,7 +151,7 @@ export async function generateQuestions(prompt: string, webSearch: boolean = fal
   const completion = await client.chat.completions.create({
     model,
     messages: [
-      { role: 'system', content: QUESTIONS_SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: prompt },
     ],
     ...(webSearch && { web_search_options: { search_context_size: 'medium' as const } }),
@@ -90,15 +164,24 @@ export async function generateQuestions(prompt: string, webSearch: boolean = fal
 export async function* generateTasks(
   prompt: string,
   answers: { question: string; answer: string }[],
-  webSearch: boolean = false,
+  webSearch: boolean,
+  mode: BrainstormMode,
+  taskCount: number,
+  codebaseContext: CodebaseContext,
 ): AsyncGenerator<BrainstormTask> {
   const provider = getProvider();
-  const model = getModel();
+  const model = getModel(mode);
+  const systemPrompt =
+    mode === 'pro'
+      ? buildProTasksPrompt(codebaseContext, taskCount)
+      : buildBasicTasksPrompt(codebaseContext, taskCount);
 
   const qaContext = answers
     .map((a) => `Q: ${a.question}\nA: ${a.answer}`)
     .join('\n\n');
-  const userContent = `Idea: ${prompt}\n\nClarifying Q&A:\n${qaContext}`;
+  const userContent = qaContext
+    ? `Goal: ${prompt}\n\nClarifying Q&A:\n${qaContext}`
+    : `Goal: ${prompt}`;
 
   let buffer = '';
 
@@ -107,7 +190,7 @@ export async function* generateTasks(
     const stream = client.messages.stream({
       model,
       max_tokens: 4096,
-      system: TASKS_SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: [{ role: 'user', content: userContent }],
     });
 
@@ -128,7 +211,7 @@ export async function* generateTasks(
       model,
       stream: true,
       messages: [
-        { role: 'system', content: TASKS_SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userContent },
       ],
       ...(webSearch && { web_search_options: { search_context_size: 'medium' as const } }),
@@ -172,7 +255,7 @@ function tryParseTask(line: string): BrainstormTask | null {
       };
     }
   } catch {
-    // Skip malformed JSON lines
+    return null;
   }
 
   return null;
