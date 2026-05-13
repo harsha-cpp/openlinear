@@ -1,10 +1,6 @@
 "use client"
 
-<<<<<<<< HEAD:apps/desktop-ui/app/teams/detail/page.tsx
-import { useState, useEffect, useCallback, Suspense } from "react"
-========
 import { Suspense, useState, useEffect, useCallback } from "react"
->>>>>>>> origin/dev:apps/desktop-ui/app/teams/manage/page.tsx
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   ArrowLeft,
@@ -80,25 +76,18 @@ interface Task {
   identifier: string | null
 }
 
-<<<<<<<< HEAD:apps/desktop-ui/app/teams/detail/page.tsx
-function TeamDetailContent() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const teamId = searchParams.get("id") as string
-========
-export default function TeamDetailPage() {
+export default function TeamManagePage() {
   return (
     <Suspense fallback={null}>
-      <TeamDetailPageContent />
+      <TeamManagePageContent />
     </Suspense>
   )
 }
 
-function TeamDetailPageContent() {
+function TeamManagePageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const teamId = searchParams.get("id") ?? ""
->>>>>>>> origin/dev:apps/desktop-ui/app/teams/manage/page.tsx
 
   const [team, setTeam] = useState<Team | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -794,19 +783,5 @@ function TeamDetailPageContent() {
         </AlertDialogContent>
       </AlertDialog>
     </AppShell>
-  )
-}
-
-export default function TeamDetailPage() {
-  return (
-    <Suspense fallback={
-      <AppShell>
-        <div className="flex-1 flex items-center justify-center bg-linear-bg">
-          <div className="text-linear-text-tertiary">Loading...</div>
-        </div>
-      </AppShell>
-    }>
-      <TeamDetailContent />
-    </Suspense>
   )
 }

@@ -15,3 +15,5 @@ export { fetchMyIssues, executeTaskPublic, refreshTaskPr, fetchInboxTasks, fetch
 
 export { checkBrainstormAvailability, generateBrainstormQuestions, streamBrainstormTasks, transcribeAudio } from './brainstorm';
 export type { BrainstormTask, BrainstormAvailability } from './brainstorm';
+
+export { isDesktopRuntime, getApiUrl, getApiBaseUrl, getCloudApiUrl, getSidecarApiUrl, API_URL } from './client';

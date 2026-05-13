@@ -61,8 +61,10 @@ const subNavItemClass = (isActive: boolean) =>
 interface SidebarProps {
     open: boolean
     onClose: () => void
+    onOpen?: () => void
     width: number
     animating: boolean
+    isMobile?: boolean
 }
 
 function TeamSection({ team, pathname, searchParams, onDelete }: { team: Team; pathname: string; searchParams: URLSearchParams; onDelete: (teamId: string, teamName: string) => void }) {

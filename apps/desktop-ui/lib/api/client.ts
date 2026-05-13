@@ -111,3 +111,11 @@ export function getAuthToken(): string | null {
     return null;
   }
 }
+
+export const isDesktopRuntime = isTauriRuntime;
+
+export function getApiBaseUrl(): string {
+  return getApiUrl();
+}
+
+export const API_URL = DEFAULT_API_URL;

@@ -22,6 +22,7 @@ interface TaskCardProps {
   isBatchTask?: boolean
   isCompletedBatchTask?: boolean
   isDragging?: boolean
+  syncState?: unknown
 }
 
 function formatDueDate(dateStr: string): { text: string; isOverdue: boolean } {

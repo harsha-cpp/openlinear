@@ -12,7 +12,7 @@ interface DoneColumnContentProps {
   columnTasks: Task[]
   completedBatch: { taskIds: string[]; prUrl: string | null; mode: string } | null
   executionProgress: Record<string, ExecutionProgress>
-  syncStates: Record<string, TaskSyncState>
+  syncStates?: Record<string, TaskSyncState>
   selectedTaskIds: Set<string>
   onDelete: (taskId: string) => Promise<void>
   onTaskClick: (taskId: string) => Promise<void>
@@ -101,7 +101,7 @@ export function DoneColumnContent({
                       onDelete={onDelete}
                       onTaskClick={onTaskClick}
                       executionProgress={executionProgress[task.id]}
-                      syncState={syncStates[task.id]}
+                      syncState={syncStates?.[task.id]}
                       selected={selectedTaskIds.has(task.id)}
                       onToggleSelect={onToggleSelect}
                       selectionMode={false}

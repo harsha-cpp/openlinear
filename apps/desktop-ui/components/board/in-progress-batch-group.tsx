@@ -13,7 +13,7 @@ interface InProgressBatchGroupProps {
   canExecute: boolean
   executionProgress: Record<string, ExecutionProgress>
   selectedTaskIds: Set<string>
-  syncStates: Record<string, TaskSyncState>
+  syncStates?: Record<string, TaskSyncState>
   onExecute?: (taskId: string) => Promise<void>
   onCancel: (taskId: string) => Promise<void>
   onDelete: (taskId: string) => Promise<void>
@@ -65,7 +65,7 @@ export function InProgressBatchGroup({
                   onDelete={onDelete}
                   onTaskClick={onTaskClick}
                   executionProgress={executionProgress[task.id]}
-                  syncState={syncStates[task.id]}
+                  syncState={syncStates?.[task.id]}
                   selected={selectedTaskIds.has(task.id)}
                   onToggleSelect={onToggleSelect}
                   selectionMode={false}

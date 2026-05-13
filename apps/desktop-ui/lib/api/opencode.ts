@@ -89,10 +89,12 @@ export interface ProviderModels {
 export interface ModelConfig {
   model: string | null;
   small_model: string | null;
+  effective_model?: string | null;
+  source?: 'opencode' | 'legacy-openlinear' | string | null;
 }
 
-export async function getModels(): Promise<{ providers: ProviderModels[] }> {
-  return opencodeFetch<{ providers: ProviderModels[] }>(
+export async function getModels(): Promise<{ providers: ProviderModels[]; selection?: ModelConfig | null }> {
+  return opencodeFetch<{ providers: ProviderModels[]; selection?: ModelConfig | null }>(
     '/api/opencode/models',
     {},
     'Failed to get models',
