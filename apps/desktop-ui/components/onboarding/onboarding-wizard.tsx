@@ -1,11 +1,10 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
 import {
   Rocket,
   FolderKanban,
-  FolderOpen,
   Users2,
   Github,
   ArrowRight,
@@ -21,14 +20,10 @@ import {
   createTeam,
   createProject,
   fetchGitHubRepos,
-  getGitHubConnectUrl,
-  isDesktopRuntime,
   type Team,
   type GitHubRepo,
 } from "@/lib/api"
 import { useAuth } from "@/hooks/use-auth"
-import { openExternal } from "@/lib/utils"
-import { pickLocalFolder as chooseLocalFolder } from "@/lib/pick-local-folder"
 
 const SPRING = { type: "spring" as const, stiffness: 300, damping: 30 }
 
@@ -38,21 +33,22 @@ interface OnboardingWizardProps {
 }
 
 function WelcomeStep({ onNext }: { onNext: () => void }) {
+  const reduceMotion = useReducedMotion()
   return (
     <div className="text-center space-y-6">
       <motion.div
-        initial={{ scale: 0.8, opacity: 0 }}
+        initial={reduceMotion ? false : { scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ ...SPRING, delay: 0.1 }}
+        transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.1 }}
         className="w-20 h-20 mx-auto rounded-2xl bg-linear-accent/10 flex items-center justify-center"
       >
         <Rocket className="w-10 h-10 text-linear-accent" />
       </motion.div>
 
       <motion.div
-        initial={{ y: 20, opacity: 0 }}
+        initial={reduceMotion ? false : { y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ ...SPRING, delay: 0.2 }}
+        transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.2 }}
         className="space-y-2"
       >
         <h2 className="text-2xl font-semibold text-linear-text">
@@ -64,9 +60,9 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
       </motion.div>
 
       <motion.div
-        initial={{ y: 20, opacity: 0 }}
+        initial={reduceMotion ? false : { y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ ...SPRING, delay: 0.3 }}
+        transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.3 }}
       >
         <button
           type="button"
@@ -81,7 +77,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
   )
 }
 
-type ProjectTab = "github" | "link" | "local"
+type ProjectTab = "github" | "link"
 
 function RepoItem({
   repo,
@@ -142,7 +138,6 @@ function GitHubRepoTab({
   const { user, refreshUser } = useAuth()
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [isLoadingRepos, setIsLoadingRepos] = useState(false)
-  const [isConnecting, setIsConnecting] = useState(false)
   const [search, setSearch] = useState("")
 
   const hasGitHub = !!user?.githubId
@@ -153,7 +148,7 @@ function GitHubRepoTab({
     setIsLoadingRepos(true)
     fetchGitHubRepos()
       .then(setRepos)
-      .catch((err) => toast.error(err instanceof Error ? err.message : "Failed to load repositories"))
+      .catch(() => toast.error("Failed to load repositories"))
       .finally(() => setIsLoadingRepos(false))
   }, [hasGitHub])
 
@@ -167,18 +162,6 @@ function GitHubRepoTab({
         r.description?.toLowerCase().includes(q)
     )
   }, [repos, search])
-
-  const handleConnect = useCallback(async () => {
-    setIsConnecting(true)
-    try {
-      const url = await getGitHubConnectUrl()
-      await openExternal(url)
-    } catch {
-      toast.error("Failed to start GitHub connection")
-    } finally {
-      setIsConnecting(false)
-    }
-  }, [])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -197,25 +180,12 @@ function GitHubRepoTab({
         </div>
         <div className="text-center space-y-1">
           <p className="text-sm font-medium text-linear-text">
-            Connect your GitHub account
+            GitHub account not detected
           </p>
           <p className="text-xs text-linear-text-tertiary max-w-[240px]">
-            Link GitHub to import your repositories and start managing projects.
+            Sign out and sign in again to refresh your GitHub session.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleConnect}
-          disabled={isConnecting}
-          className="bg-[#24292f] hover:bg-[#32383f] text-white rounded-md h-9 px-4 text-sm font-medium transition-colors inline-flex items-center gap-2 disabled:opacity-50"
-        >
-          {isConnecting ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Github className="w-4 h-4" />
-          )}
-          Connect to GitHub
-        </button>
       </div>
     )
   }
@@ -296,67 +266,6 @@ function LinkTab({
   )
 }
 
-function LocalFolderTab({
-  isDesktopApp,
-  localPath,
-  isPicking,
-  onLocalPathChange,
-  onPickFolder,
-}: {
-  isDesktopApp: boolean
-  localPath: string
-  isPicking: boolean
-  onLocalPathChange: (path: string) => void
-  onPickFolder: () => void
-}) {
-  if (!isDesktopApp) {
-    return (
-      <div className="rounded-lg border border-linear-border bg-linear-bg-tertiary px-4 py-5 text-center">
-        <p className="text-sm text-linear-text-secondary">
-          Local folders are available in the desktop app.
-        </p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-4 py-2">
-      <div className="space-y-1.5">
-        <label htmlFor="onboarding-local-path" className="text-xs font-medium text-linear-text-secondary">
-          Local project folder
-        </label>
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <FolderOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-linear-text-tertiary" />
-            <Input
-              id="onboarding-local-path"
-              value={localPath}
-              onChange={(e) => onLocalPathChange(e.target.value)}
-              placeholder="/Users/you/project"
-              className="bg-linear-bg-tertiary border-linear-border text-linear-text placeholder:text-linear-text-tertiary focus:border-linear-border-hover h-10 pl-10"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={onPickFolder}
-            disabled={isPicking}
-            className="shrink-0 rounded-md border border-linear-border bg-linear-bg-tertiary px-3 text-sm text-linear-text transition-colors hover:border-linear-border-hover disabled:opacity-50"
-          >
-            {isPicking ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              "Browse"
-            )}
-          </button>
-        </div>
-        <p className="text-xs text-linear-text-tertiary">
-          Choose a folder on this machine and OpenLinear will work locally without GitHub.
-        </p>
-      </div>
-    </div>
-  )
-}
-
 function ProjectStep({
   teamId,
   onComplete,
@@ -364,29 +273,12 @@ function ProjectStep({
   teamId: string
   onComplete: (result: { teamId: string; projectId: string }) => void
 }) {
-  const { user } = useAuth()
-  const [isDesktopApp, setIsDesktopApp] = useState(false)
-  const [activeTab, setActiveTab] = useState<ProjectTab>("link")
+  const reduceMotion = useReducedMotion()
+  const [activeTab, setActiveTab] = useState<ProjectTab>("github")
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null)
   const [repoUrl, setRepoUrl] = useState("")
-  const [localPath, setLocalPath] = useState("")
   const [projectName, setProjectName] = useState("")
   const [isCreating, setIsCreating] = useState(false)
-  const [isPickingLocalPath, setIsPickingLocalPath] = useState(false)
-  const hasGitHub = !!user?.githubId
-
-  useEffect(() => {
-    setIsDesktopApp(isDesktopRuntime())
-  }, [])
-
-  useEffect(() => {
-    if (hasGitHub) {
-      setActiveTab("github")
-      return
-    }
-
-    setActiveTab(isDesktopApp ? "local" : "link")
-  }, [hasGitHub, isDesktopApp])
 
   useEffect(() => {
     if (selectedRepo) {
@@ -403,36 +295,6 @@ function ProjectStep({
     }
   }, [repoUrl, activeTab, projectName])
 
-  useEffect(() => {
-    if (activeTab === "local" && localPath && !projectName) {
-      const parts = localPath.split(/[/\\]/).filter(Boolean)
-      const folderName = parts.at(-1)
-      if (folderName) {
-        setProjectName(folderName)
-      }
-    }
-  }, [localPath, activeTab, projectName])
-
-  const pickLocalFolder = useCallback(async () => {
-    if (!isDesktopApp) {
-      return
-    }
-
-    setIsPickingLocalPath(true)
-    try {
-      const selectedPath = await chooseLocalFolder()
-      if (selectedPath) {
-        setLocalPath(selectedPath)
-      }
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to choose local folder",
-      )
-    } finally {
-      setIsPickingLocalPath(false)
-    }
-  }, [isDesktopApp])
-
   const resolvedRepoUrl = useMemo(() => {
     if (activeTab === "github" && selectedRepo) {
       return `https://github.com/${selectedRepo.full_name}`
@@ -443,8 +305,7 @@ function ProjectStep({
     return undefined
   }, [activeTab, selectedRepo, repoUrl])
 
-  const resolvedLocalPath = activeTab === "local" ? localPath.trim() || undefined : undefined
-  const canCreate = projectName.trim().length > 0 && (activeTab !== "local" || !!resolvedLocalPath)
+  const canCreate = projectName.trim().length > 0
 
   const handleCreate = useCallback(async () => {
     if (!canCreate) return
@@ -455,37 +316,19 @@ function ProjectStep({
         name: projectName.trim(),
         teamIds: [teamId],
         repoUrl: resolvedRepoUrl,
-        localPath: resolvedLocalPath,
       })
       onComplete({ teamId, projectId: project.id })
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create project. Please try again.")
+    } catch {
+      toast.error("Failed to create project. Please try again.")
     } finally {
       setIsCreating(false)
     }
-  }, [canCreate, projectName, teamId, resolvedRepoUrl, resolvedLocalPath, onComplete])
+  }, [canCreate, projectName, teamId, resolvedRepoUrl, onComplete])
 
-  const tabs = useMemo(() => {
-    const nextTabs: { id: ProjectTab; label: string; icon: typeof Github }[] = []
-
-    if (hasGitHub) {
-      nextTabs.push({ id: "github", label: "GitHub Repos", icon: Github })
-    }
-
-    if (isDesktopApp) {
-      nextTabs.push({ id: "local", label: "Local Folder", icon: FolderOpen })
-    }
-
-    nextTabs.push({ id: "link", label: "Enter Link", icon: ExternalLink })
-
-    return nextTabs
-  }, [hasGitHub, isDesktopApp])
-
-  const projectSourceDescription = hasGitHub
-    ? "Choose a GitHub repository, paste a link, or point OpenLinear at a local folder."
-    : isDesktopApp
-      ? "Start from a local folder now, or paste a GitHub link later."
-      : "Paste a GitHub repository link to start creating issues."
+  const tabs: { id: ProjectTab; label: string; icon: typeof Github }[] = [
+    { id: "github", label: "GitHub Repos", icon: Github },
+    { id: "link", label: "Enter Link", icon: ExternalLink },
+  ]
 
   return (
     <div className="space-y-5">
@@ -497,7 +340,7 @@ function ProjectStep({
           Create Your First Project
         </h2>
         <p className="text-sm text-linear-text-secondary">
-          {projectSourceDescription}
+          Connect a GitHub repository to start creating issues.
         </p>
       </div>
 
@@ -511,18 +354,8 @@ function ProjectStep({
               key={tab.id}
               onClick={() => {
                 setActiveTab(tab.id)
-                if (tab.id === "github") {
-                  setRepoUrl("")
-                  setLocalPath("")
-                }
-                if (tab.id === "link") {
-                  setSelectedRepo(null)
-                  setLocalPath("")
-                }
-                if (tab.id === "local") {
-                  setSelectedRepo(null)
-                  setRepoUrl("")
-                }
+                if (tab.id === "github") setRepoUrl("")
+                if (tab.id === "link") setSelectedRepo(null)
               }}
               className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-md text-xs font-medium transition-all ${
                 isActive
@@ -540,23 +373,15 @@ function ProjectStep({
       <AnimatePresence mode="wait">
         <motion.div
           key={activeTab}
-          initial={{ opacity: 0, y: 8 }}
+          initial={reduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.15 }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+          transition={reduceMotion ? { duration: 0 } : { duration: 0.15 }}
         >
           {activeTab === "github" ? (
             <GitHubRepoTab
               selectedRepo={selectedRepo}
               onSelectRepo={setSelectedRepo}
-            />
-          ) : activeTab === "local" ? (
-            <LocalFolderTab
-              isDesktopApp={isDesktopApp}
-              localPath={localPath}
-              isPicking={isPickingLocalPath}
-              onLocalPathChange={setLocalPath}
-              onPickFolder={() => void pickLocalFolder()}
             />
           ) : (
             <LinkTab repoUrl={repoUrl} onUrlChange={setRepoUrl} />
@@ -618,24 +443,13 @@ function TeamStep({
   onTeamReady: (team: Team) => void
 }) {
   const { user } = useAuth()
-  const githubTeamName = user?.username ? `${user.username}'s Team` : null
-  const defaultTeamName = user?.username?.startsWith("local-")
-    ? "My Team"
-    : githubTeamName || "My Team"
   const [name, setName] = useState(() => {
-    return defaultTeamName
+    const base = user?.username ? `${user.username}'s Team` : "My Team"
+    return base
   })
   const [key, setKey] = useState(() => deriveTeamKey(name))
   const [keyDirty, setKeyDirty] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
-
-  useEffect(() => {
-    if (name !== "My Team" && name !== githubTeamName) {
-      return
-    }
-
-    setName(defaultTeamName)
-  }, [defaultTeamName, githubTeamName, name])
 
   useEffect(() => {
     if (team) {
@@ -759,6 +573,7 @@ function TeamStep({
 }
 
 function StepIndicator({ currentStep, totalSteps }: { currentStep: number; totalSteps: number }) {
+  const reduceMotion = useReducedMotion()
   const stepKeys = useMemo(
     () => Array.from({ length: totalSteps }, (_, i) => `step-${i}`),
     [totalSteps]
@@ -781,6 +596,7 @@ function StepIndicator({ currentStep, totalSteps }: { currentStep: number; total
                     ? "rgb(29, 78, 216)"
                     : "rgb(42, 42, 42)",
               }}
+              transition={reduceMotion ? { duration: 0 } : undefined}
               className="w-2.5 h-2.5 rounded-full transition-colors"
             />
             {index < totalSteps - 1 && (
@@ -799,6 +615,7 @@ function StepIndicator({ currentStep, totalSteps }: { currentStep: number; total
 
 export function OnboardingWizard({ teams, onComplete }: OnboardingWizardProps) {
   const [currentStep, setCurrentStep] = useState(0)
+  const reduceMotion = useReducedMotion()
 
   const [teamFlow, setTeamFlow] = useState(false)
   const [createdTeam, setCreatedTeam] = useState<Team | null>(null)
@@ -847,10 +664,10 @@ export function OnboardingWizard({ teams, onComplete }: OnboardingWizardProps) {
       <AnimatePresence mode="wait">
         <motion.div
           key={currentStep}
-          initial={{ opacity: 0, x: 20 }}
+          initial={reduceMotion ? false : { opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          transition={SPRING}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -20 }}
+          transition={reduceMotion ? { duration: 0 } : SPRING}
           className="bg-linear-bg-secondary border border-linear-border rounded-xl p-6"
         >
           {steps[currentStep]}

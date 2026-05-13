@@ -1,27 +1,55 @@
 #!/bin/bash
-set -euo pipefail
+set -e
 
-# Download opencode binary for the current platform
-# Used by build-sidecar.sh when no opencode binary is present
+# Downloads the latest opencode binary for the current platform
+# and places it in the Tauri sidecar binaries directory with
+# the correct target-triple naming convention.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 BINARIES_DIR="$ROOT_DIR/apps/desktop/src-tauri/binaries"
 
+REPO="opencode-ai/opencode"
+OPENCODE_VERSION="${OPENCODE_VERSION:-latest}"
+
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 
-# Determine target triple
+echo "==> Downloading opencode binary for $OS / $ARCH (version: $OPENCODE_VERSION)"
+
+# Resolve GitHub asset name + Tauri target triple
 case "$OS" in
   Darwin)
-    if [ "$ARCH" = "arm64" ]; then
-      TRIPLE="aarch64-apple-darwin"
-    else
-      TRIPLE="x86_64-apple-darwin"
-    fi
+    case "$ARCH" in
+      arm64)
+        ASSET_NAME="opencode-mac-arm64.tar.gz"
+        TARGET_TRIPLE="aarch64-apple-darwin"
+        ;;
+      x86_64)
+        ASSET_NAME="opencode-mac-x86_64.tar.gz"
+        TARGET_TRIPLE="x86_64-apple-darwin"
+        ;;
+      *)
+        echo "Unsupported macOS architecture: $ARCH"
+        exit 1
+        ;;
+    esac
     ;;
   Linux)
-    TRIPLE="x86_64-unknown-linux-gnu"
+    case "$ARCH" in
+      x86_64)
+        ASSET_NAME="opencode-linux-x86_64.tar.gz"
+        TARGET_TRIPLE="x86_64-unknown-linux-gnu"
+        ;;
+      aarch64)
+        ASSET_NAME="opencode-linux-arm64.tar.gz"
+        TARGET_TRIPLE="aarch64-unknown-linux-gnu"
+        ;;
+      *)
+        echo "Unsupported Linux architecture: $ARCH"
+        exit 1
+        ;;
+    esac
     ;;
   *)
     echo "Unsupported OS: $OS"
@@ -29,93 +57,55 @@ case "$OS" in
     ;;
 esac
 
-TARGET="$BINARIES_DIR/opencode-$TRIPLE"
+DEST="$BINARIES_DIR/opencode-$TARGET_TRIPLE"
 
-if [ -f "$TARGET" ]; then
-  echo "opencode binary already exists at $TARGET"
+# Skip if already downloaded
+if [ -f "$DEST" ]; then
+  echo "  - opencode binary already exists at $DEST, skipping download"
+  echo "  - Delete it manually to force re-download"
   exit 0
 fi
 
-# Try system opencode first
-if command -v opencode &>/dev/null; then
-  SYS_OPENCODE="$(command -v opencode)"
-  # Follow wrapper scripts to find the real binary
-  if file "$SYS_OPENCODE" | grep -q "shell script"; then
-    REAL_BIN=$(grep -oP 'exec\s+\K\S+' "$SYS_OPENCODE" 2>/dev/null || true)
-    if [ -n "$REAL_BIN" ] && [ -f "$REAL_BIN" ]; then
-      SYS_OPENCODE="$REAL_BIN"
-    fi
-  fi
-  if file "$SYS_OPENCODE" | grep -q "ELF\|Mach-O"; then
-    echo "Copying system opencode from $SYS_OPENCODE"
-    mkdir -p "$BINARIES_DIR"
-    cp "$SYS_OPENCODE" "$TARGET"
-    chmod +x "$TARGET"
-    echo "Done: $TARGET"
-    exit 0
-  fi
+if [ "$OPENCODE_VERSION" = "latest" ]; then
+  RELEASE_URL="https://api.github.com/repos/$REPO/releases/latest"
+else
+  RELEASE_URL="https://api.github.com/repos/$REPO/releases/tags/$OPENCODE_VERSION"
 fi
 
-# Download from GitHub releases
-echo "Downloading opencode binary..."
-OPENCODE_REPO="anomalyco/opencode"
-RELEASE_URL="https://github.com/$OPENCODE_REPO/releases/latest"
-RELEASE_API_URL="https://api.github.com/repos/$OPENCODE_REPO/releases/latest"
-LATEST_TAG=$(
-  curl -fsSL \
-    -H "Accept: application/vnd.github+json" \
-    -H "User-Agent: openlinear-build" \
-    "$RELEASE_API_URL" |
-    sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' |
-    head -n 1
-)
+echo "  - Fetching release metadata from $RELEASE_URL..."
+RELEASE_JSON=$(curl -sL "$RELEASE_URL")
+DOWNLOAD_URL=$(echo "$RELEASE_JSON" | grep "browser_download_url.*$ASSET_NAME" | cut -d '"' -f 4)
 
-if [ -z "$LATEST_TAG" ]; then
-  echo "Failed to determine latest opencode version"
-  echo "Please download manually from: $RELEASE_URL"
+if [ -z "$DOWNLOAD_URL" ]; then
+  echo "  ! Failed to find download URL for $ASSET_NAME (version: $OPENCODE_VERSION)"
   exit 1
 fi
 
-echo "Latest version: $LATEST_TAG"
+TAG=$(echo "$RELEASE_JSON" | grep '"tag_name"' | head -1 | cut -d '"' -f 4)
+echo "  - Resolved version: $TAG"
+echo "  - Downloading $ASSET_NAME..."
 
-# opencode releases use format: opencode-linux-x64, opencode-darwin-arm64, etc.
-case "$OS-$ARCH" in
-  Linux-x86_64) ASSET="opencode-linux-x64.tar.gz" ;;
-  Darwin-arm64) ASSET="opencode-darwin-arm64.zip" ;;
-  Darwin-x86_64) ASSET="opencode-darwin-x64.zip" ;;
-  *) echo "No pre-built binary for $OS-$ARCH"; exit 1 ;;
-esac
+# Download and extract
+TMPDIR=$(mktemp -d)
+curl -sL "$DOWNLOAD_URL" -o "$TMPDIR/$ASSET_NAME"
 
-DOWNLOAD_URL="https://github.com/$OPENCODE_REPO/releases/download/$LATEST_TAG/$ASSET"
-echo "Downloading $DOWNLOAD_URL ..."
+echo "  - Extracting..."
+tar -xzf "$TMPDIR/$ASSET_NAME" -C "$TMPDIR"
 
-TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT
-ARCHIVE_PATH="$TMP_DIR/$ASSET"
+# The tarball contains: LICENSE, README.md, opencode
+if [ ! -f "$TMPDIR/opencode" ]; then
+  echo "  ! Expected 'opencode' binary not found in tarball"
+  ls -la "$TMPDIR"
+  exit 1
+fi
 
+# Copy to binaries dir with Tauri target triple naming
 mkdir -p "$BINARIES_DIR"
-curl -L --fail -o "$ARCHIVE_PATH" "$DOWNLOAD_URL"
+cp "$TMPDIR/opencode" "$DEST"
+chmod +x "$DEST"
 
-case "$ASSET" in
-  *.tar.gz)
-    tar -xzf "$ARCHIVE_PATH" -C "$TMP_DIR"
-    ;;
-  *.zip)
-    if ! command -v unzip >/dev/null 2>&1; then
-      echo "unzip is required to extract $ASSET"
-      exit 1
-    fi
-    unzip -q "$ARCHIVE_PATH" -d "$TMP_DIR"
-    ;;
-esac
+# Cleanup
+rm -rf "$TMPDIR"
 
-BINARY_PATH=$(find "$TMP_DIR" -maxdepth 2 -type f -name 'opencode*' ! -name '*.sig' | head -n 1)
-
-if [ -z "$BINARY_PATH" ] || [ ! -f "$BINARY_PATH" ]; then
-  echo "Failed to extract opencode binary from $ASSET"
-  exit 1
-fi
-
-install -m 755 "$BINARY_PATH" "$TARGET"
-
-echo "Done: $TARGET ($($TARGET --version 2>/dev/null || echo 'version unknown'))"
+echo "  - Installed opencode $TAG -> $DEST"
+echo "  - Size: $(du -h "$DEST" | cut -f1)"

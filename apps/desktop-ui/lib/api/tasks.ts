@@ -1,54 +1,64 @@
-import { API_URL, getAuthHeader } from './client';
+import { apiFetch } from './fetch';
 import type { InboxCount, InboxTask, MyIssueTask } from './types';
 
-export async function fetchMyIssues(): Promise<MyIssueTask[]> {
-  const res = await fetch(`${API_URL}/api/tasks`, { headers: getAuthHeader() })
-  if (!res.ok) throw new Error('Failed to fetch tasks')
-  return res.json()
+interface Paginated<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+}
+
+function unwrap<T>(data: Paginated<T> | T[]): T[] {
+  return Array.isArray(data) ? data : data.items;
+}
+
+export async function fetchMyIssues(
+  filter: 'assigned' | 'created' | 'all' = 'assigned',
+): Promise<MyIssueTask[]> {
+  const qs =
+    filter === 'assigned'
+      ? '?assignee=me'
+      : filter === 'created'
+      ? '?creator=me'
+      : '';
+  const data = await apiFetch<Paginated<MyIssueTask> | MyIssueTask[]>(`/api/tasks${qs}`);
+  return unwrap(data);
 }
 
 export async function executeTaskPublic(taskId: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/tasks/${taskId}/execute`, {
+  await apiFetch<void>(`/api/tasks/${taskId}/execute`, {
     method: 'POST',
-    headers: getAuthHeader(),
+    sidecar: true,
   });
-
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Failed to execute task' }));
-    throw new Error(error.error || 'Failed to execute task');
-  }
 }
 
 export async function fetchInboxTasks(): Promise<InboxTask[]> {
-  const res = await fetch(`${API_URL}/api/inbox`, { headers: getAuthHeader() })
-  if (!res.ok) throw new Error('Failed to fetch inbox')
-  return res.json()
+  const data = await apiFetch<Paginated<InboxTask> | InboxTask[]>('/api/inbox');
+  return unwrap(data);
 }
 
 export async function fetchInboxCount(): Promise<InboxCount> {
-  const res = await fetch(`${API_URL}/api/inbox/count`, { headers: getAuthHeader() })
-  if (!res.ok) return { total: 0, unread: 0 }
-  return res.json()
+  try {
+    return await apiFetch<InboxCount>('/api/inbox/count');
+  } catch {
+    return { total: 0, unread: 0 };
+  }
 }
 
 export async function markInboxRead(taskId: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/inbox/read/${taskId}`, { method: 'PATCH', headers: getAuthHeader() })
-  if (!res.ok) throw new Error('Failed to mark inbox as read');
+  await apiFetch<void>(`/api/inbox/read/${taskId}`, { method: 'PATCH' });
 }
 
 export async function markAllInboxRead(): Promise<void> {
-  const res = await fetch(`${API_URL}/api/inbox/read-all`, { method: 'PATCH', headers: getAuthHeader() })
-  if (!res.ok) throw new Error('Failed to mark all inbox as read');
+  await apiFetch<void>('/api/inbox/read-all', { method: 'PATCH' });
 }
 
-export async function refreshTaskPr(taskId: string): Promise<{ prUrl: string | null; refreshed: boolean; message?: string }> {
-  const res = await fetch(`${API_URL}/api/tasks/${taskId}/refresh-pr`, {
-    method: 'POST',
-    headers: getAuthHeader(),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Failed to refresh PR' }))
-    throw new Error(err.error || 'Failed to refresh PR')
-  }
-  return res.json()
+export async function refreshTaskPr(
+  taskId: string,
+): Promise<{ prUrl: string | null; refreshed: boolean; message?: string }> {
+  return apiFetch<{ prUrl: string | null; refreshed: boolean; message?: string }>(
+    `/api/tasks/${taskId}/refresh-pr`,
+    { method: 'POST', sidecar: true },
+  );
 }

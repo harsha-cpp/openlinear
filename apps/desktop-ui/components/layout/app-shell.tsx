@@ -71,8 +71,15 @@ export function AppShell({ children }: AppShellProps) {
 
     const closeSidebar = useCallback(() => setSidebarOpen(false), [])
 
+    const effectiveSidebarWidth = sidebarOpen ? (isMobile ? 300 : sidebarWidth) : 0
+
     return (
-        <div className="flex h-[100dvh] bg-linear-bg text-linear-text overflow-hidden">
+        <div
+            className="flex h-[100dvh] bg-linear-bg text-linear-text overflow-hidden"
+            style={{
+                ['--sidebar-width' as string]: isMobile ? '0px' : `${effectiveSidebarWidth}px`,
+            } as React.CSSProperties}
+        >
             {/* Mobile overlay backdrop */}
             {isMobile && sidebarOpen && (
                 <button

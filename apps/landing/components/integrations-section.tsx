@@ -26,9 +26,9 @@ export function IntegrationsSection() {
 
             {/* Orbiting Icons */}
             <IntegrationNode icon={Github} top="20%" left="20%" />
-            <IntegrationNode text="Drive" top="15%" left="35%" color="bg-blue-500" />
-            <IntegrationNode text="X" top="10%" left="55%" />
-            <IntegrationNode text="N" top="30%" left="80%" />
+            <IntegrationNode text="GPT" top="15%" left="35%" color="bg-emerald-400" />
+            <IntegrationNode text="C" top="10%" left="55%" color="bg-orange-400" />
+            <IntegrationNode text="OC" top="30%" left="80%" color="bg-cyan-400" />
             <IntegrationNode text="aws" top="65%" left="85%" />
             <IntegrationNode text="Py" top="85%" left="60%" color="bg-yellow-500" />
             <IntegrationNode icon={GitBranch} top="85%" left="30%" />
@@ -42,13 +42,13 @@ export function IntegrationsSection() {
             </div>
             
             <h2 className="font-display text-[2.5rem] md:text-[3.5rem] font-bold tracking-tight text-white leading-[1.1] mb-6">
-              Bring your user's context from where they are.
+              Connect your repo. Pick your model. Ship.
             </h2>
             
             <p className="text-[17px] text-white/50 leading-relaxed mb-8">
-              OpenLinear connects to Google Drive, Notion, Onedrive and more and syncs user context.
+              GitHub OAuth for repo access and PR creation. OpenAI, Anthropic, and local LLMs via the OpenCode SDK. Bring your own API keys, run agents on your machine.
               <br /><br />
-              Forget custom infra. OpenLinear drops into your stack with just a few lines of code.
+              No proxy in the middle. No data leaves your stack unless you say so.
             </p>
 
             <a

@@ -1,1232 +1,791 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { DropResult } from "@hello-pangea/dnd";
-import { toast } from "sonner";
-import { SSEEventType, SSEEventData } from "@/hooks/use-sse";
-import { useSSESubscription } from "@/providers/sse-provider";
-import { useAuth } from "@/hooks/use-auth";
-import { Project } from "@/lib/api";
-import type { Repository } from "@/lib/api";
-import { Task, ExecutionProgress, ExecutionLogEntry, PendingPermission } from "@/types/task";
-import {
-  API_URL,
-  getAuthHeader,
-  toApiConnectionError,
-} from "@/lib/api/client";
-import { getSetupStatus } from "@/lib/api/opencode";
-import {
-  metadataQueue,
-  TaskSyncState,
-  listenToTaskMetadata,
-} from "@/lib/api/metadata-queue";
+import { useState, useEffect, useCallback, useRef, useDeferredValue, useMemo } from "react"
+import { DropResult } from "@hello-pangea/dnd"
+import { toast } from "sonner"
+import type { SSEEventType, SSEEventData } from "@/providers/sse-provider"
+import { useSSESubscription } from "@/providers/sse-provider"
+import { useAuth } from "@/hooks/use-auth"
+import { Project } from "@/lib/api"
+import type { Repository } from "@/lib/api"
+import { Task, ExecutionProgress, ExecutionLogEntry } from "@/types/task"
+import { apiFetch, ApiError, NetworkError } from "@/lib/api/fetch"
+import { getSetupStatus, OpenCodeUnavailableError } from "@/lib/api/opencode"
 
 export const COLUMNS = [
-  { id: "todo", title: "All Issues", status: "todo" as const },
-  { id: "in_progress", title: "In Progress", status: "in_progress" as const },
-  { id: "done", title: "Done", status: "done" as const },
-  { id: "cancelled", title: "Cancelled", status: "cancelled" as const },
-];
+  { id: 'todo', title: 'All Issues', status: 'todo' as const },
+  { id: 'in_progress', title: 'In Progress', status: 'in_progress' as const },
+  { id: 'done', title: 'Done', status: 'done' as const },
+  { id: 'cancelled', title: 'Cancelled', status: 'cancelled' as const },
+]
 
 export interface ActiveBatch {
-  id: string;
-  status: string;
-  mode: string;
+  id: string
+  status: string
+  mode: string
   tasks: Array<{
-    taskId: string;
-    title: string;
-    status:
-      | "queued"
-      | "running"
-      | "completed"
-      | "failed"
-      | "skipped"
-      | "cancelled";
-  }>;
-  prUrl: string | null;
-}
-
-export const API_BASE_URL = API_URL;
-const SIDECAR_URL = process.env.NEXT_PUBLIC_SIDECAR_URL || "http://localhost:3001";
-const EXECUTION_POLL_INTERVAL_MS = 2500;
-
-function normalizeExecutionMessage(message: string): string {
-  const normalized = message.trim();
-  const lower = normalized.toLowerCase();
-
-  if (!normalized) {
-    return "OpenCode could not start the task.";
-  }
-
-  if (lower.includes("no active project selected")) {
-    return "Select a project or connect a repository before running tasks.";
-  }
-
-  if (lower.includes("task is already running")) {
-    return "This task is already running.";
-  }
-
-  if (
-    lower.includes("opencode server is not running") ||
-    lower.includes("call initopencode() first")
-  ) {
-    return "The local OpenCode service is not running. Restart the app and try again.";
-  }
-
-  if (lower.includes("the string did not match the expected pattern")) {
-    return "OpenCode rejected the session request.";
-  }
-
-  if (
-    lower.includes("failed to start opencode session") ||
-    lower.includes("failed to create opencode session")
-  ) {
-    return "OpenCode could not start a session.";
-  }
-
-  if (
-    lower.includes("fetch failed") ||
-    lower.includes("failed to connect to the local opencode service")
-  ) {
-    return "Could not reach the local OpenCode service.";
-  }
-
-  if (
-    lower.includes("cannot post /api/tasks/") &&
-    lower.includes("/execute")
-  ) {
-    return "The local execution service is not available on the configured port.";
-  }
-
-  return normalized;
-}
-
-async function readResponseErrorMessage(
-  response: Response,
-  fallback: string,
-): Promise<string> {
-  const body = await response.text().catch(() => "");
-  const message = body.trim();
-
-  if (!message) {
-    return fallback;
-  }
-
-  try {
-    const payload = JSON.parse(message) as {
-      error?: unknown;
-      message?: unknown;
-    };
-
-    if (typeof payload.error === "string" && payload.error.trim()) {
-      return payload.error.trim();
-    }
-
-    if (typeof payload.message === "string" && payload.message.trim()) {
-      return payload.message.trim();
-    }
-  } catch {}
-
-  const htmlRouteError = message.match(/<pre>([^<]+)<\/pre>/i)?.[1]?.trim();
-  if (htmlRouteError) {
-    return htmlRouteError;
-  }
-
-  return message;
-}
-
-function getLogEntryKey(entry: ExecutionLogEntry): string {
-  return [
-    entry.timestamp,
-    entry.type,
-    entry.message,
-    entry.details ?? "",
-  ].join("|");
-}
-
-function mergeLogEntries(
-  existing: ExecutionLogEntry[],
-  incoming: ExecutionLogEntry[],
-): ExecutionLogEntry[] {
-  if (incoming.length === 0) return existing;
-
-  const merged = [...existing];
-  const seen = new Set(existing.map(getLogEntryKey));
-
-  for (const entry of incoming) {
-    const key = getLogEntryKey(entry);
-    if (!seen.has(key)) {
-      merged.push(entry);
-      seen.add(key);
-    }
-  }
-
-  return merged.sort(
-    (a, b) =>
-      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-  );
-}
-
-export interface KanbanBoardConfigState {
-  tasks: Task[];
-  selectedTaskIds: Set<string>;
-  activeBatch: ActiveBatch | null;
-  selectedProject: Project | undefined;
-  activeRepository: Repository | null;
+    taskId: string
+    title: string
+    status: 'queued' | 'running' | 'completed' | 'failed' | 'skipped' | 'cancelled'
+  }>
+  prUrl: string | null
 }
 
 export interface KanbanBoardProps {
-  projectId?: string | null;
-  teamId?: string | null;
-  projects?: Project[];
-  onConfigState?: (state: KanbanBoardConfigState) => void;
+  projectId?: string | null
+  teamId?: string | null
+  projects?: Project[]
+  searchQuery?: string
 }
 
 export interface UseKanbanBoardReturn {
-  tasks: Task[];
-  loading: boolean;
-  error: string | null;
-  syncStates: Record<string, TaskSyncState>;
-  executionProgress: Record<string, ExecutionProgress>;
-  isTaskFormOpen: boolean;
-  setIsTaskFormOpen: (open: boolean) => void;
-  defaultStatus: Task["status"];
-  selectedTaskId: string | null;
-  taskLogs: Record<string, ExecutionLogEntry[]>;
-  selectedTaskIds: Set<string>;
-  selectingColumns: Set<string>;
-  activeBatch: ActiveBatch | null;
-  setActiveBatch: (batch: ActiveBatch | null) => void;
-  completedBatch: {
-    taskIds: string[];
-    prUrl: string | null;
-    mode: string;
-  } | null;
-  canExecute: boolean;
-  activeRepository: Repository | null;
-  selectedProject: Project | undefined;
-  batchTaskIds: string[];
-  completedBatchTaskIds: string[];
-  selectedTask: Task | null;
-  getTasksByStatus: (status: Task["status"]) => Task[];
-  handleAddTask: (status: Task["status"]) => void;
-  handleDragEnd: (result: DropResult) => void;
-  handleExecute: (taskId: string) => Promise<void>;
-  handleCancel: (taskId: string) => Promise<void>;
-  handleTaskClick: (taskId: string) => Promise<void>;
-  handleDrawerClose: () => void;
-  handleDelete: (taskId: string) => Promise<void>;
-  handleUpdateTask: (
-    taskId: string,
-    data: { title?: string; description?: string | null },
-  ) => Promise<void>;
-  handleMoveToInProgress: (taskId: string) => Promise<void>;
-  handleBatchMoveToInProgress: () => Promise<void>;
-  handleBatchExecute: (mode: "parallel" | "queue") => Promise<void>;
-  handleCancelBatch: (batchId: string) => Promise<void>;
-  pendingPermissions: Record<string, PendingPermission[]>;
-  handlePermissionRespond: (taskId: string, permissionId: string, response: 'once' | 'always' | 'reject') => Promise<void>;
-  toggleTaskSelect: (taskId: string) => void;
-  toggleColumnSelection: (columnId: string) => void;
-  toggleColumnSelectAll: (status: Task["status"]) => void;
-  clearSelection: () => void;
+  tasks: Task[]
+  loading: boolean
+  error: string | null
+  executionProgress: Record<string, ExecutionProgress>
+  isTaskFormOpen: boolean
+  setIsTaskFormOpen: (open: boolean) => void
+  defaultStatus: Task['status']
+  selectedTaskId: string | null
+  taskLogs: Record<string, ExecutionLogEntry[]>
+  selectedTaskIds: Set<string>
+  selectionActive: boolean
+  selectingColumns: Set<string>
+  activeBatch: ActiveBatch | null
+  setActiveBatch: (batch: ActiveBatch | null) => void
+  completedBatch: { taskIds: string[]; prUrl: string | null; mode: string } | null
+  canExecute: boolean
+  activeRepository: Repository | null
+  selectedProject: Project | undefined
+  batchTaskIds: string[]
+  completedBatchTaskIds: string[]
+  selectedTask: Task | null
+  getTasksByStatus: (status: Task['status']) => Task[]
+  handleAddTask: (status: Task['status']) => void
+  handleDragEnd: (result: DropResult) => void
+  handleExecute: (taskId: string) => Promise<void>
+  handleCancel: (taskId: string) => Promise<void>
+  handleTaskClick: (taskId: string) => Promise<void>
+  handleDrawerClose: () => void
+  handleDelete: (taskId: string) => Promise<void>
+  handleUpdateTask: (taskId: string, data: { title?: string; description?: string | null }) => Promise<void>
+  handleMoveToInProgress: (taskId: string) => Promise<void>
+  handleBatchMoveToInProgress: () => Promise<void>
+  handleBatchExecute: (mode: 'parallel' | 'queue') => Promise<void>
+  handleCancelBatch: (batchId: string) => Promise<void>
+  toggleTaskSelect: (taskId: string, modifiers?: { shift?: boolean; meta?: boolean }) => void
+  toggleColumnSelection: (columnId: string) => void
+  toggleColumnSelectAll: (status: Task['status']) => void
+  selectAllVisible: () => void
+  clearSelection: () => void
+  handleInlineCreateTask: (status: Task['status'], title: string) => Promise<void>
+  handleBulkDelete: () => Promise<void>
+  handleBulkChangeStatus: (status: Task['status']) => Promise<void>
   fetchTasks: (options?: {
-    showLoading?: boolean;
-    allowRetry?: boolean;
-    clearError?: boolean;
-    resetRetry?: boolean;
-    silent?: boolean;
-  }) => Promise<void>;
-  showProviderSetup: boolean;
-  setShowProviderSetup: (show: boolean) => void;
-  handleProviderSetupComplete: () => void;
+    showLoading?: boolean
+    allowRetry?: boolean
+    clearError?: boolean
+    resetRetry?: boolean
+    silent?: boolean
+  }) => Promise<void>
+  showProviderSetup: boolean
+  setShowProviderSetup: (show: boolean) => void
+  handleProviderSetupComplete: () => void
 }
 
-export function useKanbanBoard({
-  projectId,
-  teamId,
-  projects = [],
-}: KanbanBoardProps): UseKanbanBoardReturn {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [syncStates, setSyncStates] = useState<Record<string, TaskSyncState>>(
-    {},
-  );
-  const [executionProgress, setExecutionProgress] = useState<
-    Record<string, ExecutionProgress>
-  >({});
-  const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
-  const [defaultStatus, setDefaultStatus] = useState<Task["status"]>("todo");
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [taskLogs, setTaskLogs] = useState<Record<string, ExecutionLogEntry[]>>(
-    {},
-  );
-  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(
-    new Set(),
-  );
-  const [selectingColumns, setSelectingColumns] = useState<Set<string>>(
-    new Set(),
-  );
-  const [activeBatch, setActiveBatch] = useState<ActiveBatch | null>(null);
-  const [completedBatch, setCompletedBatch] = useState<{
-    taskIds: string[];
-    prUrl: string | null;
-    mode: string;
-  } | null>(null);
-  const [showProviderSetup, setShowProviderSetup] = useState(false);
-  const [pendingExecuteTaskId, setPendingExecuteTaskId] = useState<string | null>(null);
-  const [pendingPermissions, setPendingPermissions] = useState<Record<string, PendingPermission[]>>({});
-  const { isAuthenticated, activeRepository, refreshActiveRepository } =
-    useAuth();
-  const metadataUnsubscribersRef = useRef<Map<string, () => void>>(new Map());
-  const taskLogsRef = useRef(taskLogs);
-  const executionProgressRef = useRef(executionProgress);
+export function useKanbanBoard({ projectId, teamId, projects = [], searchQuery = "" }: KanbanBoardProps): UseKanbanBoardReturn {
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [executionProgress, setExecutionProgress] = useState<Record<string, ExecutionProgress>>({})
+  const [isTaskFormOpen, setIsTaskFormOpen] = useState(false)
+  const [defaultStatus, setDefaultStatus] = useState<Task['status']>('todo')
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+  const [taskLogs, setTaskLogs] = useState<Record<string, ExecutionLogEntry[]>>({})
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
+  const [selectingColumns, setSelectingColumns] = useState<Set<string>>(new Set())
+  const [activeBatch, setActiveBatch] = useState<ActiveBatch | null>(null)
+  const [completedBatch, setCompletedBatch] = useState<{ taskIds: string[]; prUrl: string | null; mode: string } | null>(null)
+  const [showProviderSetup, setShowProviderSetup] = useState(false)
+  const [pendingExecuteTaskId, setPendingExecuteTaskId] = useState<string | null>(null)
+  const lastSelectedIdRef = useRef<string | null>(null)
+  const { isAuthenticated, activeRepository, refreshActiveRepository } = useAuth()
 
-  const batchTaskIds = activeBatch?.tasks.map((t) => t.taskId) ?? [];
-  const completedBatchTaskIds = completedBatch?.taskIds ?? [];
+  const batchTaskIds = activeBatch?.tasks.map(t => t.taskId) ?? []
+  const completedBatchTaskIds = completedBatch?.taskIds ?? []
 
-  const clearColumnSelection = useCallback(
-    (status: Task["status"]) => {
-      setSelectedTaskIds((prev) => {
-        const next = new Set(prev);
-        tasks
-          .filter((task) => task.status === status)
-          .forEach((task) => {
-            next.delete(task.id);
-          });
-        return next;
-      });
-    },
-    [tasks],
-  );
+  const clearColumnSelection = useCallback((status: Task['status']) => {
+    setSelectedTaskIds(prev => {
+      const next = new Set(prev)
+      tasks
+        .filter(task => task.status === status)
+        .forEach(task => next.delete(task.id))
+      return next
+    })
+  }, [tasks])
 
-  const toggleColumnSelection = useCallback(
-    (columnId: string) => {
-      setSelectingColumns((prev) => {
-        const next = new Set(prev);
-        if (next.has(columnId)) {
-          next.delete(columnId);
-          const columnStatus = COLUMNS.find((c) => c.id === columnId)?.status;
-          if (columnStatus) {
-            clearColumnSelection(columnStatus);
+  const toggleColumnSelection = useCallback((columnId: string) => {
+    setSelectingColumns(prev => {
+      const next = new Set(prev)
+      if (next.has(columnId)) {
+        next.delete(columnId)
+        const columnStatus = COLUMNS.find(c => c.id === columnId)?.status
+        if (columnStatus) {
+          clearColumnSelection(columnStatus)
+        }
+      } else {
+        next.add(columnId)
+      }
+      return next
+    })
+  }, [clearColumnSelection])
+
+  const toggleTaskSelect = useCallback((taskId: string, modifiers?: { shift?: boolean; meta?: boolean }) => {
+    if (batchTaskIds.includes(taskId)) return
+
+    if (modifiers?.shift && lastSelectedIdRef.current) {
+      const orderedIds: string[] = []
+      for (const col of COLUMNS) {
+        for (const t of tasks) {
+          if (t.status === col.status) orderedIds.push(t.id)
+        }
+      }
+      const anchorIdx = orderedIds.indexOf(lastSelectedIdRef.current)
+      const targetIdx = orderedIds.indexOf(taskId)
+      if (anchorIdx !== -1 && targetIdx !== -1) {
+        const [from, to] = anchorIdx < targetIdx ? [anchorIdx, targetIdx] : [targetIdx, anchorIdx]
+        setSelectedTaskIds(prev => {
+          const next = new Set(prev)
+          for (let i = from; i <= to; i++) {
+            const id = orderedIds[i]
+            if (id && !batchTaskIds.includes(id)) next.add(id)
           }
-        } else {
-          next.add(columnId);
-        }
-        return next;
-      });
-    },
-    [clearColumnSelection],
-  );
+          return next
+        })
+        lastSelectedIdRef.current = taskId
+        return
+      }
+    }
 
-  const toggleTaskSelect = (taskId: string) => {
-    if (batchTaskIds.includes(taskId)) return;
-    setSelectedTaskIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(taskId)) next.delete(taskId);
-      else next.add(taskId);
-      return next;
-    });
-  };
+    setSelectedTaskIds(prev => {
+      const next = new Set(prev)
+      if (next.has(taskId)) next.delete(taskId)
+      else next.add(taskId)
+      return next
+    })
+    lastSelectedIdRef.current = taskId
+  }, [batchTaskIds, tasks])
 
-  const toggleColumnSelectAll = useCallback(
-    (status: Task["status"]) => {
-      const columnTasks = tasks.filter((task) => task.status === status);
-      const columnTaskIds = columnTasks.map((task) => task.id);
-      const allSelected = columnTaskIds.every((id) => selectedTaskIds.has(id));
-
-      setSelectedTaskIds((prev) => {
-        const next = new Set(prev);
-        if (allSelected) {
-          columnTaskIds.forEach((id) => {
-            next.delete(id);
-          });
-        } else {
-          columnTaskIds.forEach((id) => {
-            if (!batchTaskIds.includes(id)) {
-              next.add(id);
-            }
-          });
-        }
-        return next;
-      });
-    },
-    [tasks, selectedTaskIds, batchTaskIds],
-  );
+  const toggleColumnSelectAll = useCallback((status: Task['status']) => {
+    const columnTasks = tasks.filter(task => task.status === status)
+    const columnTaskIds = columnTasks.map(task => task.id)
+    const allSelected = columnTaskIds.every(id => selectedTaskIds.has(id))
+    
+    setSelectedTaskIds(prev => {
+      const next = new Set(prev)
+      if (allSelected) {
+        columnTaskIds.forEach(id => next.delete(id))
+      } else {
+        columnTaskIds.forEach(id => {
+          if (!batchTaskIds.includes(id)) {
+            next.add(id)
+          }
+        })
+      }
+      return next
+    })
+  }, [tasks, selectedTaskIds, batchTaskIds])
 
   const clearSelection = () => {
-    setSelectedTaskIds(new Set());
-    setSelectingColumns(new Set());
-  };
+    setSelectedTaskIds(new Set())
+    setSelectingColumns(new Set())
+    lastSelectedIdRef.current = null
+  }
+
+  const selectionActive = selectedTaskIds.size > 0
 
   useEffect(() => {
-    const unsubscribe = metadataQueue.subscribe(setSyncStates);
-    return unsubscribe;
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      metadataUnsubscribersRef.current.forEach((unsubscribe) => {
-        unsubscribe();
-      });
-      metadataUnsubscribersRef.current.clear();
-    };
-  }, []);
-
-  useEffect(() => {
-    taskLogsRef.current = taskLogs;
-  }, [taskLogs]);
-
-  useEffect(() => {
-    executionProgressRef.current = executionProgress;
-  }, [executionProgress]);
-
-  useEffect(() => {
-    setSelectingColumns((prev) => {
-      const next = new Set(prev);
-      let changed = false;
-      if (batchTaskIds.length > 0 && next.has("in_progress")) {
-        next.delete("in_progress");
-        clearColumnSelection("in_progress");
-        changed = true;
+    setSelectingColumns(prev => {
+      const next = new Set(prev)
+      let changed = false
+      if (batchTaskIds.length > 0 && next.has('in_progress')) {
+        next.delete('in_progress')
+        clearColumnSelection('in_progress')
+        changed = true
       }
-      if (completedBatchTaskIds.length > 0 && next.has("done")) {
-        next.delete("done");
-        clearColumnSelection("done");
-        changed = true;
+      if (completedBatchTaskIds.length > 0 && next.has('done')) {
+        next.delete('done')
+        clearColumnSelection('done')
+        changed = true
       }
-      return changed ? next : prev;
-    });
-  }, [batchTaskIds.length, completedBatchTaskIds.length, clearColumnSelection]);
+      return changed ? next : prev
+    })
+  }, [batchTaskIds.length, completedBatchTaskIds.length, clearColumnSelection])
 
-  const handleBatchExecute = async (mode: "parallel" | "queue") => {
+  const handleBatchExecute = async (mode: 'parallel' | 'queue') => {
+    const nonDoneTaskIds = Array.from(selectedTaskIds).filter(
+      id => tasks.find(t => t.id === id)?.status !== 'done'
+    )
+    if (nonDoneTaskIds.length === 0) return
+
+    const previousSelection = selectedTaskIds
+    const previousTasks = tasks
+    clearSelection()
+
     try {
-      const token = localStorage.getItem("token");
-      const nonDoneTaskIds = Array.from(selectedTaskIds).filter(
-        (id) => tasks.find((t) => t.id === id)?.status !== "done",
-      );
-      if (nonDoneTaskIds.length === 0) return;
-      const response = await fetch(`${SIDECAR_URL}/api/batches`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          taskIds: nonDoneTaskIds,
-          mode,
-        }),
-      });
-      if (!response.ok) throw new Error("Failed to create batch");
-      clearSelection();
+      await apiFetch('/api/batches', {
+        method: 'POST',
+        sidecar: true,
+        body: JSON.stringify({ taskIds: nonDoneTaskIds, mode }),
+      })
     } catch (err) {
-      console.error("Error creating batch:", err);
+      setTasks(previousTasks)
+      setSelectedTaskIds(previousSelection)
+      const msg = err instanceof Error ? err.message : 'Operation failed'
+      console.error('Error creating batch:', err)
+      toast.error(msg)
     }
-  };
+  }
 
   const handleCancelBatch = async (batchId: string) => {
     try {
-      const token = localStorage.getItem("token");
-      await fetch(`${SIDECAR_URL}/api/batches/${batchId}/cancel`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      await apiFetch(`/api/batches/${batchId}/cancel`, {
+        method: 'POST',
+        sidecar: true,
+      })
     } catch (err) {
-      console.error("Error cancelling batch:", err);
+      const msg = err instanceof Error ? err.message : 'Failed to cancel batch'
+      console.error('Error cancelling batch:', err)
+      toast.error(msg)
     }
-  };
+  }
 
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.visibilityState !== "visible") return;
+      if (document.visibilityState !== 'visible') return
       if (isAuthenticated) {
-        refreshActiveRepository();
+        refreshActiveRepository()
       }
-    };
+    }
 
-    document.addEventListener("visibilitychange", handleVisibility);
-    window.addEventListener("focus", handleVisibility);
+    document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('focus', handleVisibility)
 
     return () => {
-      document.removeEventListener("visibilitychange", handleVisibility);
-      window.removeEventListener("focus", handleVisibility);
-    };
-  }, [isAuthenticated, refreshActiveRepository]);
+      document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('focus', handleVisibility)
+    }
+  }, [isAuthenticated, refreshActiveRepository])
 
-  const selectedProject = projects.find((p) => p.id === projectId);
-  const canExecute = !!(
-    selectedProject?.repositoryId ||
-    selectedProject?.repoUrl ||
-    selectedProject?.localPath ||
-    activeRepository
-  );
+  const selectedProject = projects.find(p => p.id === projectId)
+  const canExecute = !!(selectedProject?.repositoryId || selectedProject?.localPath || activeRepository)
 
-  const handleAddTask = (status: Task["status"]) => {
-    setDefaultStatus(status);
-    setIsTaskFormOpen(true);
-  };
+  const handleAddTask = (status: Task['status']) => {
+    setDefaultStatus(status)
+    setIsTaskFormOpen(true)
+  }
 
-  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const retryAttemptRef = useRef(0);
-  const safetyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const retryAttemptRef = useRef(0)
 
-  const fetchTasks = useCallback(
-    async (options?: {
-      showLoading?: boolean;
-      allowRetry?: boolean;
-      clearError?: boolean;
-      resetRetry?: boolean;
-      silent?: boolean;
-    }) => {
-      const {
-        showLoading = false,
-        allowRetry = false,
-        clearError = false,
-        resetRetry = false,
-        silent = false,
-      } = options || {};
+  const fetchTasks = useCallback(async (options?: {
+    showLoading?: boolean
+    allowRetry?: boolean
+    clearError?: boolean
+    resetRetry?: boolean
+    silent?: boolean
+  }) => {
+    const {
+      showLoading = false,
+      allowRetry = false,
+      clearError = false,
+      resetRetry = false,
+      silent = false,
+    } = options || {}
 
-      if (clearError) {
-        setError(null);
+    if (clearError) {
+      setError(null)
+    }
+
+    if (resetRetry) {
+      retryAttemptRef.current = 0
+    }
+
+    if (showLoading) {
+      setLoading(true)
+    }
+
+    let shouldStopLoading = showLoading
+
+    try {
+      const params = new URLSearchParams()
+      if (projectId) params.set('projectId', projectId)
+      if (teamId) params.set('teamId', teamId)
+      const qs = params.toString()
+      const path = qs ? `/api/tasks?${qs}` : `/api/tasks`
+      const data = await apiFetch<{ items: Task[] } | Task[]>(path)
+      const items = Array.isArray(data) ? data : data.items
+      setTasks(items)
+      setError(null)
+      retryAttemptRef.current = 0
+
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current)
+        retryTimeoutRef.current = null
       }
-
-      if (resetRetry) {
-        retryAttemptRef.current = 0;
-      }
-
-      if (showLoading) {
-        setLoading(true);
-      }
-
-      let shouldStopLoading = showLoading;
-
-      try {
-        const params = new URLSearchParams();
-        if (projectId) params.set("projectId", projectId);
-        if (teamId) params.set("teamId", teamId);
-        const qs = params.toString();
-        const url = qs
-          ? `${API_BASE_URL}/api/tasks?${qs}`
-          : `${API_BASE_URL}/api/tasks`;
-        const response = await fetch(url, { headers: getAuthHeader() });
-        if (!response.ok) {
-          throw new Error(`Failed to fetch tasks: ${response.statusText}`);
+    } catch (err) {
+      if (allowRetry && retryAttemptRef.current < 5 && (err instanceof NetworkError || (err instanceof ApiError && err.status >= 500))) {
+        retryAttemptRef.current += 1
+        if (showLoading) {
+          shouldStopLoading = false
         }
-        const data = await response.json();
-        setTasks(data);
-        setError(null);
-        retryAttemptRef.current = 0;
-
         if (retryTimeoutRef.current) {
-          clearTimeout(retryTimeoutRef.current);
-          retryTimeoutRef.current = null;
+          clearTimeout(retryTimeoutRef.current)
         }
-      } catch (err) {
-        if (allowRetry && retryAttemptRef.current < 5) {
-          retryAttemptRef.current += 1;
-          if (showLoading) {
-            shouldStopLoading = false;
-          }
-          if (retryTimeoutRef.current) {
-            clearTimeout(retryTimeoutRef.current);
-          }
-          retryTimeoutRef.current = setTimeout(() => {
-            fetchTasks({ showLoading, allowRetry, silent: true });
-          }, 1500);
-          return;
-        }
+        retryTimeoutRef.current = setTimeout(() => {
+          fetchTasks({ showLoading, allowRetry, silent: true })
+        }, 1500)
+        return
+      }
 
-        if (!silent) {
-          setError(
-            err instanceof Error ? err.message : "Failed to fetch tasks",
-          );
-        }
-      } finally {
-        if (shouldStopLoading) {
-          setLoading(false);
+      if (!silent) {
+        const msg = err instanceof Error ? err.message : 'Failed to fetch tasks'
+        setError(msg)
+        if (!(err instanceof ApiError && err.status === 401)) {
+          toast.error(msg)
         }
       }
-    },
-    [projectId, teamId],
-  );
-
-  const handleSSEEvent = useCallback(
-    (eventType: SSEEventType, data: SSEEventData) => {
-      switch (eventType) {
-        case "task:created":
-          if (data.id && data.title && data.status) {
-            const taskProjectId = (data as unknown as { projectId?: string })
-              .projectId;
-            const taskTeamId = (data as unknown as { teamId?: string }).teamId;
-            if (projectId && taskProjectId !== projectId) {
-              break;
-            }
-            if (teamId && taskTeamId !== teamId) {
-              break;
-            }
-            const newTask: Task = {
-              id: data.id,
-              title: data.title,
-              description: data.description ?? null,
-              priority: data.priority ?? "medium",
-              status: data.status,
-              sessionId: data.sessionId ?? null,
-              createdAt: data.createdAt ?? new Date().toISOString(),
-              updatedAt: data.updatedAt ?? new Date().toISOString(),
-              labels: data.labels ?? [],
-              executionStartedAt: data.executionStartedAt ?? null,
-              executionPausedAt: data.executionPausedAt ?? null,
-              executionElapsedMs: data.executionElapsedMs ?? 0,
-              executionProgress: data.executionProgress ?? null,
-              prUrl: data.prUrl ?? null,
-              outcome: data.outcome ?? null,
-              batchId: data.batchId ?? null,
-              inboxRead: data.inboxRead ?? false,
-              identifier: data.identifier ?? null,
-              number: data.number ?? null,
-              dueDate: data.dueDate ?? null,
-            };
-            setTasks((prev) => [...prev, newTask]);
-          }
-          break;
-
-        case "task:updated":
-          if (data.id) {
-            setTasks((prev) =>
-              prev.map((task) =>
-                task.id === data.id
-                  ? {
-                      ...task,
-                      ...(data.title && { title: data.title }),
-                      ...(data.description !== undefined && {
-                        description: data.description,
-                      }),
-                      ...(data.priority && { priority: data.priority }),
-                      ...(data.status && { status: data.status }),
-                      ...(data.sessionId !== undefined && {
-                        sessionId: data.sessionId,
-                      }),
-                      ...(data.updatedAt && { updatedAt: data.updatedAt }),
-                      ...(data.labels && { labels: data.labels }),
-                      ...(data.executionStartedAt !== undefined && {
-                        executionStartedAt: data.executionStartedAt,
-                      }),
-                      ...(data.executionPausedAt !== undefined && {
-                        executionPausedAt: data.executionPausedAt,
-                      }),
-                      ...(data.executionElapsedMs !== undefined && {
-                        executionElapsedMs: data.executionElapsedMs,
-                      }),
-                      ...(data.executionProgress !== undefined && {
-                        executionProgress: data.executionProgress,
-                      }),
-                      ...(data.prUrl !== undefined && { prUrl: data.prUrl }),
-                      ...(data.outcome !== undefined && {
-                        outcome: data.outcome,
-                      }),
-                      ...(data.batchId !== undefined && {
-                        batchId: data.batchId,
-                      }),
-                      ...(data.dueDate !== undefined && {
-                        dueDate: data.dueDate,
-                      }),
-                    }
-                  : task,
-              ),
-            );
-          }
-          break;
-
-        case "task:deleted":
-          if (data.id) {
-            setTasks((prev) => prev.filter((task) => task.id !== data.id));
-          }
-          break;
-
-        case "execution:progress": {
-          const progressData = data as unknown as ExecutionProgress;
-          if (progressData.taskId) {
-            setExecutionProgress((prev) => ({
-              ...prev,
-              [progressData.taskId]: progressData,
-            }));
-          }
-          break;
-        }
-
-        case "execution:log": {
-          const logData = data as unknown as {
-            taskId: string;
-            entry: ExecutionLogEntry;
-          };
-          if (logData.taskId && logData.entry) {
-            setTaskLogs((prev) => ({
-              ...prev,
-              [logData.taskId]: mergeLogEntries(
-                prev[logData.taskId] || [],
-                [logData.entry],
-              ),
-            }));
-          }
-          break;
-        }
-
-        case "permission:requested": {
-          const taskId = data.taskId || data.id;
-          const permission = data.permission;
-          if (taskId && permission) {
-            setPendingPermissions((prev) => ({
-              ...prev,
-              [taskId]: [...(prev[taskId] || []), permission as PendingPermission],
-            }));
-            const perm = permission as PendingPermission;
-            toast.warning("Permission Required", {
-              description: perm.title || "A task needs your approval to continue",
-              duration: 10000,
-            });
-          }
-          break;
-        }
-
-        case "permission:resolved": {
-          const taskId = data.taskId || data.id;
-          const permissionId = data.permissionId;
-          if (taskId && permissionId) {
-            setPendingPermissions((prev) => ({
-              ...prev,
-              [taskId]: (prev[taskId] || []).filter((p) => p.id !== permissionId),
-            }));
-            toast.success("Permission resolved", { duration: 3000 });
-          }
-          break;
-        }
-
-        case "connected":
-          console.log("[SSE] Connected with clientId:", data.clientId);
-          fetchTasks({ silent: true });
-          if (isAuthenticated) {
-            refreshActiveRepository();
-          }
-          break;
-
-        case "batch:created":
-        case "batch:started":
-          if (data.batchId) {
-            setActiveBatch({
-              id: data.batchId as string,
-              status: (data.status as string) || "running",
-              mode: (data.mode as string) || "parallel",
-              tasks: (data.tasks as ActiveBatch["tasks"]) || [],
-              prUrl: null,
-            });
-          }
-          break;
-
-        case "batch:task:started":
-          setActiveBatch((prev) => {
-            if (!prev || prev.id !== data.batchId) return prev;
-            return {
-              ...prev,
-              tasks: prev.tasks.map((t) =>
-                t.taskId === data.taskId ? { ...t, status: "running" } : t,
-              ),
-            };
-          });
-          break;
-
-        case "batch:task:completed":
-          setActiveBatch((prev) => {
-            if (!prev || prev.id !== data.batchId) return prev;
-            return {
-              ...prev,
-              tasks: prev.tasks.map((t) =>
-                t.taskId === data.taskId ? { ...t, status: "completed" } : t,
-              ),
-            };
-          });
-          break;
-
-        case "batch:task:failed":
-          setActiveBatch((prev) => {
-            if (!prev || prev.id !== data.batchId) return prev;
-            return {
-              ...prev,
-              tasks: prev.tasks.map((t) =>
-                t.taskId === data.taskId ? { ...t, status: "failed" } : t,
-              ),
-            };
-          });
-          break;
-
-        case "batch:task:skipped":
-          setActiveBatch((prev) => {
-            if (!prev || prev.id !== data.batchId) return prev;
-            return {
-              ...prev,
-              tasks: prev.tasks.map((t) =>
-                t.taskId === data.taskId ? { ...t, status: "skipped" } : t,
-              ),
-            };
-          });
-          break;
-
-        case "batch:task:cancelled":
-          setActiveBatch((prev) => {
-            if (!prev || prev.id !== data.batchId) return prev;
-            return {
-              ...prev,
-              tasks: prev.tasks.map((t) =>
-                t.taskId === data.taskId ? { ...t, status: "cancelled" } : t,
-              ),
-            };
-          });
-          break;
-
-        case "batch:merging":
-          setActiveBatch((prev) => {
-            if (prev?.id === data.batchId) {
-              return { ...prev, status: "merging" } as ActiveBatch;
-            }
-            return prev;
-          });
-          break;
-
-        case "batch:completed":
-          if (data.batchId && data.prUrl) {
-            setTasks((prev) =>
-              prev.map((task) =>
-                task.batchId === data.batchId
-                  ? { ...task, prUrl: data.prUrl as string }
-                  : task,
-              ),
-            );
-          }
-          setActiveBatch((prev) => {
-            if (prev && prev.id === data.batchId) {
-              const prUrl = (data.prUrl as string) || prev.prUrl || null;
-              const taskIds = prev.tasks.map((t) => t.taskId);
-              setCompletedBatch({ taskIds, prUrl, mode: prev.mode });
-              return { ...prev, status: "completed", prUrl } as ActiveBatch;
-            }
-            return prev;
-          });
-          break;
-        case "batch:failed":
-        case "batch:cancelled":
-          setActiveBatch((prev) => {
-            if (prev && prev.id === data.batchId) {
-              setTimeout(() => setActiveBatch(null), 5000);
-              return {
-                ...prev,
-                status: eventType.split(":")[1]!,
-              } as ActiveBatch;
-            }
-            return prev;
-          });
-          break;
-
-        default:
-          break;
+    } finally {
+      if (shouldStopLoading) {
+        setLoading(false)
       }
-    },
-    [fetchTasks, isAuthenticated, refreshActiveRepository, projectId, teamId],
-  );
+    }
+  }, [projectId, teamId])
 
-  useSSESubscription(handleSSEEvent);
+  const handleSSEEvent = useCallback((eventType: SSEEventType, data: SSEEventData) => {
+    switch (eventType) {
+      case 'task:created':
+        if (data.id && data.title && data.status) {
+          const taskProjectId = (data as unknown as { projectId?: string }).projectId
+          const taskTeamId = (data as unknown as { teamId?: string }).teamId
+          if (projectId && taskProjectId !== projectId) {
+            break
+          }
+          if (teamId && taskTeamId !== teamId) {
+            break
+          }
+          const newTask: Task = {
+            id: data.id,
+            title: data.title,
+            description: data.description ?? null,
+            priority: data.priority ?? 'medium',
+            status: data.status,
+            sessionId: data.sessionId ?? null,
+            createdAt: data.createdAt ?? new Date().toISOString(),
+            updatedAt: data.updatedAt ?? new Date().toISOString(),
+            labels: data.labels ?? [],
+            executionStartedAt: data.executionStartedAt ?? null,
+            executionPausedAt: data.executionPausedAt ?? null,
+            executionElapsedMs: data.executionElapsedMs ?? 0,
+            executionProgress: data.executionProgress ?? null,
+            prUrl: data.prUrl ?? null,
+            outcome: data.outcome ?? null,
+            batchId: data.batchId ?? null,
+            inboxRead: data.inboxRead ?? false,
+            identifier: data.identifier ?? null,
+            number: data.number ?? null,
+            dueDate: data.dueDate ?? null,
+          }
+          setTasks((prev) => [...prev, newTask])
+        }
+        break
+
+      case 'task:updated':
+        if (data.id) {
+          setTasks((prev) =>
+            prev.map((task) =>
+              task.id === data.id
+                ? {
+                    ...task,
+                    ...(data.title && { title: data.title }),
+                    ...(data.description !== undefined && { description: data.description }),
+                    ...(data.priority && { priority: data.priority }),
+                    ...(data.status && { status: data.status }),
+                    ...(data.sessionId !== undefined && { sessionId: data.sessionId }),
+                    ...(data.updatedAt && { updatedAt: data.updatedAt }),
+                    ...(data.labels && { labels: data.labels }),
+                    ...(data.executionStartedAt !== undefined && { executionStartedAt: data.executionStartedAt }),
+                    ...(data.executionPausedAt !== undefined && { executionPausedAt: data.executionPausedAt }),
+                    ...(data.executionElapsedMs !== undefined && { executionElapsedMs: data.executionElapsedMs }),
+                    ...(data.executionProgress !== undefined && { executionProgress: data.executionProgress }),
+                    ...(data.prUrl !== undefined && { prUrl: data.prUrl }),
+                    ...(data.outcome !== undefined && { outcome: data.outcome }),
+                    ...(data.batchId !== undefined && { batchId: data.batchId }),
+                    ...(data.dueDate !== undefined && { dueDate: data.dueDate }),
+                  }
+                : task
+            )
+          )
+        }
+        break
+
+      case 'task:deleted':
+        if (data.id) {
+          setTasks((prev) => prev.filter((task) => task.id !== data.id))
+        }
+        break
+
+      case 'execution:progress':
+        const progressData = data as unknown as ExecutionProgress
+        if (progressData.taskId) {
+          setExecutionProgress((prev) => ({
+            ...prev,
+            [progressData.taskId]: progressData,
+          }))
+        }
+        break
+
+      case 'execution:log':
+        const logData = data as unknown as { taskId: string; entry: ExecutionLogEntry }
+        if (logData.taskId && logData.entry) {
+          setTaskLogs((prev) => ({
+            ...prev,
+            [logData.taskId]: [...(prev[logData.taskId] || []), logData.entry],
+          }))
+        }
+        break
+
+      case 'connected':
+        console.log("[SSE] Connected with clientId:", data.clientId)
+        fetchTasks({ silent: true })
+        if (isAuthenticated) {
+          refreshActiveRepository()
+        }
+        break
+
+      case 'batch:created':
+      case 'batch:started':
+        if (data.batchId) {
+          setActiveBatch({
+            id: data.batchId as string,
+            status: data.status as string || 'running',
+            mode: data.mode as string || 'parallel',
+            tasks: (data.tasks as ActiveBatch['tasks']) || [],
+            prUrl: null,
+          })
+        }
+        break
+
+      case 'batch:task:started':
+        setActiveBatch(prev => {
+          if (!prev || prev.id !== data.batchId) return prev
+          return {
+            ...prev,
+            tasks: prev.tasks.map(t =>
+              t.taskId === data.taskId ? { ...t, status: 'running' } : t
+            ),
+          }
+        })
+        break
+
+      case 'batch:task:completed':
+        setActiveBatch(prev => {
+          if (!prev || prev.id !== data.batchId) return prev
+          return {
+            ...prev,
+            tasks: prev.tasks.map(t =>
+              t.taskId === data.taskId ? { ...t, status: 'completed' } : t
+            ),
+          }
+        })
+        break
+
+      case 'batch:task:failed':
+        setActiveBatch(prev => {
+          if (!prev || prev.id !== data.batchId) return prev
+          return {
+            ...prev,
+            tasks: prev.tasks.map(t =>
+              t.taskId === data.taskId ? { ...t, status: 'failed' } : t
+            ),
+          }
+        })
+        break
+
+      case 'batch:task:skipped':
+        setActiveBatch(prev => {
+          if (!prev || prev.id !== data.batchId) return prev
+          return {
+            ...prev,
+            tasks: prev.tasks.map(t =>
+              t.taskId === data.taskId ? { ...t, status: 'skipped' } : t
+            ),
+          }
+        })
+        break
+
+      case 'batch:task:cancelled':
+        setActiveBatch(prev => {
+          if (!prev || prev.id !== data.batchId) return prev
+          return {
+            ...prev,
+            tasks: prev.tasks.map(t =>
+              t.taskId === data.taskId ? { ...t, status: 'cancelled' } : t
+            ),
+          }
+        })
+        break
+
+      case 'batch:merging':
+        setActiveBatch(prev => {
+          if (prev?.id === data.batchId) {
+            return { ...prev, status: 'merging' } as ActiveBatch
+          }
+          return prev
+        })
+        break
+
+      case 'batch:completed':
+        if (data.batchId && data.prUrl) {
+          setTasks(prev => prev.map(task =>
+            task.batchId === data.batchId ? { ...task, prUrl: data.prUrl as string } : task
+          ))
+        }
+        setActiveBatch(prev => {
+          if (prev && prev.id === data.batchId) {
+            const prUrl = (data.prUrl as string) || prev.prUrl || null
+            const taskIds = prev.tasks.map(t => t.taskId)
+            setCompletedBatch({ taskIds, prUrl, mode: prev.mode })
+            return { ...prev, status: 'completed', prUrl } as ActiveBatch
+          }
+          return prev
+        })
+        break
+      case 'batch:failed':
+      case 'batch:cancelled':
+        setActiveBatch(prev => {
+          if (prev && prev.id === data.batchId) {
+            setTimeout(() => setActiveBatch(null), 5000)
+            return { ...prev, status: eventType.split(':')[1]! } as ActiveBatch
+          }
+          return prev
+        })
+        break
+
+      default:
+        break
+    }
+  }, [fetchTasks, isAuthenticated, refreshActiveRepository, projectId, teamId])
+
+  useSSESubscription(handleSSEEvent)
 
   useEffect(() => {
-    fetchTasks({
-      showLoading: true,
-      allowRetry: true,
-      clearError: true,
-      resetRetry: true,
-    });
-
-    // Safety timeout: force loading to false after 10s no matter what
-    safetyTimeoutRef.current = setTimeout(() => {
-      setLoading((prev) => {
-        if (prev) {
-          console.warn(
-            "[KanbanBoard] Safety timeout triggered - forcing loading to false",
-          );
-          return false;
-        }
-        return prev;
-      });
-    }, 3000);
+    fetchTasks({ showLoading: true, allowRetry: true, clearError: true, resetRetry: true })
 
     return () => {
       if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
-        retryTimeoutRef.current = null;
+        clearTimeout(retryTimeoutRef.current)
+        retryTimeoutRef.current = null
       }
-      if (safetyTimeoutRef.current) {
-        clearTimeout(safetyTimeoutRef.current);
-        safetyTimeoutRef.current = null;
-      }
-    };
-  }, [fetchTasks]);
+    }
+  }, [fetchTasks])
 
   const updateTaskStatus = async (
-    taskId: string,
-    newStatus: Task["status"],
+    taskIds: string | string[],
+    newStatus: Task['status'],
   ) => {
+    const ids = Array.isArray(taskIds) ? taskIds : [taskIds]
+    if (ids.length === 0) return
+
+    let snapshot: Task[] = []
+    setTasks((prev) => {
+      snapshot = prev
+      const idSet = new Set(ids)
+      return prev.map((task) =>
+        idSet.has(task.id) ? { ...task, status: newStatus } : task,
+      )
+    })
+
     try {
-      const token = localStorage.getItem("token");
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to update task: ${response.statusText}`);
-      }
+      await Promise.all(
+        ids.map((id) =>
+          apiFetch(`/api/tasks/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status: newStatus }),
+          }),
+        ),
+      )
     } catch (err) {
-      console.error("Error updating task:", err);
-      fetchTasks({ silent: true });
+      setTasks(snapshot)
+      const msg = err instanceof Error ? err.message : 'Operation failed'
+      console.error('Error updating task:', err)
+      toast.error(msg)
     }
-  };
+  }
 
   const handleMoveToInProgress = async (taskId: string) => {
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskId ? { ...task, status: "in_progress" as const } : task,
-      ),
-    );
-    await updateTaskStatus(taskId, "in_progress");
-  };
+    await updateTaskStatus(taskId, 'in_progress')
+  }
 
   const handleBatchMoveToInProgress = async () => {
     const todoIds = Array.from(selectedTaskIds).filter(
-      (id) => tasks.find((t) => t.id === id)?.status === "todo",
-    );
-    if (todoIds.length === 0) return;
-    for (const id of todoIds) {
-      setTasks((prev) =>
-        prev.map((task) =>
-          task.id === id ? { ...task, status: "in_progress" as const } : task,
-        ),
-      );
+      id => tasks.find(t => t.id === id)?.status === 'todo'
+    )
+    if (todoIds.length === 0) return
+    clearSelection()
+    await updateTaskStatus(todoIds, 'in_progress')
+  }
+
+  const handleInlineCreateTask = useCallback(async (status: Task['status'], title: string) => {
+    const trimmed = title.trim()
+    if (!trimmed) return
+
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const now = new Date().toISOString()
+    const optimistic: Task = {
+      id: tempId,
+      title: trimmed,
+      description: null,
+      priority: 'medium',
+      status,
+      sessionId: null,
+      createdAt: now,
+      updatedAt: now,
+      labels: [],
+      executionStartedAt: null,
+      executionPausedAt: null,
+      executionElapsedMs: 0,
+      executionProgress: null,
+      prUrl: null,
+      outcome: null,
+      batchId: null,
+      inboxRead: false,
+      identifier: null,
+      number: null,
+      dueDate: null,
     }
-    clearSelection();
-    await Promise.all(todoIds.map((id) => updateTaskStatus(id, "in_progress")));
-  };
+
+    setTasks(prev => [...prev, optimistic])
+
+    try {
+      const created = await apiFetch<Task>('/api/tasks', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: trimmed,
+          status,
+          projectId: projectId || undefined,
+          teamId: teamId || undefined,
+        }),
+      })
+      setTasks(prev => prev.map(t => (t.id === tempId ? created : t)))
+    } catch (err) {
+      setTasks(prev => prev.filter(t => t.id !== tempId))
+      const msg = err instanceof Error ? err.message : 'Failed to create task'
+      console.error('Error creating task inline:', err)
+      toast.error(msg)
+    }
+  }, [projectId, teamId])
+
+  const handleBulkDelete = useCallback(async () => {
+    const ids = Array.from(selectedTaskIds).filter(id => !batchTaskIds.includes(id))
+    if (ids.length === 0) return
+
+    const snapshot = tasks
+    setTasks(prev => prev.filter(t => !ids.includes(t.id)))
+    clearSelection()
+
+    const results = await Promise.allSettled(
+      ids.map(id => apiFetch(`/api/tasks/${id}`, { method: 'DELETE' })),
+    )
+    const failures = results.filter(r => r.status === 'rejected').length
+    if (failures > 0) {
+      setTasks(snapshot)
+      toast.error(`Failed to delete ${failures} of ${ids.length} task${ids.length !== 1 ? 's' : ''}`)
+    } else {
+      toast.success(`Deleted ${ids.length} task${ids.length !== 1 ? 's' : ''}`)
+    }
+  }, [selectedTaskIds, tasks, batchTaskIds])
+
+  const handleBulkChangeStatus = useCallback(async (newStatus: Task['status']) => {
+    const ids = Array.from(selectedTaskIds).filter(id => !batchTaskIds.includes(id))
+    if (ids.length === 0) return
+
+    let snapshot: Task[] = []
+    setTasks(prev => {
+      snapshot = prev
+      const idSet = new Set(ids)
+      return prev.map(t => (idSet.has(t.id) ? { ...t, status: newStatus } : t))
+    })
+    clearSelection()
+
+    const results = await Promise.allSettled(
+      ids.map(id =>
+        apiFetch(`/api/tasks/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: newStatus }),
+        }),
+      ),
+    )
+    const failures = results.filter(r => r.status === 'rejected').length
+    if (failures > 0) {
+      setTasks(snapshot)
+      toast.error(`Failed to update ${failures} of ${ids.length} task${ids.length !== 1 ? 's' : ''}`)
+    }
+  }, [selectedTaskIds, batchTaskIds])
 
   const handleDragEnd = async (result: DropResult) => {
-    const { destination, source, draggableId } = result;
+    const { destination, source, draggableId } = result
 
-    if (!destination) return;
-    if (
-      destination.droppableId === source.droppableId &&
-      destination.index === source.index
-    )
-      return;
+    if (!destination) return
+    if (destination.droppableId === source.droppableId && destination.index === source.index) return
 
-    const newStatus = destination.droppableId as Task["status"];
+    const newStatus = destination.droppableId as Task['status']
 
-    if (draggableId.startsWith("batch-group-")) {
-      const batchId = draggableId.replace("batch-group-", "");
+    if (draggableId.startsWith('batch-group-')) {
+      const batchId = draggableId.replace('batch-group-', '')
       const batchTaskIds = tasks
-        .filter((task) => task.batchId === batchId)
-        .map((task) => task.id);
+        .filter(task => task.batchId === batchId)
+        .map(task => task.id)
 
-      if (batchTaskIds.length === 0) return;
+      if (batchTaskIds.length === 0) return
 
-      setTasks((prev) =>
-        prev.map((task) =>
-          batchTaskIds.includes(task.id)
-            ? { ...task, status: newStatus }
-            : task,
-        ),
-      );
-
-      await Promise.all(
-        batchTaskIds.map((id) => updateTaskStatus(id, newStatus)),
-      );
-      return;
+      await updateTaskStatus(batchTaskIds, newStatus)
+      return
     }
 
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === draggableId ? { ...task, status: newStatus } : task,
-      ),
-    );
-
-    await updateTaskStatus(draggableId, newStatus);
-  };
-
-  const appendTaskLog = useCallback(
-    (taskId: string, entry: ExecutionLogEntry) => {
-      setTaskLogs((prev) => ({
-        ...prev,
-        [taskId]: mergeLogEntries(prev[taskId] || [], [entry]),
-      }));
-    },
-    [],
-  );
-
-  const fetchTaskLogs = useCallback(
-    async (taskId: string, force = false) => {
-      if (!force && taskLogsRef.current[taskId] !== undefined) {
-        return;
-      }
-
-      try {
-        const response = await fetch(`${SIDECAR_URL}/api/tasks/${taskId}/logs`, {
-          headers: getAuthHeader(),
-        });
-
-        if (!response.ok) {
-          return;
-        }
-
-        const data = await response.json();
-        const incomingLogs = Array.isArray(data.logs) ? data.logs : [];
-
-        setTaskLogs((prev) => {
-          const currentLogs = prev[taskId] || [];
-          const nextLogs = mergeLogEntries(currentLogs, incomingLogs);
-
-          if (
-            currentLogs.length === nextLogs.length &&
-            currentLogs.every(
-              (entry, index) =>
-                getLogEntryKey(entry) === getLogEntryKey(nextLogs[index]!),
-            )
-          ) {
-            return prev;
-          }
-
-          return { ...prev, [taskId]: nextLogs };
-        });
-      } catch (err) {
-        console.error("Error fetching task logs:", err);
-      }
-    },
-    [],
-  );
+    await updateTaskStatus(draggableId, newStatus)
+  }
 
   const handleExecute = async (taskId: string) => {
     if (!canExecute) {
-      console.error("No active project - connect a repo first");
-      return;
+      const msg = "No active project — connect a repo first"
+      console.error(msg)
+      toast.error(msg)
+      return
     }
 
     try {
-      const status = await getSetupStatus().catch(() => null);
-      if (status && !status.ready) {
+      const status = await getSetupStatus();
+      if (!status.ready) {
         setPendingExecuteTaskId(taskId);
         setShowProviderSetup(true);
         return;
       }
-
-      const startedAt = new Date().toISOString();
-      setSelectedTaskId(taskId);
-      setTasks((prev) =>
-        prev.map((task) =>
-          task.id === taskId
-            ? {
-                ...task,
-                status:
-                  task.status === "todo" ? ("in_progress" as const) : task.status,
-                executionStartedAt: task.executionStartedAt ?? startedAt,
-                executionPausedAt: null,
-              }
-            : task,
-        ),
-      );
-      setExecutionProgress((prev) => ({
-        ...prev,
-        [taskId]:
-          prev[taskId] &&
-          ["cloning", "executing", "committing", "creating_pr"].includes(
-            prev[taskId].status,
-          )
-            ? prev[taskId]
-            : {
-                taskId,
-                status: "executing",
-                message: "Starting task...",
-              },
-      }));
-      void fetchTaskLogs(taskId, true);
-
-      const response = await fetch(
-        `${SIDECAR_URL}/api/tasks/${taskId}/execute`,
-        {
-          method: "POST",
-          headers: getAuthHeader(),
-        },
-      );
-      if (!response.ok) {
-        const message = await readResponseErrorMessage(
-          response,
-          `Failed to execute task: ${response.statusText}`,
-        );
-        throw new Error(message);
-      }
     } catch (err) {
-      const error = toApiConnectionError(err, "Failed to execute task");
-      const message = normalizeExecutionMessage(error.message);
-      setExecutionProgress((prev) => ({
-        ...prev,
-        [taskId]: {
-          taskId,
-          status: "error",
-          message,
-        },
-      }));
-      appendTaskLog(taskId, {
-        timestamp: new Date().toISOString(),
-        type: "error",
-        message,
-      });
-      toast.error(message);
-      console.error("Error executing task:", error);
-      void fetchTasks({ silent: true });
-    }
-  };
-
-  const handleCancel = async (taskId: string) => {
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${SIDECAR_URL}/api/tasks/${taskId}/cancel`,
-        {
-          method: "POST",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        },
-      );
-      if (!response.ok) {
-        throw new Error(`Failed to cancel task: ${response.statusText}`);
+      if (!(err instanceof OpenCodeUnavailableError)) {
+        console.warn('Could not check provider setup, proceeding anyway:', err)
       }
+    }
 
-      const cancelledAt = new Date().toISOString();
-      setTasks((prev) =>
-        prev.map((task) =>
-          task.id === taskId
-            ? {
-                ...task,
-                status: "cancelled",
-                sessionId: null,
-                executionPausedAt: cancelledAt,
-              }
-            : task,
-        ),
-      );
-      setExecutionProgress((prev) => ({
-        ...prev,
-        [taskId]: {
-          taskId,
-          status: "cancelled",
-          message: "Execution cancelled",
-        },
-      }));
-      appendTaskLog(taskId, {
-        timestamp: cancelledAt,
-        type: "info",
-        message: "Execution cancelled by user",
-      });
-      void fetchTasks({ silent: true });
+    try {
+      await apiFetch(`/api/tasks/${taskId}/execute`, {
+        method: 'POST',
+        sidecar: true,
+      })
     } catch (err) {
-      console.error("Error cancelling task:", err);
-      toast.error("Failed to cancel task");
-      throw err;
+      const msg = err instanceof Error ? err.message : 'Failed to execute task'
+      console.error('Error executing task:', err)
+      toast.error(msg)
     }
-  };
-
-  const handleTaskClick = async (taskId: string) => {
-    setSelectedTaskId(taskId);
-    const task = tasks.find((item) => item.id === taskId);
-    void fetchTaskLogs(
-      taskId,
-      task?.status === "in_progress" || (taskLogsRef.current[taskId] || []).length === 0,
-    );
-  };
-
-  useEffect(() => {
-    if (!selectedTaskId) return;
-
-    const selectedTask = tasks.find((task) => task.id === selectedTaskId);
-    if (!selectedTask || selectedTask.status !== "in_progress") return;
-
-    if (!executionProgressRef.current[selectedTaskId]) {
-      setExecutionProgress((prev) => ({
-        ...prev,
-        [selectedTaskId]: {
-          taskId: selectedTaskId,
-          status: "executing",
-          message: "Task is running...",
-        },
-      }));
-    }
-
-    void fetchTaskLogs(selectedTaskId, true);
-
-    const intervalId = window.setInterval(() => {
-      void fetchTaskLogs(selectedTaskId, true);
-      void fetchTasks({ silent: true });
-    }, EXECUTION_POLL_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [selectedTaskId, tasks, fetchTaskLogs, fetchTasks]);
-
-  const handleDrawerClose = () => {
-    setSelectedTaskId(null);
-  };
-
-  const handleDelete = async (taskId: string) => {
-    const previousTasks = tasks;
-    setTasks((prev) => prev.filter((t) => t.id !== taskId));
-    setSelectedTaskId(null);
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
-        method: "DELETE",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!response.ok) {
-        setTasks(previousTasks);
-      }
-    } catch {
-      setTasks(previousTasks);
-    }
-  };
-
-  const handleUpdateTask = async (
-    taskId: string,
-    data: { title?: string; description?: string | null },
-  ) => {
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to update task: ${response.statusText}`);
-      }
-    } catch (err) {
-      console.error("Error updating task:", err);
-    }
-  };
-
-  const selectedTask = selectedTaskId
-    ? tasks.find((t) => t.id === selectedTaskId) || null
-    : null;
-
-  const getTasksByStatus = (status: Task["status"]) => {
-    return tasks.filter((task) => task.status === status);
-  };
+  }
 
   const handleProviderSetupComplete = useCallback(async () => {
     setShowProviderSetup(false);
@@ -1234,49 +793,109 @@ export function useKanbanBoard({
       const taskId = pendingExecuteTaskId;
       setPendingExecuteTaskId(null);
       try {
-        await handleExecute(taskId);
+        await apiFetch(`/api/tasks/${taskId}/execute`, {
+          method: 'POST',
+          sidecar: true,
+        });
       } catch (err) {
-        console.error("Error executing task after provider setup:", err);
+        const msg = err instanceof Error ? err.message : 'Failed to execute task'
+        console.error('Error executing task:', err);
+        toast.error(msg)
       }
     }
-  }, [handleExecute, pendingExecuteTaskId]);
+  }, [pendingExecuteTaskId]);
 
-  const handlePermissionRespond = useCallback(async (
-    taskId: string,
-    permissionId: string,
-    response: 'once' | 'always' | 'reject',
-  ) => {
+  const handleCancel = async (taskId: string) => {
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(
-        `${SIDECAR_URL}/api/tasks/${taskId}/permissions/${permissionId}/respond`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ response }),
-        },
-      );
-      if (!res.ok) {
-        throw new Error(`Failed to respond to permission: ${res.statusText}`);
-      }
-      // Optimistically remove the permission
-      setPendingPermissions((prev) => ({
-        ...prev,
-        [taskId]: (prev[taskId] || []).filter((p) => p.id !== permissionId),
-      }));
+      await apiFetch(`/api/tasks/${taskId}/cancel`, {
+        method: 'POST',
+        sidecar: true,
+      })
     } catch (err) {
-      console.error("Error responding to permission:", err);
+      const msg = err instanceof Error ? err.message : 'Failed to cancel task'
+      console.error('Error cancelling task:', err)
+      toast.error(msg)
     }
-  }, []);
+  }
+
+  const handleTaskClick = async (taskId: string) => {
+    setSelectedTaskId(taskId)
+
+    if (!taskLogs[taskId]) {
+      try {
+        const data = await apiFetch<{ logs?: ExecutionLogEntry[] }>(
+          `/api/tasks/${taskId}/logs`,
+          { sidecar: true },
+        )
+        setTaskLogs((prev) => ({ ...prev, [taskId]: data.logs || [] }))
+      } catch (err) {
+        console.error('Error fetching task logs:', err)
+      }
+    }
+  }
+
+  const handleDrawerClose = () => {
+    setSelectedTaskId(null)
+  }
+
+  const handleDelete = async (taskId: string) => {
+    const previousTasks = tasks
+    const previousSelectedTaskId = selectedTaskId
+    setTasks((prev) => prev.filter((t) => t.id !== taskId))
+    setSelectedTaskId(null)
+    try {
+      await apiFetch(`/api/tasks/${taskId}`, { method: 'DELETE' })
+    } catch (err) {
+      setTasks(previousTasks)
+      setSelectedTaskId(previousSelectedTaskId)
+      const msg = err instanceof Error ? err.message : 'Operation failed'
+      console.error('Error deleting task:', err)
+      toast.error(msg)
+    }
+  }
+
+  const handleUpdateTask = async (taskId: string, data: { title?: string; description?: string | null }) => {
+    try {
+      await apiFetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to update task'
+      console.error('Error updating task:', err)
+      toast.error(msg)
+    }
+  }
+
+  const selectedTask = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) || null : null
+
+  const deferredSearchQuery = useDeferredValue(searchQuery)
+  const filteredTasks = useMemo(() => {
+    const q = deferredSearchQuery.trim().toLowerCase()
+    if (q.length < 1) return tasks
+    return tasks.filter((task) => {
+      const title = (task.title || "").toLowerCase()
+      const identifier = (task.identifier || "").toLowerCase()
+      return title.includes(q) || identifier.includes(q)
+    })
+  }, [tasks, deferredSearchQuery])
+
+  const getTasksByStatus = (status: Task['status']) => {
+    return filteredTasks.filter((task) => task.status === status)
+  }
+
+  const selectAllVisible = useCallback(() => {
+    const ids = filteredTasks
+      .filter(t => !batchTaskIds.includes(t.id))
+      .map(t => t.id)
+    if (ids.length === 0) return
+    setSelectedTaskIds(new Set(ids))
+  }, [filteredTasks, batchTaskIds])
 
   return {
     tasks,
     loading,
     error,
-    syncStates,
     executionProgress,
     isTaskFormOpen,
     setIsTaskFormOpen,
@@ -1284,6 +903,7 @@ export function useKanbanBoard({
     selectedTaskId,
     taskLogs,
     selectedTaskIds,
+    selectionActive,
     selectingColumns,
     activeBatch,
     setActiveBatch,
@@ -1307,15 +927,17 @@ export function useKanbanBoard({
     handleBatchMoveToInProgress,
     handleBatchExecute,
     handleCancelBatch,
-    pendingPermissions,
-    handlePermissionRespond,
     toggleTaskSelect,
     toggleColumnSelection,
     toggleColumnSelectAll,
+    selectAllVisible,
     clearSelection,
+    handleInlineCreateTask,
+    handleBulkDelete,
+    handleBulkChangeStatus,
     fetchTasks,
     showProviderSetup,
     setShowProviderSetup,
     handleProviderSetupComplete,
-  };
+  }
 }

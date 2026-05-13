@@ -38,6 +38,36 @@ fn get_opencode_version(binary_path: &std::path::Path) -> Option<String> {
 
 #[tauri::command]
 pub fn check_opencode() -> OpenCodeStatus {
+    // First check bundled sidecar next to our own binary
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(bin_dir) = exe.parent() {
+            let target_triple = env!("TARGET");
+            let bundled = bin_dir.join(format!("opencode-{}", target_triple));
+            if bundled.exists() {
+                let version = Command::new(&bundled)
+                    .arg("--version")
+                    .output()
+                    .ok()
+                    .and_then(|output| {
+                        if output.status.success() {
+                            String::from_utf8(output.stdout).ok()
+                        } else {
+                            String::from_utf8(output.stderr).ok()
+                        }
+                    })
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty());
+
+                return OpenCodeStatus {
+                    found: true,
+                    version,
+                    path: Some(bundled.to_string_lossy().to_string()),
+                };
+            }
+        }
+    }
+
+    // Fall back to system PATH
     match which("opencode") {
         Ok(path) => {
             let version = get_opencode_version(&path);

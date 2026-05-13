@@ -4,23 +4,21 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "./scripts/dev.sh",
-    "app:dev": "OPENLINEAR_DEV_USE_REMOTE_DB=0 OPENLINEAR_DEV_PROFILE=low ./scripts/dev.sh",
-    "app:web:dev": "OPENLINEAR_DEV_USE_REMOTE_DB=0 OPENLINEAR_DEV_PROFILE=low ./scripts/dev-web.sh",
     "dev:web": "./scripts/dev-web.sh",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "db:push": "pnpm --filter db db:push",
-    "db:seed": "pnpm --filter @openlinear/api exec tsx ../../packages/db/prisma/seed.ts",
-    "db:studio": "pnpm --filter db db:studio",
-    "build:sidecar": "./scripts/build-sidecar.sh",
-    "build:desktop": "pnpm --filter @openlinear/desktop tauri build",
-    "build:app": "./scripts/build-app.sh",
-    "build:app:fast": "./scripts/build-app.sh --skip-sidecar",
-    "run:app": "./scripts/run-app.sh",
-    "run:app:fresh": "./scripts/run-app.sh --build"
+    "db:push": "pnpm --filter @openlinear/db db:push",
+    "db:migrate": "pnpm --filter @openlinear/db db:migrate",
+    "db:migrate:deploy": "pnpm --filter @openlinear/db db:migrate:deploy",
+    "db:seed": "pnpm --filter @openlinear/db exec tsx prisma/seed.ts",
+    "db:studio": "pnpm --filter @openlinear/db db:studio",
+    "build:desktop": "pnpm --filter @openlinear/desktop tauri build"
   },
   "devDependencies": {
+    "@opencode-ai/sdk": "^1.2.5",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5",
     "turbo": "^2.8.9",
     "typescript": "^5.9.3"
   },

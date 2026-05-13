@@ -9,12 +9,13 @@ import {
   Loader2,
   Check,
 } from "lucide-react"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { AppShell } from "@/components/layout/app-shell"
 import { Task } from "@/types/task"
-import { API_URL } from "@/lib/api/client"
-
-const API_BASE_URL = API_URL
+import { apiFetch } from "@/lib/api/fetch"
+import { EmptyState } from "@/components/empty-state"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const PRIORITY_TABS = ["all", "high", "medium", "low"] as const
 type PriorityTab = (typeof PRIORITY_TABS)[number]
@@ -36,12 +37,12 @@ export default function ArchivedPage() {
 
   const fetchArchived = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/tasks/archived`)
-      if (!response.ok) throw new Error("Failed to fetch")
-      const data = await response.json()
-      setTasks(data)
+      const data = await apiFetch<{ items: Task[] } | Task[]>('/api/tasks/archived')
+      setTasks(Array.isArray(data) ? data : data.items)
     } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to fetch archived tasks'
       console.error("Error fetching archived tasks:", err)
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -65,15 +66,10 @@ export default function ArchivedPage() {
     })
 
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/api/tasks/archived/${taskId}`, {
-        method: "DELETE",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-      if (!response.ok) {
-        fetchArchived()
-      }
-    } catch {
+      await apiFetch(`/api/tasks/archived/${taskId}`, { method: 'DELETE' })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete task'
+      toast.error(msg)
       fetchArchived()
     } finally {
       setDeletingIds((prev) => {
@@ -91,15 +87,10 @@ export default function ArchivedPage() {
     setSelectedIds(new Set())
 
     try {
-      const token = localStorage.getItem("token")
-      const response = await fetch(`${API_BASE_URL}/api/tasks/archived`, {
-        method: "DELETE",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-      if (!response.ok) {
-        setTasks(previousTasks)
-      }
-    } catch {
+      await apiFetch('/api/tasks/archived', { method: 'DELETE' })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete all tasks'
+      toast.error(msg)
       setTasks(previousTasks)
     } finally {
       setDeletingAll(false)
@@ -116,20 +107,20 @@ export default function ArchivedPage() {
     setSelectedIds(new Set())
 
     try {
-      const token = localStorage.getItem("token")
-      const results = await Promise.all(
+      const results = await Promise.allSettled(
         idsToDelete.map((taskId) =>
-          fetch(`${API_BASE_URL}/api/tasks/archived/${taskId}`, {
-            method: "DELETE",
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          })
+          apiFetch(`/api/tasks/archived/${taskId}`, { method: 'DELETE' })
         )
       )
-      if (results.some((r) => !r.ok)) {
+      const failures = results.filter((r) => r.status === 'rejected')
+      if (failures.length > 0) {
+        toast.error(`Failed to delete ${failures.length} task(s)`)
         setTasks(previousTasks)
         fetchArchived()
       }
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete selected tasks'
+      toast.error(msg)
       setTasks(previousTasks)
       fetchArchived()
     } finally {
@@ -243,8 +234,18 @@ export default function ArchivedPage() {
 
         <div className="flex-1 overflow-auto">
           {loading ? (
-            <div className="flex items-center justify-center py-24">
-              <Loader2 className="w-5 h-5 animate-spin text-linear-text-tertiary" />
+            <div className="divide-y divide-linear-border/50">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 sm:px-6 py-3">
+                  <Skeleton className="w-4 h-4 rounded" />
+                  <Skeleton className="w-4 h-4 rounded" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-3.5 w-2/3 rounded" />
+                    <Skeleton className="h-2.5 w-1/3 rounded" />
+                  </div>
+                  <Skeleton className="h-5 w-14 rounded" />
+                </div>
+              ))}
             </div>
           ) : filteredTasks.length > 0 ? (
             <div className="divide-y divide-linear-border/50">
@@ -305,19 +306,15 @@ export default function ArchivedPage() {
               })}
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center py-24">
-              <div className="w-12 h-12 rounded-xl bg-linear-bg-tertiary border border-linear-border flex items-center justify-center mb-4">
-                <Archive className="w-6 h-6 text-linear-text-tertiary" />
-              </div>
-              <h3 className="text-sm font-medium text-linear-text mb-1">
-                {activeTab === "all" ? "No archived tasks" : `No ${activeTab} priority tasks`}
-              </h3>
-              <p className="text-sm text-linear-text-tertiary">
-                {activeTab === "all"
+            <EmptyState
+              icon={Archive}
+              title={activeTab === "all" ? "No archived tasks" : `No ${activeTab} priority tasks`}
+              description={
+                activeTab === "all"
                   ? "Tasks you archive will appear here"
-                  : "Try switching to a different priority tab"}
-              </p>
-            </div>
+                  : "Try switching to a different priority tab"
+              }
+            />
           )}
         </div>
       </div>

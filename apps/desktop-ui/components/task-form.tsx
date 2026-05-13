@@ -48,14 +48,11 @@ interface TaskFormDialogProps {
   onSuccess?: () => void
   defaultStatus?: "todo" | "in_progress" | "done" | "cancelled"
   defaultProjectId?: string | null
-  defaultTeamId?: string | null
   projects?: Project[]
 }
 
-import { API_URL, getAuthHeader } from "@/lib/api/client"
+import { apiFetch, ApiError } from "@/lib/api/fetch"
 import { toast } from "sonner"
-
-const API_BASE_URL = `${API_URL}/api`
 
 const statusColors = {
   todo: "#a0a0a0",
@@ -77,7 +74,6 @@ export function TaskFormDialog({
   onSuccess,
   defaultStatus,
   defaultProjectId,
-  defaultTeamId,
   projects = [],
 }: TaskFormDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -106,39 +102,46 @@ export function TaskFormDialog({
     try {
       setIsSubmitting(true)
 
-      const response = await fetch(`${API_BASE_URL}/tasks`, {
+      await apiFetch('/api/tasks', {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeader(),
-        },
-         body: JSON.stringify({
-           title: values.title,
-           description: values.description || undefined,
-           status: values.status,
-           labelIds: values.labelIds.length > 0 ? values.labelIds : undefined,
-           projectId: values.projectId || undefined,
-           teamId: values.projectId ? undefined : (defaultTeamId || undefined),
-           dueDate: values.dueDate ? new Date(values.dueDate).toISOString() : undefined,
-         }),
+        body: JSON.stringify({
+          title: values.title,
+          description: values.description || undefined,
+          status: values.status,
+          labelIds: values.labelIds.length > 0 ? values.labelIds : undefined,
+          projectId: values.projectId || undefined,
+          dueDate: values.dueDate ? new Date(values.dueDate).toISOString() : undefined,
+        }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: response.statusText }))
-        throw new Error(errorData.error || `Failed to create task: ${response.statusText}`)
-      }
 
       form.reset()
       onOpenChange(false)
       onSuccess?.()
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to create task"
-      toast.error(message)
-      console.error("Error creating task:", error)
+      if (error instanceof ApiError) {
+        toast.error(error.message)
+        const details = error.details as
+          | { fieldErrors?: Record<string, string[]> }
+          | undefined
+        if (details?.fieldErrors && typeof details.fieldErrors === "object") {
+          for (const [field, msgs] of Object.entries(details.fieldErrors)) {
+            if (Array.isArray(msgs) && msgs.length > 0 && typeof msgs[0] === "string") {
+              if (field === "title" || field === "description" || field === "status" || field === "projectId" || field === "dueDate") {
+                form.setError(field as keyof FormValues, { type: "server", message: msgs[0] })
+              }
+            }
+          }
+        } else {
+          form.setError("root", { type: "server", message: error.message })
+        }
+      } else {
+        toast.error("Could not reach OpenLinear server. Check your connection and try again.")
+        form.setError("root", { type: "server", message: "Network error" })
+      }
     } finally {
       setIsSubmitting(false)
     }
-  }, [form, onOpenChange, onSuccess, defaultTeamId])
+  }, [form, onOpenChange, onSuccess])
 
   // ⌘+Enter keyboard shortcut
   useEffect(() => {
@@ -170,7 +173,7 @@ export function TaskFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[520px] bg-[#1a1a1a] border-[#2a2a2a] p-0 gap-0 overflow-hidden">
+      <DialogContent className="sm:max-w-[520px] bg-linear-bg-secondary border-linear-border p-0 gap-0 overflow-hidden">
         <DialogTitle className="sr-only">Create Task</DialogTitle>
         <DialogDescription className="sr-only">
           Create a new task with title, description, due date, and labels
@@ -188,7 +191,7 @@ export function TaskFormDialog({
                       <input
                         type="text"
                         placeholder="Issue title"
-                        className="w-full bg-transparent text-lg font-semibold text-[#f5f5f5] placeholder:text-[#6a6a6a] outline-none border-none focus:ring-0 p-0"
+                        className="w-full bg-transparent text-lg font-semibold text-linear-text placeholder:text-linear-text-tertiary outline-none border-none focus:ring-0 p-0"
                         {...field}
                       />
                     </FormControl>
@@ -205,7 +208,7 @@ export function TaskFormDialog({
                     <FormControl>
                       <textarea
                         placeholder="Add description..."
-                        className="w-full bg-transparent text-sm text-[#a0a0a0] placeholder:text-[#6a6a6a] outline-none border-none resize-none focus:ring-0 p-0 min-h-[60px] max-h-[200px] overflow-y-auto"
+                        className="w-full bg-transparent text-sm text-linear-text-secondary placeholder:text-linear-text-tertiary outline-none border-none resize-none focus:ring-0 p-0 min-h-[60px] max-h-[200px] overflow-y-auto"
                         rows={1}
                         onInput={handleTextareaInput}
                         {...field}
@@ -217,7 +220,7 @@ export function TaskFormDialog({
               />
             </div>
 
-            <div className="border-b border-[#2a2a2a]" />
+            <div className="border-b border-linear-border" />
 
             <div className="px-4 sm:px-5 py-3 flex items-center gap-2 flex-wrap">
               <FormField
@@ -230,7 +233,7 @@ export function TaskFormDialog({
                       value={field.value}
                     >
                       <FormControl>
-                        <SelectTrigger className="h-7 w-auto px-2.5 text-xs rounded-md bg-transparent border-none hover:bg-white/[0.06] text-[#a0a0a0] gap-1.5 focus:ring-0 shadow-none">
+                        <SelectTrigger className="h-7 w-auto px-2.5 text-xs rounded-md bg-transparent border-none hover:bg-white/[0.06] text-linear-text-secondary gap-1.5 focus:ring-0 shadow-none">
                           <div className="flex items-center gap-1.5">
                             <div
                               className="w-2 h-2 rounded-full"
@@ -244,10 +247,10 @@ export function TaskFormDialog({
                           </div>
                         </SelectTrigger>
                       </FormControl>
-                      <SelectContent className="bg-[#1a1a1a] border-[#2a2a2a]">
+                      <SelectContent className="bg-linear-bg-secondary border-linear-border">
                         <SelectItem
                           value="todo"
-                          className="text-[#f5f5f5] focus:bg-white/[0.06] focus:text-[#f5f5f5] text-xs"
+                          className="text-linear-text focus:bg-white/[0.06] focus:text-linear-text text-xs"
                         >
                           <div className="flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: statusColors.todo }} />
@@ -256,7 +259,7 @@ export function TaskFormDialog({
                         </SelectItem>
                         <SelectItem
                           value="in_progress"
-                          className="text-[#f5f5f5] focus:bg-white/[0.06] focus:text-[#f5f5f5] text-xs"
+                          className="text-linear-text focus:bg-white/[0.06] focus:text-linear-text text-xs"
                         >
                           <div className="flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: statusColors.in_progress }} />
@@ -265,7 +268,7 @@ export function TaskFormDialog({
                         </SelectItem>
                         <SelectItem
                           value="done"
-                          className="text-[#f5f5f5] focus:bg-white/[0.06] focus:text-[#f5f5f5] text-xs"
+                          className="text-linear-text focus:bg-white/[0.06] focus:text-linear-text text-xs"
                         >
                           <div className="flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: statusColors.done }} />
@@ -274,7 +277,7 @@ export function TaskFormDialog({
                         </SelectItem>
                         <SelectItem
                           value="cancelled"
-                          className="text-[#f5f5f5] focus:bg-white/[0.06] focus:text-[#f5f5f5] text-xs"
+                          className="text-linear-text focus:bg-white/[0.06] focus:text-linear-text text-xs"
                         >
                           <div className="flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: statusColors.cancelled }} />
@@ -297,7 +300,7 @@ export function TaskFormDialog({
                       <LabelPicker
                         selectedIds={field.value}
                         onChange={field.onChange}
-                        triggerClassName="h-7 w-auto px-2.5 text-xs rounded-md bg-transparent border-none hover:bg-white/[0.06] hover:border-none text-[#a0a0a0] shadow-none"
+                        triggerClassName="h-7 w-auto px-2.5 text-xs rounded-md bg-transparent border-none hover:bg-white/[0.06] hover:border-none text-linear-text-secondary shadow-none"
                       />
                     </FormControl>
                     <FormMessage className="text-red-400 text-xs" />
@@ -314,14 +317,14 @@ export function TaskFormDialog({
                       <div className="relative">
                         <button
                           type="button"
-                          className="h-7 w-auto px-2.5 text-xs rounded-md bg-transparent border-none hover:bg-white/[0.06] text-[#a0a0a0] flex items-center gap-1.5 cursor-pointer"
+                          className="h-7 w-auto px-2.5 text-xs rounded-md bg-transparent border-none hover:bg-white/[0.06] text-linear-text-secondary flex items-center gap-1.5 cursor-pointer"
                           onClick={() => {
                             const input = document.getElementById('dueDate-input') as HTMLInputElement
                             input?.showPicker?.()
                             input?.focus()
                           }}
                         >
-                          <CalendarDays className="w-3 h-3 text-[#6a6a6a]" />
+                          <CalendarDays className="w-3 h-3 text-linear-text-tertiary" />
                           {field.value ? new Date(field.value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Due date'}
                         </button>
                         <input
@@ -349,9 +352,9 @@ export function TaskFormDialog({
                         value={field.value || ""}
                       >
                         <FormControl>
-                          <SelectTrigger className="h-7 w-auto px-2.5 text-xs rounded-md bg-transparent border-none hover:bg-white/[0.06] text-[#a0a0a0] gap-1.5 focus:ring-0 shadow-none data-[state=error]:border-red-500">
+                          <SelectTrigger className="h-7 w-auto px-2.5 text-xs rounded-md bg-transparent border-none hover:bg-white/[0.06] text-linear-text-secondary gap-1.5 focus:ring-0 shadow-none data-[state=error]:border-red-500">
                             <div className="flex items-center gap-1.5">
-                              <FolderKanban className="w-3 h-3 text-[#6a6a6a]" />
+                              <FolderKanban className="w-3 h-3 text-linear-text-tertiary" />
                               <SelectValue placeholder="Select project">
                                 {field.value
                                   ? projects.find((p) => p.id === field.value)?.name
@@ -360,12 +363,12 @@ export function TaskFormDialog({
                             </div>
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent className="bg-[#1a1a1a] border-[#2a2a2a]">
+                        <SelectContent className="bg-linear-bg-secondary border-linear-border">
                           {projects.map((project) => (
                             <SelectItem
                               key={project.id}
                               value={project.id}
-                              className="text-[#f5f5f5] focus:bg-white/[0.06] focus:text-[#f5f5f5] text-xs"
+                              className="text-linear-text focus:bg-white/[0.06] focus:text-linear-text text-xs"
                             >
                               <div className="flex items-center gap-2">
                                 <div
@@ -385,7 +388,13 @@ export function TaskFormDialog({
               )}
             </div>
 
-            <div className="border-b border-[#2a2a2a]" />
+            <div className="border-b border-linear-border" />
+
+            {form.formState.errors.root?.message && (
+              <div className="px-4 sm:px-5 pt-2 text-xs text-red-400">
+                {form.formState.errors.root.message}
+              </div>
+            )}
 
             <DialogFooter className="px-4 sm:px-5 py-3 gap-2 sm:gap-2">
               <Button
@@ -393,12 +402,12 @@ export function TaskFormDialog({
                 variant="ghost"
                 onClick={() => handleOpenChange(false)}
                 disabled={isSubmitting}
-                className="h-8 px-3 text-xs bg-transparent text-[#a0a0a0] hover:bg-white/[0.06] hover:text-[#f5f5f5]"
+                className="h-8 px-3 text-xs bg-transparent text-linear-text-secondary hover:bg-white/[0.06] hover:text-linear-text"
               >
                 Cancel
               </Button>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-[#6a6a6a]">⌘ Enter</span>
+                <span className="text-[10px] text-linear-text-tertiary">⌘ Enter</span>
                 <Button
                   type="submit"
                   disabled={isSubmitting}

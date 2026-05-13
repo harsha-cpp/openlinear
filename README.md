@@ -2,15 +2,14 @@
 
 # OpenLinear
 
-**The local-first OpenLinear release repo.**
+**AI-powered project management that actually writes the code.**
 
-The hosted product has been retired. This repository now ships the desktop app, npm launcher, Arch packaging metadata, and the landing/docs surface.
+Drag tasks on a kanban board. Click execute. Get a pull request.
 
-[![npm version](https://img.shields.io/npm/v/openlinear.svg)](https://www.npmjs.com/package/openlinear)
-[![npm downloads](https://img.shields.io/npm/dm/openlinear.svg)](https://www.npmjs.com/package/openlinear)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
 [![pnpm](https://img.shields.io/badge/pnpm-9-orange)](https://pnpm.io)
+[![Deploy](https://img.shields.io/badge/production-openlinear.tech-purple)](https://openlinear.tech)
 
 </div>
 
@@ -20,16 +19,22 @@ The hosted product has been retired. This repository now ships the desktop app, 
 <img src="docs/diagrams/architecture.svg" alt="OpenLinear Architecture" width="100%"/>
 </p>
 
-## What is in this repo?
+## What is OpenLinear?
 
-This repository ships the local OpenLinear desktop app, the npm launcher, Arch packaging metadata, and the landing/docs surface.
+OpenLinear is a desktop app (and web app) that combines a Linear-style kanban board with AI coding agents. You manage tasks visually, and when you're ready, the AI clones your repo, creates a branch, writes the code, and opens a pull request — all in one click.
 
-## What ships
+The OpenCode AI agent runs directly on your machine as a bundled Tauri sidecar. No containers, no isolation overhead — just the agent working with your local copy of the code.
 
-- **`apps/desktop`** — Tauri desktop app
-- **`packages/openlinear`** — npm launcher and utilities
-- **`packaging/aur/openlinear-bin`** — Arch/AUR package metadata
-- **`apps/landing`** — optional landing/docs surface
+## Features
+
+- **Kanban Board** — drag-and-drop task management with priorities, labels, and status tracking
+- **One-Click Execution** — select a task, hit execute, get a PR with real code changes
+- **Batch Execution** — run multiple tasks in parallel or queue mode, merged into a single PR
+- **Real-Time Streaming** — watch the AI work live via SSE (tool calls, file edits, progress)
+- **GitHub Integration** — OAuth login, repo management, automatic PR creation
+- **Brainstorm Mode** — describe a goal in natural language, get actionable tasks generated
+- **Teams & Projects** — organize work with teams, projects, and scoped issue numbering
+- **Desktop + Web** — runs as a Tauri desktop app or a standard web app
 
 ## Agent Support
 
@@ -46,57 +51,108 @@ This repository ships the local OpenLinear desktop app, the npm launcher, Arch p
 
 - Node.js 22+
 - pnpm 9+
+- A GitHub OAuth app (for login and repo access)
 
 ### Setup
 
 ```bash
-git clone https://github.com/kaizen403/openlinear.git
+# Clone and install
+git clone https://github.com/openlinear/openlinear.git
 cd openlinear
 pnpm install
-pnpm --filter @openlinear/landing dev
+
+# Start PostgreSQL
+docker compose up -d
+
+# Configure environment
+export DATABASE_URL=postgresql://openlinear:openlinear@localhost:5432/openlinear
+
+# Push database schema
+pnpm db:push
+
+# Start the API
+pnpm --filter @openlinear/api dev
+
+# Start the desktop app (in another terminal)
+pnpm --filter @openlinear/desktop dev
 ```
 
-## Releases
+### Environment Variables
 
-- curl installer: `curl -fsSL https://rixie.in/api/install | bash`
-- GitHub Releases: macOS `.dmg` / `.app.tar.gz`, Linux AppImage / `.deb`
-- npm package: `npm install -g openlinear`
-- Arch/AUR package: `openlinear-bin`
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `JWT_SECRET` | Secret for signing auth tokens (REQUIRED in production) |
+| `GITHUB_CLIENT_ID` | GitHub OAuth app client ID |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth app client secret |
+| `GITHUB_REDIRECT_URI` | OAuth callback URL (e.g. `http://localhost:3001/api/auth/github/callback` for dev, `https://openlinear.tech/api/auth/github/callback` for prod). The same URL handles both web and desktop logins; desktop callbacks are auto-detected by the `?client=desktop` state and redirected to the `openlinear://` deep link. |
+| `REPOS_DIR` | Host path for cloned repos (default: `<tmp>/openlinear-repos`) |
+| `API_PORT` | API server port (default: `3001`; ignored in the bundled desktop app, which picks a free ephemeral port) |
+| `CORS_ORIGIN` | Comma-separated allowed origins (default: `http://localhost:3000`). Tauri origins (`tauri://localhost`, `https://tauri.localhost`) are always added implicitly. |
+| `OAUTH_INTERCEPTOR_PORT` | Sidecar OAuth interceptor port for OpenCode AI provider OAuth (default: `1455`) |
+| `NEXT_PUBLIC_CLOUD_API_URL` | Cloud API base URL baked into the desktop UI build (default: `https://openlinear.tech`) |
 
-## CI/CD
+## How It Works
 
-GitHub Actions no longer deploy a hosted API. The supported automation is tag-based release publishing to GitHub Releases, npm, and the Arch/AUR package.
+1. **You create tasks** on the kanban board with descriptions of what you want built
+2. **You click execute** — the API clones your repo and creates a branch
+3. **The agent writes code** with OpenCode running directly on your machine in its own worktree
+4. **You watch it work** — real-time SSE streams every tool call, file edit, and decision
+5. **You get a PR** — changes are committed, pushed, and a pull request is created automatically
+
+For batch execution, multiple tasks run in parallel (or queued), each in isolated worktrees, merged into a single PR.
+
+> For the full architecture deep dive, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Project Structure
 
 ```
 openlinear/
   apps/
-    desktop/        Tauri desktop app
-    desktop-ui/     Desktop webview UI
-    landing/        Marketing landing page
+    desktop-ui/     Next.js frontend (Tauri webview)
+    api/            Express API sidecar
   packages/
-    openlinear/     npm package / installer
-  packaging/
-    aur/            Arch/AUR package metadata
+    db/             Prisma schema + client
   docs/
+    features/       Feature documentation (18 guides)
     diagrams/       Architecture SVGs
-    ARCHITECTURE.md System design
+    ARCHITECTURE.md Full system design
 ```
+
+## Distribution
+
+| Format | Platform | Install |
+|--------|----------|---------|
+| .dmg | macOS (Apple Silicon) | [GitHub Releases](https://github.com/openlinear/openlinear/releases) |
+| AppImage | Linux | [GitHub Releases](https://github.com/openlinear/openlinear/releases) |
+| .deb | Debian/Ubuntu | [GitHub Releases](https://github.com/openlinear/openlinear/releases) |
+| AUR | Arch Linux | `yay -S openlinear-bin` |
+| npm CLI | Any | `npm install @openlinear/openlinear-cli` |
+
+> **macOS note**: The app currently ships ad-hoc signed (`signingIdentity: "-"`). On first launch macOS will warn that "Apple cannot verify" the app — right-click → Open, or run `xattr -cr /Applications/OpenLinear.app` to bypass Gatekeeper. To produce a properly signed/notarized build, add a Developer ID certificate and set `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` in the release workflow and replace `signingIdentity: "-"` in `apps/desktop/src-tauri/tauri.conf.json` with your identity name.
+
+Release builds are triggered automatically on tag push (`v*`).
 
 ## Documentation
 
+- [Getting Started](docs/features/getting-started.md)
 - [Architecture](docs/ARCHITECTURE.md)
-- [CI/CD](docs/CICD.md)
-- [Landing docs page](apps/landing/app/docs/page.tsx)
+- [API Reference](docs/features/api-reference.md)
+- [Task Execution](docs/features/task-execution.md)
+- [Batch Execution](docs/features/batch-execution.md)
+- [OpenCode Integration](docs/features/opencode-integration.md)
+- [All Features](docs/features/README.md)
 
 ## Contributing
 
 Contributions are welcome. Please open an issue first to discuss what you'd like to change.
 
 ```bash
-pnpm --filter @openlinear/landing dev
-pnpm --filter @openlinear/landing build
+# Development
+pnpm dev          # Start everything
+pnpm lint         # Lint
+pnpm typecheck    # Type check
+pnpm test         # Run tests
 ```
 
 ## License

@@ -20,7 +20,7 @@ import {
   FolderOpen,
 } from "lucide-react"
 import { AppShell } from "@/components/layout/app-shell"
-import { cn, openExternal } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -48,13 +48,49 @@ import {
   updateProject,
   deleteProject,
   fetchGitHubRepos,
-  getGitHubConnectUrl,
+  getLoginUrl,
+  ApiError,
   type Project,
   type Team,
   type GitHubRepo,
 } from "@/lib/api"
 import { useSSESubscription } from "@/providers/sse-provider"
-import { pickLocalFolder as chooseLocalFolder } from "@/lib/pick-local-folder"
+import { toast } from "sonner"
+import { EmptyState } from "@/components/empty-state"
+import { Skeleton } from "@/components/ui/skeleton"
+
+function mapErrorToForm(
+  err: unknown,
+  fallbackMessage: string,
+): { toastMessage: string; formErrors: Record<string, string> } {
+  if (err instanceof ApiError) {
+    const formErrors: Record<string, string> = {}
+    const details = err.details as
+      | { fieldErrors?: Record<string, string[]>; formErrors?: string[] }
+      | undefined
+    if (details?.fieldErrors && typeof details.fieldErrors === "object") {
+      for (const [field, msgs] of Object.entries(details.fieldErrors)) {
+        if (Array.isArray(msgs) && msgs.length > 0 && typeof msgs[0] === "string") {
+          formErrors[field] = msgs[0]
+        }
+      }
+    }
+    if (err.code === "OWNERSHIP_REQUIRED") {
+      const message =
+        err.status === 404
+          ? "You don't have access to this resource."
+          : "You don't have permission to perform this action."
+      formErrors._root = message
+      return { toastMessage: message, formErrors }
+    }
+    formErrors._root = err.message
+    return { toastMessage: err.message, formErrors }
+  }
+  return {
+    toastMessage: fallbackMessage,
+    formErrors: { _root: fallbackMessage },
+  }
+}
 
 type StatusType = 'planned' | 'in_progress' | 'paused' | 'completed' | 'cancelled'
 
@@ -208,11 +244,6 @@ function ProjectsContent() {
     }
   }, [])
 
-  const openGitHubConnect = useCallback(async () => {
-    const url = await getGitHubConnectUrl()
-    await openExternal(url)
-  }, [])
-
   useEffect(() => {
     const tauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
     setIsDesktopApp(tauri)
@@ -228,7 +259,8 @@ function ProjectsContent() {
     }
 
     try {
-      const selectedPath = await chooseLocalFolder()
+      const { invoke } = await import("@tauri-apps/api/core")
+      const selectedPath = await invoke<string | null>("pick_local_folder")
       if (!selectedPath) return
 
       if (isEdit) {
@@ -237,7 +269,11 @@ function ProjectsContent() {
         setFormData((prev) => ({ ...prev, sourceType: "local", repoUrl: "", localPath: selectedPath }))
       }
     } catch (error) {
-      console.error("Failed to pick local folder:", error)
+      const { toastMessage } = mapErrorToForm(
+        error,
+        "Could not open the folder picker. Try again or paste a path manually.",
+      )
+      toast.error(toastMessage)
     } finally {
       if (isEdit) {
         setIsPickingEditLocalPath(false)
@@ -252,7 +288,11 @@ function ProjectsContent() {
       const data = await fetchProjects(filterTeamId)
       setProjects(data)
     } catch (error) {
-      console.error("Failed to fetch projects:", error)
+      const { toastMessage } = mapErrorToForm(
+        error,
+        "Could not load projects. Check your connection and try again.",
+      )
+      toast.error(`Failed to load projects: ${toastMessage}`)
     }
   }, [filterTeamId])
 
@@ -261,7 +301,11 @@ function ProjectsContent() {
       const data = await fetchTeams()
       setTeams(data)
     } catch (error) {
-      console.error("Failed to fetch teams:", error)
+      const { toastMessage } = mapErrorToForm(
+        error,
+        "Could not load teams. Check your connection and try again.",
+      )
+      toast.error(`Failed to load teams: ${toastMessage}`)
     }
   }, [])
 
@@ -295,13 +339,21 @@ function ProjectsContent() {
 
   const handleEditDialogOpenChange = (open: boolean) => {
     setIsEditDialogOpen(open)
-    if (open) return
+    if (open) {
+      setFormErrors({})
+      return
+    }
 
     const params = new URLSearchParams(searchParams.toString())
     if (!params.has('editProjectId')) return
     params.delete('editProjectId')
     const qs = params.toString()
     router.replace(qs ? `/projects?${qs}` : '/projects', { scroll: false })
+  }
+
+  const handleCreateDialogOpenChange = (open: boolean) => {
+    setIsCreateDialogOpen(open)
+    if (open) setFormErrors({})
   }
 
   useSSESubscription((eventType) => {
@@ -377,7 +429,12 @@ function ProjectsContent() {
       setIsCreateDialogOpen(false)
       loadProjects()
     } catch (error) {
-      console.error("Failed to create project:", error)
+      const { toastMessage, formErrors: nextErrors } = mapErrorToForm(
+        error,
+        "Could not reach OpenLinear server. Check your connection and try again.",
+      )
+      setFormErrors((prev) => ({ ...prev, ...nextErrors }))
+      toast.error(toastMessage)
     } finally {
       setIsSubmitting(false)
     }
@@ -393,7 +450,11 @@ function ProjectsContent() {
       setProjectToDelete(null)
       loadProjects()
     } catch (error) {
-      console.error("Failed to delete project:", error)
+      const { toastMessage } = mapErrorToForm(
+        error,
+        "Could not reach OpenLinear server. Check your connection and try again.",
+      )
+      toast.error(`Failed to delete project: ${toastMessage}`)
     } finally {
       setIsSubmitting(false)
     }
@@ -423,7 +484,12 @@ function ProjectsContent() {
       setEditProject(null)
       loadProjects()
     } catch (error) {
-      console.error("Failed to update project:", error)
+      const { toastMessage, formErrors: nextErrors } = mapErrorToForm(
+        error,
+        "Could not reach OpenLinear server. Check your connection and try again.",
+      )
+      setFormErrors((prev) => ({ ...prev, ...nextErrors }))
+      toast.error(toastMessage)
     } finally {
       setIsSubmitting(false)
     }
@@ -433,7 +499,7 @@ function ProjectsContent() {
     <AppShell>
       <div className="flex-1 flex flex-col min-w-0 bg-linear-bg">
         <div className="border-b border-linear-border">
-          <div className="pl-[72px] pr-4 sm:pr-6 lg:px-6 py-4">
+          <div className="px-4 sm:px-6 py-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
               <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto">
                 <h1 className="text-xl font-semibold text-linear-text flex-shrink-0">Projects</h1>
@@ -481,7 +547,7 @@ function ProjectsContent() {
                   <TrendingUp className="w-4 h-4 mr-1.5" />
                   <span className="hidden sm:inline">New view</span>
                 </Button>
-                <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                <Dialog open={isCreateDialogOpen} onOpenChange={handleCreateDialogOpenChange}>
                   <DialogTrigger asChild>
                     <Button size="sm" className="h-8 bg-linear-accent hover:bg-linear-accent-hover text-white">
                       <Plus className="w-4 h-4 mr-1.5" />
@@ -689,14 +755,13 @@ function ProjectsContent() {
                                   </div>
                                 ) : githubError ? (
                                   <div className="text-sm text-linear-text-secondary py-4">
-                                    Failed to load repos.{" "}
-                                    <button
-                                      type="button"
-                                      onClick={() => loadGitHubRepos()}
+                                    Connect your GitHub account to browse repos.{" "}
+                                    <a
+                                      href={getLoginUrl()}
                                       className="text-linear-accent hover:underline"
                                     >
-                                      Retry
-                                    </button>
+                                      Connect GitHub
+                                    </a>
                                   </div>
                                 ) : (
                                   <>
@@ -775,6 +840,12 @@ function ProjectsContent() {
                         )}
                       </div>
 
+                      {formErrors._root && (
+                        <div role="alert" className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+                          {formErrors._root}
+                        </div>
+                      )}
+
                       <DialogFooter className="gap-2">
                         <Button
                           type="button"
@@ -850,15 +921,36 @@ function ProjectsContent() {
                 </thead>
                 <tbody>
                   {isLoading ? (
-                    <tr>
-                      <td colSpan={6} className="py-12 text-center">
-                        <Loader2 className="w-6 h-6 animate-spin mx-auto text-linear-text-tertiary" />
-                      </td>
-                    </tr>
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <tr key={i} className="border-b border-linear-border/50">
+                        <td className="py-3 px-6">
+                          <div className="flex items-center gap-3">
+                            <Skeleton className="w-7 h-7 rounded-lg" />
+                            <div className="space-y-1.5">
+                              <Skeleton className="h-3.5 w-40 rounded" />
+                              <Skeleton className="h-2.5 w-56 rounded" />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4"><Skeleton className="h-5 w-16 rounded" /></td>
+                        <td className="py-3 px-4"><Skeleton className="h-5 w-24 rounded" /></td>
+                        <td className="py-3 px-4"><Skeleton className="h-3 w-20 rounded" /></td>
+                        <td className="py-3 px-4"><Skeleton className="h-3 w-6 rounded" /></td>
+                        <td className="py-3 px-4" />
+                      </tr>
+                    ))
                   ) : filteredProjects.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-linear-text-tertiary">
-                        {searchQuery ? "No projects match your search" : "No projects yet. Create your first project!"}
+                      <td colSpan={6} className="py-0">
+                        <EmptyState
+                          icon={FolderKanban}
+                          title={searchQuery ? "No projects match your search" : "No projects yet"}
+                          description={
+                            searchQuery
+                              ? "Try adjusting your search query"
+                              : "Create your first project to start organizing tasks"
+                          }
+                        />
                       </td>
                     </tr>
                   ) : (
@@ -940,13 +1032,27 @@ function ProjectsContent() {
 
           <div className="block md:hidden space-y-3 p-4">
             {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-6 h-6 animate-spin text-linear-text-tertiary" />
-              </div>
+              Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="bg-linear-bg-secondary border border-linear-border rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <Skeleton className="w-7 h-7 rounded-lg" />
+                    <div className="flex-1 space-y-1.5">
+                      <Skeleton className="h-3.5 w-40 rounded" />
+                      <Skeleton className="h-2.5 w-56 rounded" />
+                    </div>
+                  </div>
+                </div>
+              ))
             ) : filteredProjects.length === 0 ? (
-              <div className="text-center py-12 text-linear-text-tertiary">
-                {searchQuery ? "No projects match your search" : "No projects yet. Create your first project!"}
-              </div>
+              <EmptyState
+                icon={FolderKanban}
+                title={searchQuery ? "No projects match your search" : "No projects yet"}
+                description={
+                  searchQuery
+                    ? "Try adjusting your search query"
+                    : "Create your first project to start organizing tasks"
+                }
+              />
             ) : (
               filteredProjects.map((project) => (
                 <div
@@ -1252,14 +1358,13 @@ function ProjectsContent() {
                         </div>
                       ) : editGithubError ? (
                         <div className="text-sm text-linear-text-secondary py-4">
-                          Failed to load repos.{" "}
-                          <button
-                            type="button"
-                            onClick={() => loadGitHubRepos(true)}
+                          Connect your GitHub account to browse repos.{" "}
+                          <a
+                            href={getLoginUrl()}
                             className="text-linear-accent hover:underline"
                           >
-                            Retry
-                          </button>
+                            Connect GitHub
+                          </a>
                         </div>
                       ) : (
                         <>
@@ -1345,6 +1450,12 @@ function ProjectsContent() {
                 )
               )}
             </div>
+
+            {formErrors._root && (
+              <div role="alert" className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+                {formErrors._root}
+              </div>
+            )}
 
             <DialogFooter className="gap-2">
               <Button

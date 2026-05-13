@@ -1,28 +1,9 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { User, Repository, fetchCurrentUser, getActiveRepository, logout as apiLogout } from '@/lib/api';
+import { useRouter, usePathname } from 'next/navigation';
 import { toast } from 'sonner';
-
-async function storeGitHubAccessToken(accessToken?: string) {
-  if (!accessToken || typeof window === 'undefined' || !("__TAURI_INTERNALS__" in window)) {
-    return;
-  }
-
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('store_secret', { key: 'github_token', value: accessToken });
-  } catch (error) {
-    console.error('Failed to store GitHub token:', error);
-  }
-}
-
-interface AuthCallbackPayload {
-  success: boolean;
-  token?: string;
-  github_connect_token?: string;
-  error?: string;
-}
+import { User, Repository, fetchCurrentUser, getActiveRepository, logout as apiLogout } from '@/lib/api';
 
 interface AuthContextType {
   user: User | null;
@@ -37,6 +18,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [activeRepository, setActiveRepository] = useState<Repository | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -62,31 +45,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
-    const githubConnectToken = params.get('github_connect_token');
     const error = params.get('error');
 
-    if (githubConnectToken) {
-      import('@/lib/api/auth').then(({ confirmGitHubConnect }) => {
-        confirmGitHubConnect(githubConnectToken)
-          .then(async (res) => {
-            await storeGitHubAccessToken(res.githubAccessToken)
-            localStorage.setItem('token', res.token);
-            window.history.replaceState({}, '', window.location.pathname);
-            await Promise.all([refreshUser(), refreshActiveRepository()]);
-          })
-          .catch(err => {
-            console.error('GitHub connect error:', err);
-            toast.error(err instanceof Error ? err.message : 'GitHub connection failed');
-          });
-      }).catch(err => console.error('Failed to load auth module:', err));
-    } else if (token) {
+    if (token) {
       localStorage.setItem('token', token);
       window.history.replaceState({}, '', window.location.pathname);
     }
 
     if (error) {
       console.error('Auth error:', error);
-      toast.error(error);
       window.history.replaceState({}, '', window.location.pathname);
     }
 
@@ -96,56 +63,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshUser, refreshActiveRepository]);
 
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
+    if (typeof window === 'undefined') return;
+    if (!('__TAURI_INTERNALS__' in window)) return;
 
-    const subscribe = async () => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+
+    (async () => {
       try {
         const { listen } = await import('@tauri-apps/api/event');
-        unlisten = await listen<AuthCallbackPayload>('auth:callback', async (event) => {
+        const dispose = await listen<{
+          success: boolean;
+          token?: string;
+          error?: string;
+        }>('auth:callback', (event) => {
           const payload = event.payload;
-
-          if (payload.success) {
-            if (payload.github_connect_token) {
-              try {
-                const { confirmGitHubConnect } = await import('@/lib/api/auth');
-                const res = await confirmGitHubConnect(payload.github_connect_token);
-                await storeGitHubAccessToken(res.githubAccessToken)
-                localStorage.setItem('token', res.token);
-                await Promise.all([refreshUser(), refreshActiveRepository()]);
-              } catch (e) {
-                console.error('GitHub connect error via callback:', e);
-                toast.error(e instanceof Error ? e.message : 'GitHub connection failed');
-              }
-              return;
-            } else if (payload.token) {
-              localStorage.setItem('token', payload.token);
-              await Promise.all([refreshUser(), refreshActiveRepository()]);
-              return;
-            }
-          }
-
-          if (payload.error) {
-            console.error('Auth callback error:', payload.error);
-            toast.error(payload.error);
+          if (payload.success && payload.token) {
+            localStorage.setItem('token', payload.token);
+            void refreshUser();
+          } else if (payload.error) {
+            console.error('[Auth] Tauri callback error:', payload.error);
           }
         });
-      } catch {}
-    };
-
-    void subscribe();
+        if (cancelled) {
+          dispose();
+        } else {
+          unlisten = dispose;
+        }
+      } catch (err) {
+        console.warn('[Auth] Failed to register Tauri auth:callback listener:', err);
+      }
+    })();
 
     return () => {
-      if (unlisten) {
-        unlisten();
-      }
+      cancelled = true;
+      unlisten?.();
     };
-  }, [refreshUser, refreshActiveRepository]);
+  }, [refreshUser]);
 
   const logout = useCallback(() => {
     apiLogout();
     setUser(null);
     setActiveRepository(null);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleAuthExpired = () => {
+      setUser(null);
+      setActiveRepository(null);
+      toast.error('Session expired. Please sign in again.');
+      if (pathname !== '/login' && pathname !== '/') {
+        router.push('/login');
+      }
+    };
+
+    window.addEventListener('auth:expired', handleAuthExpired);
+    return () => window.removeEventListener('auth:expired', handleAuthExpired);
+  }, [router, pathname]);
 
   return (
     <AuthContext.Provider

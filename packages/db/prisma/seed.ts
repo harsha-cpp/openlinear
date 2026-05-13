@@ -1,23 +1,9 @@
-import { existsSync } from "fs";
 import { resolve } from "path";
 import { PrismaClient } from "../generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import crypto from "crypto";
 
-const envCandidates = [
-  resolve(import.meta.dirname, "../.env"),
-  resolve(import.meta.dirname, "../../../.env"),
-];
-
-for (const envPath of envCandidates) {
-  if (existsSync(envPath)) {
-    process.loadEnvFile(envPath);
-  }
-}
-
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is not set. Add it to .env before running the seed.");
-}
+process.loadEnvFile(resolve(import.meta.dirname, "../.env"));
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,
@@ -28,11 +14,6 @@ function generateInviteCode(key: string): string {
   const random = crypto.randomBytes(4).toString("hex").toUpperCase();
   return `${key}-${random}`;
 }
-
-// Pre-computed bcrypt hash of "kaz" with 10 salt rounds
-// Generated via: bcrypt.hash('kaz', 10)
-const KAZ_PASSWORD_HASH =
-  "$2a$10$9nD7hcFzJXMrUMChzUMn8uM7vjcJnCCBsGGep8xyhriffyCbO9cnK";
 
 const SEED_TASKS = [
   {
@@ -97,12 +78,12 @@ async function main() {
   console.log(`[seed] Upserted ${SEED_TASKS.length} tasks`);
 
   const user = await prisma.user.upsert({
-    where: { username: "kaz" },
+    where: { id: "seed-user-demo" },
     update: {},
     create: {
-      id: "seed-user-kaz",
-      username: "kaz",
-      passwordHash: KAZ_PASSWORD_HASH,
+      id: "seed-user-demo",
+      username: "demo",
+      email: "demo@openlinear.tech",
     },
   });
   console.log(`[seed] Upserted user "${user.username}"`);
@@ -133,7 +114,7 @@ async function main() {
     console.log(`[seed] Backfilled invite codes for ${teamsWithoutCode.length} teams`);
   }
 
-  // 4. Link kaz to Default team
+  // 4. Link demo user to Default team
   await prisma.teamMember.upsert({
     where: { teamId_userId: { teamId: team.id, userId: user.id } },
     update: {},
@@ -143,7 +124,7 @@ async function main() {
       role: "owner",
     },
   });
-  console.log(`[seed] Upserted TeamMember kaz -> Default`);
+  console.log(`[seed] Upserted TeamMember demo -> Default`);
 
   // 5. Check for an active repository
   const activeRepo = await prisma.repository.findFirst({

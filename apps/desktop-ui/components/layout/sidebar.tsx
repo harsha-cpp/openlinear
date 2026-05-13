@@ -1,22 +1,46 @@
 "use client"
 
-import { useState, useEffect, useCallback, type ReactNode } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams, useRouter } from "next/navigation"
+import { useTheme } from "next-themes"
 import {
     Home, Inbox, Layers, Settings,
-    PanelLeft, PanelLeftClose, LogIn, LogOut, Archive, Brain,
-    ChevronRight, ChevronDown, CircleDot, Hexagon, MoreHorizontal, Pencil, Trash2, Plus
+    PanelLeftClose, LogOut, Archive, Brain, BarChart3,
+    ChevronRight, ChevronDown, CircleDot, Hexagon, MoreHorizontal, Pencil, Trash2, Plus,
+    User as UserIcon, Sun, Moon, Monitor, ChevronsUpDown
 } from "lucide-react"
 import { ProjectSelector } from "@/components/auth/project-selector"
 import { useAuth } from "@/hooks/use-auth"
 import { cn } from "@/lib/utils"
-import { fetchInboxCount, fetchTeams, deleteTeam, type Team } from "@/lib/api"
-import { useSSESubscription } from "@/providers/sse-provider"
+import { BRAND_COLORS } from "@/lib/design-tokens"
+import { deleteTeam, apiFetch, type Team } from "@/lib/api"
+import { getApiUrl, getAuthToken } from "@/lib/api/client"
+import { useTeams } from "@/providers/teams-provider"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-
-// Module-level cache so teams survive sidebar remounts during page navigation
-let cachedTeams: Team[] = []
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { buttonVariants } from "@/components/ui/button"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 const navItemClass = (isActive: boolean) =>
     cn(
@@ -34,54 +58,11 @@ const subNavItemClass = (isActive: boolean) =>
             : "text-linear-text-secondary hover:text-linear-text hover:bg-linear-bg-tertiary/50"
     )
 
-const railItemClass = (isActive: boolean) =>
-    cn(
-        "relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200",
-        isActive
-            ? "bg-linear-bg-tertiary text-linear-text shadow-sm"
-            : "text-linear-text-secondary hover:text-linear-text hover:bg-linear-bg-tertiary/60"
-    )
-
 interface SidebarProps {
     open: boolean
     onClose: () => void
-    onOpen: () => void
     width: number
     animating: boolean
-    isMobile: boolean
-}
-
-interface RailLinkProps {
-    href: string
-    isActive: boolean
-    label: string
-    badge?: number
-    children: ReactNode
-}
-
-function RailLink({ href, isActive, label, badge, children }: RailLinkProps) {
-    return (
-        <Link
-            href={href}
-            className={railItemClass(isActive)}
-            title={label}
-            aria-label={label}
-        >
-            {children}
-            {typeof badge === "number" && badge > 0 && (
-                <span
-                    className={cn(
-                        "absolute -right-1 -top-1 min-w-[16px] h-4 px-1 rounded-full text-[10px] flex items-center justify-center",
-                        badge > 0
-                            ? "text-linear-accent bg-linear-accent/12 border border-linear-accent/20"
-                            : "text-linear-text-tertiary bg-linear-bg-tertiary"
-                    )}
-                >
-                    {badge > 99 ? "99+" : badge}
-                </span>
-            )}
-        </Link>
-    )
 }
 
 function TeamSection({ team, pathname, searchParams, onDelete }: { team: Team; pathname: string; searchParams: URLSearchParams; onDelete: (teamId: string, teamName: string) => void }) {
@@ -91,13 +72,12 @@ function TeamSection({ team, pathname, searchParams, onDelete }: { team: Team; p
 
     const isIssuesActive = pathname === "/" && teamId === team.id
     const isProjectsActive = pathname === "/projects" && teamId === team.id
-    const isManageActive = pathname === "/teams/detail" && searchParams.get("id") === team.id
+    const isManageActive = pathname === "/teams/manage" && searchParams.get("id") === team.id
 
     return (
         <div className="group/team">
             <div className="flex items-center">
                 <button
-                    type="button"
                     onClick={() => setExpanded(!expanded)}
                     className="flex items-center gap-2 flex-1 min-w-0 px-3 py-1.5 rounded-md text-[13px] font-medium text-linear-text-secondary hover:text-linear-text hover:bg-linear-bg-tertiary/50 transition-colors"
                 >
@@ -119,7 +99,6 @@ function TeamSection({ team, pathname, searchParams, onDelete }: { team: Team; p
                 <Popover open={menuOpen} onOpenChange={setMenuOpen}>
                     <PopoverTrigger asChild>
                         <button
-                            type="button"
                             className="opacity-0 group-hover/team:opacity-100 p-1 mr-2 rounded hover:bg-linear-bg-tertiary transition-all text-linear-text-tertiary hover:text-linear-text"
                             title="Team options"
                         >
@@ -128,7 +107,7 @@ function TeamSection({ team, pathname, searchParams, onDelete }: { team: Team; p
                     </PopoverTrigger>
                     <PopoverContent align="start" side="bottom" className="w-36 p-1 bg-linear-bg-secondary border-linear-border">
                         <Link
-                            href={`/teams/detail?id=${team.id}`}
+                            href={`/teams/manage?id=${team.id}`}
                             onClick={() => setMenuOpen(false)}
                             className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-linear-text-secondary hover:text-linear-text hover:bg-linear-bg-tertiary transition-colors w-full"
                         >
@@ -136,7 +115,6 @@ function TeamSection({ team, pathname, searchParams, onDelete }: { team: Team; p
                             Edit
                         </Link>
                         <button
-                            type="button"
                             onClick={() => { setMenuOpen(false); onDelete(team.id, team.name) }}
                             className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-red-500 hover:bg-red-500/10 transition-colors w-full"
                         >
@@ -164,7 +142,7 @@ function TeamSection({ team, pathname, searchParams, onDelete }: { team: Team; p
                         <span>Projects</span>
                     </Link>
                     <Link
-                        href={`/teams/detail?id=${team.id}`}
+                        href={`/teams/manage?id=${team.id}`}
                         className={subNavItemClass(isManageActive)}
                     >
                         <Settings className="w-3.5 h-3.5 flex-shrink-0" />
@@ -176,22 +154,16 @@ function TeamSection({ team, pathname, searchParams, onDelete }: { team: Team; p
     )
 }
 
-export function Sidebar({ open, onClose, onOpen, width, animating, isMobile }: SidebarProps) {
+export function Sidebar({ open, onClose, width, animating }: SidebarProps) {
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const router = useRouter()
     const { user, isAuthenticated, isLoading, logout } = useAuth()
+    const { teams, reload: reloadTeams } = useTeams()
+    const { setTheme } = useTheme()
     const [isTauri, setIsTauri] = useState(false)
-    const [inboxCount, setInboxCount] = useState<{ total: number; unread: number }>({ total: 0, unread: 0 })
-    const [teams, setTeams] = useState<Team[]>(cachedTeams)
+    const [unreadCount, setUnreadCount] = useState<number>(0)
     const [isFullscreen, setIsFullscreen] = useState(false)
-
-    const loadTeams = useCallback(() => {
-        fetchTeams().then((data) => {
-            cachedTeams = data
-            setTeams(data)
-        }).catch(() => setTeams([]))
-    }, [])
 
     useEffect(() => {
         const tauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -213,35 +185,56 @@ export function Sidebar({ open, onClose, onOpen, width, animating, isMobile }: S
     }, [])
 
     useEffect(() => {
-        fetchInboxCount().then(setInboxCount).catch(() => setInboxCount({ total: 0, unread: 0 }))
-    }, [])
+        let cancelled = false
+        apiFetch<{ unreadCount: number }>('/api/notifications?pageSize=1')
+            .then((res) => { if (!cancelled) setUnreadCount(res.unreadCount) })
+            .catch(() => { if (!cancelled) setUnreadCount(0) })
+        return () => { cancelled = true }
+    }, [pathname])
 
     useEffect(() => {
-        loadTeams()
-    }, [loadTeams])
-
-    useSSESubscription((eventType) => {
-        if (['team:created', 'team:updated', 'team:deleted'].includes(eventType)) {
-            loadTeams()
+        if (typeof window === 'undefined') return
+        const token = getAuthToken()
+        if (!token) return
+        const url = new URL(`${getApiUrl()}/api/events`)
+        url.searchParams.set('token', token)
+        const es = new EventSource(url.toString())
+        const onCreated = () => setUnreadCount((c) => c + 1)
+        es.addEventListener('notification:created', onCreated)
+        return () => {
+            es.removeEventListener('notification:created', onCreated)
+            es.close()
         }
-    })
+    }, [])
 
-    const handleDeleteTeam = useCallback(async (teamId: string, teamName: string) => {
-        if (!confirm(`Delete "${teamName}"? This action cannot be undone.`)) return
+    const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
+    const [isDeletingTeam, setIsDeletingTeam] = useState(false)
+
+    const handleDeleteTeam = useCallback((teamId: string, teamName: string) => {
+        setDeleteTarget({ id: teamId, name: teamName })
+    }, [])
+
+    const confirmDeleteTeam = useCallback(async () => {
+        if (!deleteTarget) return
+        const { id: teamId } = deleteTarget
         try {
+            setIsDeletingTeam(true)
             await deleteTeam(teamId)
-            loadTeams()
-            if (searchParams.get("teamId") === teamId || (pathname === "/teams/detail" && searchParams.get("id") === teamId)) {
+            void reloadTeams()
+            if (searchParams.get("teamId") === teamId || (pathname === "/teams/manage" && searchParams.get("id") === teamId)) {
                 router.push('/')
             }
+            setDeleteTarget(null)
         } catch (error) {
             console.error("Failed to delete team:", error)
+        } finally {
+            setIsDeletingTeam(false)
         }
-    }, [loadTeams, searchParams, pathname, router])
+    }, [deleteTarget, reloadTeams, searchParams, pathname, router])
 
     const handleClose = async () => {
         const { getCurrentWindow } = await import('@tauri-apps/api/window')
-        getCurrentWindow().minimize()
+        await getCurrentWindow().close()
     }
 
     const handleMinimize = async () => {
@@ -262,176 +255,52 @@ export function Sidebar({ open, onClose, onOpen, width, animating, isMobile }: S
     }
 
     const isHomeNoFilter = pathname === "/" && !searchParams.get("teamId") && !searchParams.get("projectId")
-    const collapsed = !open && !isMobile
-
-    if (collapsed) {
-        return (
-            <aside
-                className="bg-linear-bg-secondary border-r border-linear-border flex flex-col flex-shrink-0 overflow-hidden h-full"
-                style={{
-                    width: 64,
-                    transition: animating ? 'width 150ms cubic-bezier(0.25, 0.1, 0.25, 1)' : 'none',
-                }}
-            >
-                <div className="p-2.5 border-b border-linear-border flex flex-col items-center gap-2">
-                    <Link
-                        href="/"
-                        className="flex h-10 w-10 items-center justify-center rounded-xl hover:bg-linear-bg-tertiary/60 transition-colors"
-                        title="OpenLinear"
-                        aria-label="OpenLinear home"
-                    >
-                        <img src="/logo.png" alt="OpenLinear" className="h-[20px] w-auto" />
-                    </Link>
-                    <button
-                        type="button"
-                        onClick={onOpen}
-                        className="flex h-10 w-10 items-center justify-center rounded-xl text-linear-text-tertiary hover:text-linear-text hover:bg-linear-bg-tertiary/60 transition-colors"
-                        title="Expand sidebar"
-                        aria-label="Expand sidebar"
-                    >
-                        <PanelLeft className="w-4 h-4" />
-                    </button>
-                </div>
-
-                <nav className="flex-1 overflow-y-auto py-3 px-2">
-                    <div className="flex flex-col items-center gap-2">
-                        <RailLink href="/" isActive={isHomeNoFilter} label="Home">
-                            <Home className="w-4 h-4" />
-                        </RailLink>
-                        <RailLink href="/inbox" isActive={pathname === "/inbox"} label="Inbox" badge={inboxCount.total}>
-                            <Inbox className="w-4 h-4" />
-                        </RailLink>
-                        <RailLink href="/my-issues" isActive={pathname === "/my-issues"} label="My Issues">
-                            <Layers className="w-4 h-4" />
-                        </RailLink>
-                    </div>
-
-                    <div className="mt-4 pt-4 border-t border-linear-border/80 flex flex-col items-center gap-2">
-                        {teams.map((team) => {
-                            const teamActive = pathname === "/" && searchParams.get("teamId") === team.id
-                            return (
-                                <Link
-                                    key={team.id}
-                                    href={`/?teamId=${team.id}`}
-                                    className={railItemClass(teamActive)}
-                                    title={`${team.name} issues`}
-                                    aria-label={`${team.name} issues`}
-                                >
-                                    <div
-                                        className="w-5 h-5 rounded-md flex items-center justify-center"
-                                        style={{ backgroundColor: `${team.color}25` }}
-                                    >
-                                        <span className="text-[10px] font-bold" style={{ color: team.color }}>
-                                            {team.name.charAt(0).toUpperCase()}
-                                        </span>
-                                    </div>
-                                </Link>
-                            )
-                        })}
-                        <RailLink href="/teams" isActive={pathname === "/teams" || pathname === "/teams/detail"} label="Teams">
-                            <Plus className="w-4 h-4" />
-                        </RailLink>
-                    </div>
-
-                    <div className="mt-4 pt-4 border-t border-linear-border/80 flex flex-col items-center gap-2">
-                        <RailLink href="/archived" isActive={pathname === "/archived"} label="Archived">
-                            <Archive className="w-4 h-4" />
-                        </RailLink>
-                        <RailLink
-                            href="/settings?section=ai-providers"
-                            isActive={pathname === "/settings" && searchParams.get("section") === "ai-providers"}
-                            label="Connect Provider"
-                        >
-                            <Brain className="w-4 h-4" />
-                        </RailLink>
-                        <RailLink href="/settings" isActive={pathname === "/settings"} label="Settings">
-                            <Settings className="w-4 h-4" />
-                        </RailLink>
-                    </div>
-                </nav>
-
-                <div className="p-2 border-t border-linear-border flex flex-col items-center gap-2">
-                    {isLoading ? (
-                        <div className="w-10 h-10 rounded-full bg-linear-bg-tertiary animate-pulse" />
-                    ) : isAuthenticated && user ? (
-                        <>
-                            {user.avatarUrl ? (
-                                <img
-                                    src={user.avatarUrl}
-                                    alt={user.username}
-                                    className="w-10 h-10 rounded-full border border-linear-border"
-                                    title={user.username}
-                                />
-                            ) : (
-                                <div
-                                    className="w-10 h-10 rounded-full bg-linear-bg-tertiary border border-linear-border flex items-center justify-center text-sm font-semibold text-linear-text"
-                                    title={user.username}
-                                >
-                                    {user.username.charAt(0).toUpperCase()}
-                                </div>
-                            )}
-                            <button
-                                type="button"
-                                onClick={logout}
-                                className="flex h-10 w-10 items-center justify-center rounded-xl text-linear-text-tertiary hover:text-linear-text hover:bg-linear-bg-tertiary/60 transition-colors"
-                                title="Sign out"
-                                aria-label="Sign out"
-                            >
-                                <LogOut className="w-4 h-4" />
-                            </button>
-                        </>
-                    ) : (
-                        <Link
-                            href="/login"
-                            className="flex h-10 w-10 items-center justify-center rounded-xl bg-linear-accent text-white hover:bg-linear-accent-hover transition-colors"
-                            title="Sign in"
-                            aria-label="Sign in"
-                        >
-                            <LogIn className="w-4 h-4" />
-                        </Link>
-                    )}
-                </div>
-            </aside>
-        )
-    }
 
     return (
         <aside
-            className="bg-linear-bg-secondary border-r border-linear-border flex flex-col flex-shrink-0 overflow-hidden h-full"
+            className="bg-linear-bg-secondary border-r border-linear-border flex-shrink-0 overflow-hidden h-full relative"
             style={{
-                width: open ? width : 0,
-                transition: animating ? 'width 150ms cubic-bezier(0.25, 0.1, 0.25, 1)' : 'none',
+                width: 'var(--sidebar-width, 0px)',
             }}
+            aria-hidden={!open}
         >
+            <div
+                className="flex flex-col h-full"
+                style={{
+                    width: `${width}px`,
+                    transform: open ? 'translateX(0)' : `translateX(-${width}px)`,
+                    transition: animating ? 'transform 150ms cubic-bezier(0.25, 0.1, 0.25, 1)' : 'none',
+                    willChange: animating ? 'transform' : 'auto',
+                }}
+            >
             <div className="p-4 border-b border-linear-border flex items-center justify-between min-w-0" data-tauri-drag-region>
                 <div className="flex items-center gap-3">
                     {isTauri && (
                         <div className="flex items-center gap-[7px]">
                             <button
-                                type="button"
                                 onClick={handleClose}
-                                className="w-[12px] h-[12px] rounded-full bg-[#ff5f57] hover:brightness-110 transition-all flex-shrink-0"
+                                className="w-[12px] h-[12px] rounded-full hover:brightness-110 transition-all flex-shrink-0"
+                                style={{ backgroundColor: BRAND_COLORS.macClose }}
                                 aria-label="Close"
                             />
                             <button
-                                type="button"
                                 onClick={handleMinimize}
-                                className="w-[12px] h-[12px] rounded-full bg-[#febc2e] hover:brightness-110 transition-all flex-shrink-0"
+                                className="w-[12px] h-[12px] rounded-full hover:brightness-110 transition-all flex-shrink-0"
+                                style={{ backgroundColor: BRAND_COLORS.macMinimize }}
                                 aria-label="Minimize"
                             />
                             <button
-                                type="button"
                                 onClick={handleMaximize}
-                                className="w-[12px] h-[12px] rounded-full bg-[#28c840] hover:brightness-110 transition-all flex-shrink-0"
+                                className="w-[12px] h-[12px] rounded-full hover:brightness-110 transition-all flex-shrink-0"
+                                style={{ backgroundColor: BRAND_COLORS.macMaximize }}
                                 aria-label="Maximize"
                             />
                         </div>
                     )}
-                  <img src="/logo.png" alt="OpenLinear" className="h-[22px]" />
+                  <img src="/brand/logomark.svg" alt="OpenLinear" className="h-[16px]" />
                 </div>
                 <div className="flex items-center gap-1">
                     <button
-                        type="button"
                         onClick={onClose}
                         className="w-6 h-6 rounded flex items-center justify-center text-linear-text-tertiary hover:text-linear-text hover:bg-linear-bg-tertiary transition-colors"
                         aria-label="Collapse sidebar"
@@ -450,14 +319,9 @@ export function Sidebar({ open, onClose, onOpen, width, animating, isMobile }: S
                     <Link href="/inbox" className={navItemClass(pathname === "/inbox")}>
                         <Inbox className="w-4 h-4 flex-shrink-0" />
                         <span>Inbox</span>
-                        {inboxCount.total > 0 && (
-                            <span className={cn(
-                                "ml-auto text-xs px-1.5 py-0.5 rounded",
-                                inboxCount.unread > 0
-                                    ? "text-linear-accent bg-linear-accent/10"
-                                    : "text-linear-text-tertiary bg-linear-bg-tertiary"
-                            )}>
-                                {inboxCount.total}
+                        {unreadCount > 0 && (
+                            <span className="ml-auto text-xs px-1.5 py-0.5 rounded text-linear-accent bg-linear-accent/10">
+                                {unreadCount}
                             </span>
                         )}
                     </Link>
@@ -510,6 +374,10 @@ export function Sidebar({ open, onClose, onOpen, width, animating, isMobile }: S
                         <Archive className="w-4 h-4 flex-shrink-0" />
                         <span>Archived</span>
                     </Link>
+                    <Link href="/usage" className={navItemClass(pathname === "/usage")}>
+                        <BarChart3 className="w-4 h-4 flex-shrink-0" />
+                        <span>Usage</span>
+                    </Link>
                     <Link href="/settings?section=ai-providers" className={navItemClass(pathname === "/settings" && searchParams.get("section") === "ai-providers")}>
                         <Brain className="w-4 h-4 flex-shrink-0" />
                         <span>Connect Provider</span>
@@ -540,24 +408,66 @@ export function Sidebar({ open, onClose, onOpen, width, animating, isMobile }: S
                         <div className="h-3 w-20 bg-linear-bg-tertiary rounded animate-pulse" />
                     </div>
                 ) : isAuthenticated && user ? (
-                    <div className="flex items-center gap-3 px-3 py-2">
-                        {user.avatarUrl && (
-                            <img
-                                src={user.avatarUrl}
-                                alt={user.username}
-                                className="w-7 h-7 rounded-full flex-shrink-0"
-                            />
-                        )}
-                        <span className="text-sm text-linear-text truncate flex-1">{user.username}</span>
-                        <button
-                            type="button"
-                            onClick={logout}
-                            className="p-1.5 rounded-md hover:bg-linear-bg-tertiary transition-colors text-linear-text-tertiary hover:text-linear-text"
-                            title="Sign out"
-                        >
-                            <LogOut className="w-3.5 h-3.5" />
-                        </button>
-                    </div>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                className="flex items-center gap-3 w-full px-2 py-2 rounded-md hover:bg-linear-bg-tertiary/50 transition-colors text-left"
+                                aria-label="User menu"
+                            >
+                                <Avatar className="w-7 h-7 flex-shrink-0">
+                                    {user.avatarUrl && (
+                                        <AvatarImage src={user.avatarUrl} alt={user.username} />
+                                    )}
+                                    <AvatarFallback className="text-xs">
+                                        {user.username.charAt(0).toUpperCase()}
+                                    </AvatarFallback>
+                                </Avatar>
+                                <span className="text-sm text-linear-text truncate flex-1">{user.username}</span>
+                                <ChevronsUpDown className="w-3.5 h-3.5 text-linear-text-tertiary flex-shrink-0" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" side="top" className="w-56">
+                            <DropdownMenuLabel className="truncate">{user.username}</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem asChild>
+                                <Link href="/settings" className="cursor-pointer">
+                                    <UserIcon className="w-4 h-4 mr-2" />
+                                    Profile
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                                <Link href="/settings" className="cursor-pointer">
+                                    <Settings className="w-4 h-4 mr-2" />
+                                    Settings
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                    <Sun className="w-4 h-4 mr-2" />
+                                    Theme
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                    <DropdownMenuItem onClick={() => setTheme("light")} className="cursor-pointer">
+                                        <Sun className="w-4 h-4 mr-2" />
+                                        Light
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setTheme("dark")} className="cursor-pointer">
+                                        <Moon className="w-4 h-4 mr-2" />
+                                        Dark
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setTheme("system")} className="cursor-pointer">
+                                        <Monitor className="w-4 h-4 mr-2" />
+                                        System
+                                    </DropdownMenuItem>
+                                </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => logout()} className="cursor-pointer text-red-500 focus:text-red-500">
+                                <LogOut className="w-4 h-4 mr-2" />
+                                Sign out
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 ) : (
                     <a
                         href="/login"
@@ -567,6 +477,28 @@ export function Sidebar({ open, onClose, onOpen, width, animating, isMobile }: S
                     </a>
                 )}
             </div>
+            </div>
+
+            <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete team</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Delete &ldquo;{deleteTarget?.name}&rdquo;? This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeletingTeam}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(e) => { e.preventDefault(); void confirmDeleteTeam() }}
+                            disabled={isDeletingTeam}
+                            className={cn(buttonVariants({ variant: "destructive" }))}
+                        >
+                            {isDeletingTeam ? "Deleting..." : "Delete"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </aside>
     )
 }

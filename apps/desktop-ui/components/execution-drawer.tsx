@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react"
 import { X, Bot, Wrench, CheckCircle, AlertCircle, Info, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn, openExternal } from "@/lib/utils"
+import { STATUS_COLORS } from "@/lib/design-tokens"
 
 export interface ExecutionLogEntry {
   timestamp: string
@@ -40,13 +41,13 @@ interface ExecutionDrawerProps {
 }
 
 const statusConfig = {
-  cloning: { label: 'Cloning Repository', color: 'text-blue-400', bg: 'bg-blue-500/10' },
-  executing: { label: 'Executing', color: 'text-linear-accent', bg: 'bg-linear-accent/10' },
-  committing: { label: 'Committing Changes', color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
-  creating_pr: { label: 'Creating Pull Request', color: 'text-purple-400', bg: 'bg-purple-500/10' },
-  done: { label: 'Completed', color: 'text-green-400', bg: 'bg-green-500/10' },
-  cancelled: { label: 'Cancelled', color: 'text-gray-400', bg: 'bg-gray-500/10' },
-  error: { label: 'Error', color: 'text-red-400', bg: 'bg-red-500/10' },
+  cloning: { label: 'Cloning Repository', color: STATUS_COLORS.cloning.text, bg: STATUS_COLORS.cloning.bg },
+  executing: { label: 'Executing', color: STATUS_COLORS.executing.text, bg: STATUS_COLORS.executing.bg },
+  committing: { label: 'Committing Changes', color: STATUS_COLORS.committing.text, bg: STATUS_COLORS.committing.bg },
+  creating_pr: { label: 'Creating Pull Request', color: STATUS_COLORS.creating_pr.text, bg: STATUS_COLORS.creating_pr.bg },
+  done: { label: 'Completed', color: STATUS_COLORS.done.text, bg: STATUS_COLORS.done.bg },
+  cancelled: { label: 'Cancelled', color: STATUS_COLORS.cancelled.text, bg: STATUS_COLORS.cancelled.bg },
+  error: { label: 'Error', color: STATUS_COLORS.error.text, bg: STATUS_COLORS.error.bg },
 }
 
 const logIcons = {
@@ -60,9 +61,9 @@ const logIcons = {
 const logColors = {
   info: 'text-linear-text-secondary',
   agent: 'text-linear-accent',
-  tool: 'text-yellow-400',
-  error: 'text-red-400',
-  success: 'text-green-400',
+  tool: STATUS_COLORS.committing.text,
+  error: STATUS_COLORS.error.text,
+  success: STATUS_COLORS.done.text,
 }
 
 function formatTime(timestamp: string): string {
@@ -177,7 +178,7 @@ export function ExecutionDrawer({ task, logs, progress, open, onClose }: Executi
                     </div>
                     <p className={cn(
                       "mt-0.5 break-words",
-                      log.type === 'error' ? 'text-red-400' : 'text-linear-text-secondary'
+                      log.type === 'error' ? STATUS_COLORS.error.text : 'text-linear-text-secondary'
                     )}>
                       {log.message}
                     </p>

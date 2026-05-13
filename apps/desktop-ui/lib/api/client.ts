@@ -1,58 +1,91 @@
-const LOCAL_API_URL = 'http://localhost:3001';
-const DESKTOP_API_URL = process.env.NEXT_PUBLIC_DESKTOP_API_URL || LOCAL_API_URL;
+const DEFAULT_API_URL = 'http://localhost:3001';
+const CLOUD_DEFAULT = 'https://openlinear.tech';
+const TAURI_SIDECAR_URL_KEY = 'openlinear:tauri-sidecar-url';
 
-export function isDesktopRuntime(): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
+let cachedSidecarUrl: string | null = null;
+let listenerInstalled = false;
 
-  const hostname = window.location.hostname;
-  const userAgent = window.navigator?.userAgent?.toLowerCase() ?? '';
-  
-  // Check for Tauri-specific globals
-  const hasTauriGlobal = '__TAURI_INTERNALS__' in window || '__TAURI__' in window;
-  // Check for Tauri-specific hostnames
-  const isTauriHostname = hostname === 'tauri.localhost' || hostname.endsWith('.tauri.localhost');
-  // Check for Tauri in user agent (for external OAuth windows)
-  const isTauriUA = userAgent.includes('tauri');
-  // Check for desktop app file protocol (Tauri can run on file://)
-  const isFileProtocol = window.location.protocol === 'file:';
-  
-  return hasTauriGlobal || isTauriHostname || isTauriUA || isFileProtocol;
+function isTauriRuntime(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
+function loadCachedSidecarUrl(): string | null {
+  if (cachedSidecarUrl) return cachedSidecarUrl;
+  if (typeof window === 'undefined') return null;
+  cachedSidecarUrl = window.sessionStorage.getItem(TAURI_SIDECAR_URL_KEY);
+  return cachedSidecarUrl;
 }
 
-function getDefaultApiUrl(): string {
-  if (typeof window === 'undefined') {
-    return LOCAL_API_URL;
+function persistSidecarUrl(url: string) {
+  cachedSidecarUrl = url;
+  if (typeof window !== 'undefined') {
+    window.sessionStorage.setItem(TAURI_SIDECAR_URL_KEY, url);
   }
-
-  const hostname = window.location.hostname;
-
-  if (isDesktopRuntime()) {
-    return DESKTOP_API_URL;
-  }
-
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return LOCAL_API_URL;
-  }
-
-  return window.location.origin;
 }
 
-export const API_URL = (process.env.NEXT_PUBLIC_API_URL || getDefaultApiUrl()).replace(/\/$/, '');
+async function ensureSidecarListener() {
+  if (listenerInstalled) return;
+  if (!isTauriRuntime()) return;
+  listenerInstalled = true;
+  try {
+    const { listen } = await import('@tauri-apps/api/event');
+    await listen<{ port: number; api_url: string; health_url: string }>(
+      'sidecar:ready',
+      (event) => {
+        if (event.payload?.api_url) {
+          persistSidecarUrl(event.payload.api_url);
+        }
+      },
+    );
+
+    const { invoke } = await import('@tauri-apps/api/core');
+    const port = await invoke<number | null>('get_api_server_port').catch(() => null);
+    if (port) {
+      persistSidecarUrl(`http://127.0.0.1:${port}`);
+    }
+  } catch {
+    listenerInstalled = false;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  void ensureSidecarListener();
+}
+
+function envApiUrl(): string | undefined {
+  if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  return undefined;
+}
+
+function envCloudUrl(): string | undefined {
+  if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_CLOUD_API_URL) {
+    return process.env.NEXT_PUBLIC_CLOUD_API_URL;
+  }
+  return undefined;
+}
+
+export function getCloudApiUrl(): string {
+  if (isTauriRuntime()) {
+    return envCloudUrl() ?? CLOUD_DEFAULT;
+  }
+  return envApiUrl() ?? envCloudUrl() ?? DEFAULT_API_URL;
+}
+
+export function getSidecarApiUrl(): string {
+  if (isTauriRuntime()) {
+    return loadCachedSidecarUrl() ?? envApiUrl() ?? DEFAULT_API_URL;
+  }
+  return envApiUrl() ?? DEFAULT_API_URL;
+}
+
+export function getApiUrl(): string {
+  return getCloudApiUrl();
+}
 
 function getClientHeader(): HeadersInit {
-  return isDesktopRuntime() ? { 'x-openlinear-client': 'desktop' } : {};
-}
-
-export function getAuthToken(): string | null {
-  return typeof window !== 'undefined' && window.localStorage
-    ? window.localStorage.getItem('token')
-    : null;
+  return isTauriRuntime() ? { 'x-openlinear-client': 'desktop' } : {};
 }
 
 export function getAuthHeader(): HeadersInit {
@@ -63,60 +96,18 @@ export function getAuthHeader(): HeadersInit {
   };
 }
 
-export function getApiUnavailableMessage(): string {
-  return isDesktopRuntime()
-    ? 'Cannot reach the local OpenLinear service. Restart the app and try again.'
-    : 'Cannot connect to the OpenLinear service. Please try again.';
-}
-
-export function isLikelyApiConnectionError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
+/**
+ * Returns the current JWT token (or null). Single point of truth for token reads.
+ *
+ * Use this for callsites that cannot use `apiFetch` directly — currently:
+ * native EventSource (cannot set Authorization headers, must pass token via URL).
+ * Do NOT use elsewhere; prefer `apiFetch` from `lib/api/fetch.ts`.
+ */
+export function getAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem('token');
+  } catch {
+    return null;
   }
-
-  const message = error.message.toLowerCase();
-  return (
-    message.includes('load failed') ||
-    message.includes('failed to fetch') ||
-    message.includes('fetch failed') ||
-    message.includes('networkerror') ||
-    message.includes('network request failed') ||
-    message.includes('network error')
-  );
-}
-
-export function toApiConnectionError(error: unknown, fallback = getApiUnavailableMessage()): Error {
-  if (isLikelyApiConnectionError(error)) {
-    return new Error(fallback);
-  }
-
-  return error instanceof Error ? error : new Error(fallback);
-}
-
-export async function waitForApiReady(options?: { attempts?: number; delayMs?: number }): Promise<void> {
-  if (!isDesktopRuntime()) {
-    return;
-  }
-
-  const attempts = options?.attempts ?? 40;
-  const delayMs = options?.delayMs ?? 250;
-
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    try {
-      const response = await fetch(`${API_URL}/health`, {
-        cache: 'no-store',
-        headers: getClientHeader(),
-      });
-
-      if (response.ok) {
-        return;
-      }
-    } catch {}
-
-    if (attempt < attempts - 1) {
-      await sleep(delayMs);
-    }
-  }
-
-  throw new Error(getApiUnavailableMessage());
 }

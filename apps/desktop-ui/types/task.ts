@@ -26,6 +26,11 @@ export interface Task {
   identifier: string | null
   number: number | null
   dueDate: string | null
+  assigneeId?: string | null
+  creatorId?: string | null
+  assignee?: { id: string; username: string; avatarUrl: string | null } | null
+  creator?: { id: string; username: string; avatarUrl: string | null } | null
+  teamId?: string | null
 }
 
 export interface ExecutionProgress {

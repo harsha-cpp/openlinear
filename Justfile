@@ -72,9 +72,17 @@ db-up:
 db-down:
     docker compose down
 
-# Push Prisma schema to database
+# Push Prisma schema to database (dev convenience)
 db-push:
     pnpm db:push
+
+# Create a new Prisma migration (interactive)
+db-migrate name="":
+    pnpm db:migrate {{ if name == "" { "" } else { "--name " + name } }}
+
+# Apply pending migrations (production / CI)
+db-migrate-deploy:
+    pnpm db:migrate:deploy
 
 # Open Prisma Studio
 db-studio:

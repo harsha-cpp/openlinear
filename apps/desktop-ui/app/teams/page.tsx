@@ -24,9 +24,36 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { buttonVariants } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { AppShell } from "@/components/layout/app-shell"
-import { fetchTeams, createTeam, deleteTeam, updateTeam, joinTeam, type Team } from "@/lib/api"
+import { fetchTeams, createTeam, deleteTeam, updateTeam, joinTeam, ApiError, type Team } from "@/lib/api"
 import { useSSESubscription } from "@/providers/sse-provider"
+import { toast } from "sonner"
+import { EmptyState } from "@/components/empty-state"
+import { Skeleton } from "@/components/ui/skeleton"
+
+function describeApiError(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    if (err.code === "OWNERSHIP_REQUIRED") {
+      return err.status === 404
+        ? "You don't have access to this team."
+        : "You don't have permission to perform this action."
+    }
+    return err.message
+  }
+  return fallback
+}
 
 type TeamDialogMode = "create" | "join"
 
@@ -52,6 +79,10 @@ export default function TeamsPage() {
   const [joinError, setJoinError] = useState("")
   const [copiedTeamId, setCopiedTeamId] = useState<string | null>(null)
   const [copiedCreatedCode, setCopiedCreatedCode] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [editError, setEditError] = useState<string | null>(null)
+  const [deleteTeamId, setDeleteTeamId] = useState<string | null>(null)
+  const [isDeletingTeam, setIsDeletingTeam] = useState(false)
 
   const loadTeams = useCallback(async () => {
     try {
@@ -59,7 +90,7 @@ export default function TeamsPage() {
       const data = await fetchTeams()
       setTeams(data)
     } catch (error) {
-      console.error("Failed to fetch teams:", error)
+      toast.error(`Failed to load teams: ${describeApiError(error, "Could not reach OpenLinear server.")}`)
     } finally {
       setIsLoading(false)
     }
@@ -80,8 +111,8 @@ export default function TeamsPage() {
       await navigator.clipboard.writeText(inviteCode)
       setCopiedTeamId(teamId)
       setTimeout(() => setCopiedTeamId(null), 2000)
-    } catch (error) {
-      console.error("Failed to copy:", error)
+    } catch {
+      toast.error("Could not copy invite code to clipboard.")
     }
   }
 
@@ -91,8 +122,8 @@ export default function TeamsPage() {
       await navigator.clipboard.writeText(createdTeam.inviteCode)
       setCopiedCreatedCode(true)
       setTimeout(() => setCopiedCreatedCode(false), 2000)
-    } catch (error) {
-      console.error("Failed to copy:", error)
+    } catch {
+      toast.error("Could not copy invite code to clipboard.")
     }
   }
 
@@ -102,6 +133,7 @@ export default function TeamsPage() {
 
     try {
       setIsSubmitting(true)
+      setCreateError(null)
       const team = await createTeam({
         name: formData.name,
         key: formData.key.toUpperCase(),
@@ -112,7 +144,9 @@ export default function TeamsPage() {
       setFormData({ name: "", key: "", description: "", color: "#6366f1" })
       loadTeams()
     } catch (error) {
-      console.error("Failed to create team:", error)
+      const message = describeApiError(error, "Could not reach OpenLinear server. Check your connection and try again.")
+      setCreateError(message)
+      toast.error(message)
     } finally {
       setIsSubmitting(false)
     }
@@ -160,14 +194,22 @@ export default function TeamsPage() {
     setIsDialogOpen(true)
   }
 
-  const handleDeleteTeam = async (teamId: string) => {
-    if (!confirm("Are you sure you want to delete this team?")) return
+  const handleDeleteTeam = (teamId: string) => {
+    setDeleteTeamId(teamId)
+  }
 
+  const confirmDeleteTeam = async () => {
+    if (!deleteTeamId) return
     try {
-      await deleteTeam(teamId)
+      setIsDeletingTeam(true)
+      await deleteTeam(deleteTeamId)
+      setDeleteTeamId(null)
       loadTeams()
     } catch (error) {
-      console.error("Failed to delete team:", error)
+      const message = describeApiError(error, "Could not reach OpenLinear server. Check your connection and try again.")
+      toast.error(`Failed to delete team: ${message}`)
+    } finally {
+      setIsDeletingTeam(false)
     }
   }
 
@@ -177,6 +219,7 @@ export default function TeamsPage() {
 
     try {
       setIsSubmitting(true)
+      setEditError(null)
       await updateTeam(editTeam.id, {
         name: editFormData.name,
         description: editFormData.description || null,
@@ -187,7 +230,9 @@ export default function TeamsPage() {
       setEditFormData({ name: "", description: "", color: "#6366f1" })
       loadTeams()
     } catch (error) {
-      console.error("Failed to update team:", error)
+      const message = describeApiError(error, "Could not reach OpenLinear server. Check your connection and try again.")
+      setEditError(message)
+      toast.error(message)
     } finally {
       setIsSubmitting(false)
     }
@@ -203,7 +248,7 @@ export default function TeamsPage() {
     <AppShell>
       <div className="flex-1 flex flex-col min-w-0 bg-linear-bg">
         <div className="border-b border-linear-border">
-          <div className="pl-[72px] pr-4 sm:pr-6 lg:px-6 py-4">
+          <div className="px-4 sm:px-6 py-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
               <div className="flex items-center gap-4">
                 <h1 className="text-xl font-semibold text-linear-text">Teams</h1>
@@ -498,8 +543,33 @@ export default function TeamsPage() {
 
         <div className="flex-1 overflow-auto">
           {isLoading ? (
-            <div className="flex-1 flex items-center justify-center py-24">
-              <div className="text-linear-text-tertiary">Loading teams...</div>
+            <div className="hidden md:block">
+              <table className="w-full">
+                <tbody>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i} className="border-b border-linear-border/50">
+                      <td className="py-3 px-6">
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="w-7 h-7 rounded-lg" />
+                          <div className="space-y-1.5">
+                            <Skeleton className="h-3.5 w-32 rounded" />
+                            <Skeleton className="h-2.5 w-48 rounded" />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4"><Skeleton className="h-3 w-12 rounded" /></td>
+                      <td className="py-3 px-4"><Skeleton className="h-3 w-28 rounded" /></td>
+                      <td className="py-3 px-4"><Skeleton className="h-3 w-8 rounded" /></td>
+                      <td className="py-3 px-4" />
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="block md:hidden space-y-3 p-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-24 w-full rounded-lg" />
+                ))}
+              </div>
             </div>
           ) : filteredTeams.length > 0 ? (
             <>
@@ -527,7 +597,7 @@ export default function TeamsPage() {
                       {filteredTeams.map((team) => (
                         <tr
                           key={team.id}
-                          onClick={() => router.push(`/teams/detail?id=${team.id}`)}
+                          onClick={() => router.push(`/teams/manage?id=${team.id}`)}
                           className="border-b border-linear-border/50 hover:bg-linear-bg-secondary/50 transition-colors cursor-pointer group"
                         >
                           <td className="py-3 px-6">
@@ -632,7 +702,7 @@ export default function TeamsPage() {
                   >
                     <button
                       type="button"
-                      onClick={() => router.push(`/teams/detail?id=${team.id}`)}
+                      onClick={() => router.push(`/teams/manage?id=${team.id}`)}
                       className="w-full text-left"
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -727,33 +797,52 @@ export default function TeamsPage() {
               </div>
             </>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center py-24">
-              <div className="w-12 h-12 rounded-xl bg-linear-bg-tertiary border border-linear-border flex items-center justify-center mb-4">
-                <Users className="w-6 h-6 text-linear-text-tertiary" />
-              </div>
-              <h3 className="text-sm font-medium text-linear-text mb-1">
-                {filterText ? "No teams found" : "No teams yet"}
-              </h3>
-              <p className="text-sm text-linear-text-tertiary mb-4">
-                {filterText
+            <EmptyState
+              icon={Users}
+              title={filterText ? "No teams found" : "No teams yet"}
+              description={
+                filterText
                   ? "Try adjusting your filter"
-                  : "Create a team to organize your members and issues"}
-              </p>
-              {!filterText && (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-8 bg-linear-accent hover:bg-linear-accent-hover text-white"
-                  onClick={openCreateTeamDialog}
-                >
-                  <Plus className="w-4 h-4 mr-1.5" />
-                  Create team
-                </Button>
-              )}
-            </div>
+                  : "Create a team to organize your members and issues"
+              }
+              action={
+                !filterText && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 bg-linear-accent hover:bg-linear-accent-hover text-white"
+                    onClick={openCreateTeamDialog}
+                  >
+                    <Plus className="w-4 h-4 mr-1.5" />
+                    Create team
+                  </Button>
+                )
+              }
+            />
           )}
         </div>
       </div>
+
+      <AlertDialog open={deleteTeamId !== null} onOpenChange={(open) => { if (!open) setDeleteTeamId(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete team</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this team? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingTeam}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); void confirmDeleteTeam() }}
+              disabled={isDeletingTeam}
+              className={cn(buttonVariants({ variant: "destructive" }))}
+            >
+              {isDeletingTeam ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppShell>
   )
 }

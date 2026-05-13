@@ -1,10 +1,14 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { X, ArrowLeft, Bot, Wrench, CheckCircle, AlertCircle, Info, Clock, AlertTriangle, Flag, Tag, Folder, Square, Archive, GitMerge, ExternalLink, Play, Check, Loader2, ShieldAlert } from "lucide-react"
+import { useState, useEffect, useRef, type MouseEvent } from "react"
+import { X, ArrowLeft, Bot, Wrench, CheckCircle, AlertCircle, Info, Clock, AlertTriangle, Flag, Tag, Folder, Square, Archive, GitMerge, ExternalLink, Play, Check, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet"
+import { MarkdownView } from "@/components/markdown-view"
+import { CommentsThread } from "@/components/comments-thread"
 import { cn, openExternal } from "@/lib/utils"
-import { Task, ExecutionProgress, ExecutionLogEntry, PendingPermission, formatDuration } from "@/types/task"
+import { Task, ExecutionProgress, ExecutionLogEntry, formatDuration } from "@/types/task"
+import { BRAND_COLORS } from "@/lib/design-tokens"
 
 interface TaskDetailViewProps {
   task: Task | null
@@ -13,12 +17,11 @@ interface TaskDetailViewProps {
   open: boolean
   onClose: () => void
   onDelete?: (taskId: string) => void
-  onCancel?: (taskId: string) => void | Promise<void>
+  onCancel?: (taskId: string) => void
   onExecute?: (taskId: string) => void
   onUpdate?: (taskId: string, data: { title?: string; description?: string | null }) => void
   isExecuting?: boolean
-  pendingPermissions?: PendingPermission[]
-  onPermissionRespond?: (taskId: string, permissionId: string, response: 'once' | 'always' | 'reject') => void
+  project?: { id: string; name: string } | null
 }
 
 const statusConfig = {
@@ -50,44 +53,6 @@ const logColors = {
   success: 'text-green-400',
 }
 
-const progressConfig = {
-  cloning: {
-    label: 'Preparing repository',
-    tone: 'text-blue-400',
-    surface: 'bg-blue-500/10 border-blue-500/20',
-  },
-  executing: {
-    label: 'Running',
-    tone: 'text-linear-accent',
-    surface: 'bg-linear-accent/10 border-linear-accent/20',
-  },
-  committing: {
-    label: 'Committing changes',
-    tone: 'text-yellow-400',
-    surface: 'bg-yellow-500/10 border-yellow-500/20',
-  },
-  creating_pr: {
-    label: 'Creating pull request',
-    tone: 'text-purple-400',
-    surface: 'bg-purple-500/10 border-purple-500/20',
-  },
-  done: {
-    label: 'Done',
-    tone: 'text-green-400',
-    surface: 'bg-green-500/10 border-green-500/20',
-  },
-  cancelled: {
-    label: 'Cancelled',
-    tone: 'text-zinc-400',
-    surface: 'bg-zinc-500/10 border-zinc-500/20',
-  },
-  error: {
-    label: 'Failed',
-    tone: 'text-red-400',
-    surface: 'bg-red-500/10 border-red-500/20',
-  },
-}
-
 function formatTime(timestamp: string): string {
   const date = new Date(timestamp)
   return date.toLocaleTimeString('en-US', {
@@ -107,7 +72,7 @@ function formatDate(timestamp: string): string {
   })
 }
 
-export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, onCancel, onExecute, onUpdate, isExecuting, pendingPermissions, onPermissionRespond }: TaskDetailViewProps) {
+export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, onCancel, onExecute, onUpdate, isExecuting, project }: TaskDetailViewProps) {
   const logsContainerRef = useRef<HTMLDivElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const descriptionRef = useRef<HTMLTextAreaElement>(null)
@@ -116,7 +81,9 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
   const [titleDraft, setTitleDraft] = useState("")
   const [descriptionDraft, setDescriptionDraft] = useState("")
   const [cancelling, setCancelling] = useState(false)
-  const [respondingId, setRespondingId] = useState<string | null>(null)
+  // Tracks whether a save already fired this edit cycle so blur+Enter don't double-fire onUpdate.
+  const titleSavedRef = useRef(false)
+  const descriptionSavedRef = useRef(false)
 
   useEffect(() => {
     if (logsContainerRef.current && open && logs.length > 0) {
@@ -128,65 +95,18 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
     if (!isExecuting) setCancelling(false)
   }, [isExecuting])
 
-  // Keyboard shortcuts: 1=Allow Once, 2=Always Allow, 3=Deny
-  useEffect(() => {
-    if (!open || !task || !pendingPermissions?.length || !onPermissionRespond) return
-
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
-
-      const firstPerm = pendingPermissions![0]
-      if (!firstPerm || respondingId) return
-
-      if (e.key === '1') {
-        e.preventDefault()
-        setRespondingId(firstPerm.id)
-        onPermissionRespond!(task!.id, firstPerm.id, 'once')
-      } else if (e.key === '2') {
-        e.preventDefault()
-        setRespondingId(firstPerm.id)
-        onPermissionRespond!(task!.id, firstPerm.id, 'always')
-      } else if (e.key === '3') {
-        e.preventDefault()
-        setRespondingId(firstPerm.id)
-        onPermissionRespond!(task!.id, firstPerm.id, 'reject')
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [open, task, pendingPermissions, onPermissionRespond, respondingId])
-
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (editingTitle) {
-          setEditingTitle(false)
-          return
-        }
-        if (editingDescription) {
-          setEditingDescription(false)
-          return
-        }
-        if (open) {
-          onClose()
-        }
-      }
-    }
-    window.addEventListener('keydown', handleEscape)
-    return () => window.removeEventListener('keydown', handleEscape)
-  }, [open, onClose, editingTitle, editingDescription])
-
   useEffect(() => {
     if (editingTitle && titleInputRef.current) {
       titleInputRef.current.focus()
       titleInputRef.current.select()
+      titleSavedRef.current = false
     }
   }, [editingTitle])
 
   useEffect(() => {
     if (editingDescription && descriptionRef.current) {
       descriptionRef.current.focus()
+      descriptionSavedRef.current = false
     }
   }, [editingDescription])
 
@@ -196,6 +116,11 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
   }, [task?.id])
 
   const saveTitle = () => {
+    if (titleSavedRef.current) {
+      setEditingTitle(false)
+      return
+    }
+    titleSavedRef.current = true
     const trimmed = titleDraft.trim()
     if (trimmed && trimmed !== task?.title && onUpdate && task) {
       onUpdate(task.id, { title: trimmed })
@@ -204,6 +129,11 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
   }
 
   const saveDescription = () => {
+    if (descriptionSavedRef.current) {
+      setEditingDescription(false)
+      return
+    }
+    descriptionSavedRef.current = true
     if (!task || !onUpdate) { setEditingDescription(false); return }
     const value = descriptionDraft.trim() || null
     if (value !== (task.description || null)) {
@@ -212,23 +142,40 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
     setEditingDescription(false)
   }
 
-  if (!open || !task) {
+  // Esc inside an inline editor should cancel the edit, not close the Sheet.
+  // Stop propagation so Radix's outer Esc handler doesn't also fire.
+  const cancelTitleEdit = (e: React.KeyboardEvent) => {
+    e.stopPropagation()
+    titleSavedRef.current = true
+    setEditingTitle(false)
+  }
+  const cancelDescriptionEdit = (e: React.KeyboardEvent) => {
+    e.stopPropagation()
+    descriptionSavedRef.current = true
+    setEditingDescription(false)
+  }
+
+  if (!task) {
     return null
   }
 
   const statusInfo = statusConfig[task.status]
   const priorityInfo = priorityConfig[task.priority]
   const PriorityIcon = priorityInfo.icon
-  const liveProgress = progress ?? (isExecuting ? {
-    taskId: task.id,
-    status: 'executing' as const,
-    message: 'Task is running...'
-  } : undefined)
-  const showLiveProgress = !!liveProgress && task.status !== 'done'
+  const projectName = project?.name ?? 'No project'
 
   return (
-    <div className="absolute inset-0 z-40 bg-linear-bg">
-      <div className="flex flex-col h-full">
+    <Sheet open={open} onOpenChange={(next) => { if (!next) onClose() }}>
+      <SheetContent
+        side="right"
+        // Override default narrow width; this is a full task detail panel, not a settings drawer.
+        className="w-full sm:max-w-none md:w-[860px] lg:w-[960px] xl:w-[1100px] p-0 bg-linear-bg border-linear-border flex flex-col"
+        // Hide the built-in close button (we render our own X in the header)
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        <SheetTitle className="sr-only">{task.title}</SheetTitle>
+        <SheetDescription className="sr-only">Task detail view for {task.identifier || task.id}</SheetDescription>
+
         <header className="flex items-center justify-between px-3 sm:px-4 py-3 border-b border-linear-border">
           <div className="flex items-center gap-3">
             <Button
@@ -252,12 +199,7 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                   size="sm"
                   className="h-8 px-2 sm:px-3 text-linear-text-secondary hover:text-yellow-400 hover:bg-yellow-400/10"
                   disabled={cancelling}
-                  onClick={() => {
-                    setCancelling(true)
-                    void Promise.resolve(onCancel(task.id)).catch(() => {
-                      setCancelling(false)
-                    })
-                  }}
+                  onClick={() => { setCancelling(true); onCancel(task.id) }}
                 >
                   {cancelling ? (
                     <>
@@ -321,8 +263,11 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                       onChange={(e) => setTitleDraft(e.target.value)}
                       onBlur={saveTitle}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') saveTitle()
-                        if (e.key === 'Escape') setEditingTitle(false)
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          saveTitle()
+                        }
+                        if (e.key === 'Escape') cancelTitleEdit(e)
                       }}
                     />
                   ) : (
@@ -337,40 +282,6 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                     </h1>
                   )}
                 </div>
-
-                {showLiveProgress && (
-                  <div
-                    className={cn(
-                      "mb-6 p-4 border rounded-lg",
-                      progressConfig[liveProgress.status].surface,
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full bg-black/20 flex items-center justify-center flex-shrink-0">
-                        {['cloning', 'executing', 'committing', 'creating_pr'].includes(liveProgress.status) ? (
-                          <Loader2 className={cn("w-4 h-4 animate-spin", progressConfig[liveProgress.status].tone)} />
-                        ) : liveProgress.status === 'done' ? (
-                          <CheckCircle className={cn("w-4 h-4", progressConfig[liveProgress.status].tone)} />
-                        ) : liveProgress.status === 'error' ? (
-                          <AlertCircle className={cn("w-4 h-4", progressConfig[liveProgress.status].tone)} />
-                        ) : (
-                          <Clock className={cn("w-4 h-4", progressConfig[liveProgress.status].tone)} />
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-[11px] uppercase tracking-[0.16em] text-linear-text-tertiary">
-                          Status
-                        </div>
-                        <div className={cn("text-sm font-medium mt-1", progressConfig[liveProgress.status].tone)}>
-                          {progressConfig[liveProgress.status].label}
-                        </div>
-                        <p className="text-sm text-linear-text-secondary mt-1 break-words">
-                          {liveProgress.message || progressConfig[liveProgress.status].label}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 {task.status === 'done' && (
                   <div className="mb-6 p-4 bg-linear-bg-secondary border border-linear-border rounded-lg">
@@ -389,7 +300,10 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                     {(task.prUrl || progress?.prUrl) && (
                       <button
                         onClick={() => openExternal((task.prUrl || progress?.prUrl)!)}
-                        className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium text-white bg-[#8957e5] hover:bg-[#7c4dcc] transition-colors"
+                        className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium text-white transition-colors"
+                        style={{ backgroundColor: BRAND_COLORS.githubPurple }}
+                        onMouseEnter={(e: MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.backgroundColor = BRAND_COLORS.githubPurpleHover }}
+                        onMouseLeave={(e: MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.backgroundColor = BRAND_COLORS.githubPurple }}
                       >
                         <GitMerge className="w-3.5 h-3.5" />
                         View Pull Request
@@ -427,20 +341,28 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                       onChange={(e) => setDescriptionDraft(e.target.value)}
                       onBlur={saveDescription}
                       onKeyDown={(e) => {
-                        if (e.key === 'Escape') setEditingDescription(false)
+                        if (e.key === 'Escape') cancelDescriptionEdit(e)
+                        // ⌘+Enter (or Ctrl+Enter) saves description, mirroring task-form behavior.
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                          e.preventDefault()
+                          saveDescription()
+                        }
                       }}
                       rows={4}
                     />
                   ) : task.description ? (
-                    <p
-                      className="text-sm text-linear-text-secondary leading-relaxed whitespace-pre-wrap cursor-text hover:text-linear-text-secondary/80"
-                      onClick={() => {
+                    <div
+                      className="cursor-text rounded-md -mx-2 px-2 py-1 hover:bg-linear-bg-secondary/40"
+                      onClick={(e) => {
+                        // Don't enter edit mode when clicking embedded markdown links.
+                        const target = e.target as HTMLElement
+                        if (target.tagName === 'A' || target.closest('a')) return
                         setDescriptionDraft(task.description || "")
                         setEditingDescription(true)
                       }}
                     >
-                      {task.description}
-                    </p>
+                      <MarkdownView body={task.description} />
+                    </div>
                   ) : (
                     <button
                       className="text-sm text-linear-text-tertiary hover:text-linear-text-secondary"
@@ -454,82 +376,7 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                   )}
                 </div>
 
-                {pendingPermissions && pendingPermissions.length > 0 && task && (
-                  <div className="mb-8 space-y-3">
-                    {pendingPermissions.map((perm) => (
-                      <div
-                        key={perm.id}
-                        className="p-4 bg-amber-500/[0.06] border border-amber-500/20 rounded-lg"
-                      >
-                        <div className="flex items-start gap-3 mb-3">
-                          <div className="w-8 h-8 rounded-full bg-amber-500/15 flex items-center justify-center flex-shrink-0 mt-0.5">
-                            <ShieldAlert className="w-4 h-4 text-amber-400" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="text-sm font-medium text-linear-text mb-1">
-                              Permission Required
-                            </h4>
-                            <p className="text-sm text-linear-text-secondary">
-                              {perm.title}
-                            </p>
-                            <div className="flex items-center gap-3 mt-1.5 text-xs text-linear-text-tertiary">
-                              <span className="font-mono bg-white/[0.04] px-1.5 py-0.5 rounded">
-                                {perm.type}
-                              </span>
-                              {perm.pattern && (
-                                <span className="font-mono truncate">
-                                  {perm.pattern}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 ml-11">
-                          <Button
-                            size="sm"
-                            className="h-7 px-3 text-xs bg-green-600 hover:bg-green-700 text-white border-0"
-                            disabled={respondingId === perm.id}
-                            onClick={() => {
-                              setRespondingId(perm.id)
-                              onPermissionRespond?.(task.id, perm.id, 'once')
-                            }}
-                          >
-                            {respondingId === perm.id ? (
-                              <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                            ) : null}
-                            Allow Once
-                            <kbd className="ml-1.5 text-[10px] opacity-60 bg-white/10 px-1 rounded">1</kbd>
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="h-7 px-3 text-xs bg-blue-600 hover:bg-blue-700 text-white border-0"
-                            disabled={respondingId === perm.id}
-                            onClick={() => {
-                              setRespondingId(perm.id)
-                              onPermissionRespond?.(task.id, perm.id, 'always')
-                            }}
-                          >
-                            Always Allow
-                            <kbd className="ml-1.5 text-[10px] opacity-60 bg-white/10 px-1 rounded">2</kbd>
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 px-3 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                            disabled={respondingId === perm.id}
-                            onClick={() => {
-                              setRespondingId(perm.id)
-                              onPermissionRespond?.(task.id, perm.id, 'reject')
-                            }}
-                          >
-                            Deny
-                            <kbd className="ml-1.5 text-[10px] opacity-60 bg-white/10 px-1 rounded">3</kbd>
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <CommentsThread taskId={task.id} />
 
                 <div className="border-t border-linear-border pt-6">
                   <h2 className="text-sm font-medium text-linear-text-secondary mb-4 flex items-center gap-2">
@@ -544,14 +391,8 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                     {logs.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-12 text-linear-text-tertiary">
                         <Clock className="w-8 h-8 mb-2 opacity-50" />
-                        <p className="text-sm">
-                          {showLiveProgress ? 'Waiting for logs...' : 'No activity yet'}
-                        </p>
-                        <p className="text-xs mt-1 text-center max-w-xs">
-                          {showLiveProgress
-                            ? 'The task is running. Logs will appear here when the agent emits them.'
-                            : 'Execution logs will appear here when a task is run'}
-                        </p>
+                        <p className="text-sm">No activity yet</p>
+                        <p className="text-xs mt-1">Execution logs will appear here when a task is run</p>
                       </div>
                     ) : (
                       [...logs].reverse().map((log, index) => {
@@ -662,7 +503,7 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
                         <span className="text-sm text-linear-text-secondary">Project</span>
                         <Folder className="w-3.5 h-3.5 text-linear-text-tertiary" />
                       </div>
-                          <span className="text-sm text-linear-text">OpenLinear</span>
+                      <span className="text-sm text-linear-text">{projectName}</span>
                     </div>
 
                     <div className="py-2">
@@ -704,7 +545,7 @@ export function TaskDetailView({ task, logs, progress, open, onClose, onDelete, 
             </aside>
           </div>
         </div>
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   )
 }

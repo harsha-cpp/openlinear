@@ -1,83 +1,65 @@
-import { API_URL, getAuthHeader, toApiConnectionError, waitForApiReady } from './client';
+import { apiFetch } from './fetch';
 import type { Team, TeamMember } from './types';
 
 export async function fetchTeams(): Promise<Team[]> {
-  try {
-    await waitForApiReady()
-    const res = await fetch(`${API_URL}/api/teams`, { headers: getAuthHeader() })
-    if (!res.ok) throw new Error('Failed to fetch teams')
-    return res.json()
-  } catch (error) {
-    throw toApiConnectionError(error)
-  }
+  return apiFetch<Team[]>('/api/teams');
 }
 
 export async function fetchTeam(id: string): Promise<Team> {
-  const res = await fetch(`${API_URL}/api/teams/${id}`, { headers: getAuthHeader() })
-  if (!res.ok) throw new Error('Failed to fetch team')
-  return res.json()
+  return apiFetch<Team>(`/api/teams/${id}`);
 }
 
-export async function createTeam(data: { name: string; key: string; description?: string; color?: string; icon?: string; private?: boolean }): Promise<Team> {
-  try {
-    await waitForApiReady()
-    const res = await fetch(`${API_URL}/api/teams`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-      body: JSON.stringify(data),
-    })
-    if (!res.ok) throw new Error('Failed to create team')
-    return res.json()
-  } catch (error) {
-    throw toApiConnectionError(error)
-  }
-}
-
-export async function updateTeam(id: string, data: Partial<{ name: string; description: string | null; color: string; icon: string | null; private: boolean }>): Promise<Team> {
-  const res = await fetch(`${API_URL}/api/teams/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+export async function createTeam(data: {
+  name: string;
+  key: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+  private?: boolean;
+}): Promise<Team> {
+  return apiFetch<Team>('/api/teams', {
+    method: 'POST',
     body: JSON.stringify(data),
-  })
-  if (!res.ok) throw new Error('Failed to update team')
-  return res.json()
+  });
+}
+
+export async function updateTeam(
+  id: string,
+  data: Partial<{
+    name: string;
+    description: string | null;
+    color: string;
+    icon: string | null;
+    private: boolean;
+  }>,
+): Promise<Team> {
+  return apiFetch<Team>(`/api/teams/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
 }
 
 export async function deleteTeam(id: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/teams/${id}`, {
-    method: 'DELETE',
-    headers: getAuthHeader(),
-  })
-  if (!res.ok) throw new Error('Failed to delete team')
+  await apiFetch<void>(`/api/teams/${id}`, { method: 'DELETE' });
 }
 
-export async function addTeamMember(teamId: string, data: { email?: string; userId?: string; role?: string }): Promise<TeamMember> {
-  const res = await fetch(`${API_URL}/api/teams/${teamId}/members`, {
+export async function addTeamMember(
+  teamId: string,
+  data: { email?: string; userId?: string; role?: string },
+): Promise<TeamMember> {
+  return apiFetch<TeamMember>(`/api/teams/${teamId}/members`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
     body: JSON.stringify(data),
-  })
-  if (!res.ok) throw new Error('Failed to add team member')
-  return res.json()
+  });
 }
 
 export async function removeTeamMember(teamId: string, userId: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/teams/${teamId}/members/${userId}`, {
-    method: 'DELETE',
-    headers: getAuthHeader(),
-  })
-  if (!res.ok) throw new Error('Failed to remove team member')
+  await apiFetch<void>(`/api/teams/${teamId}/members/${userId}`, { method: 'DELETE' });
 }
 
 export async function joinTeam(inviteCode: string): Promise<Team> {
-  const res = await fetch(`${API_URL}/api/teams/join`, {
+  return apiFetch<Team>('/api/teams/join', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
     body: JSON.stringify({ inviteCode }),
-  })
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Failed to join team' }))
-    throw new Error(error.error || 'Failed to join team')
-  }
-  return res.json()
+  });
 }

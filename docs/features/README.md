@@ -1,33 +1,34 @@
-# Feature Documentation
+# OpenLinear Feature Documentation
 
-Detailed implementation documentation for each major feature in OpenLinear.
+Complete documentation for every feature in OpenLinear.
 
-## Core Features
+## Getting Started
 
-| Document | Description |
-|----------|-------------|
-| [Authentication](authentication.md) | GitHub OAuth, device flow, JWT middleware |
-| [Task Management](task-management.md) | Kanban board, task CRUD, status workflow |
-| [Project Management](project-management.md) | Projects, repository linking, team associations |
-| [Team Management](team-management.md) | Teams, members, roles, invite codes |
-| [Repository Management](repository-management.md) | GitHub import, activation, local folders |
-| [Label System](label-system.md) | Labels, colors, task-label associations |
+- [Getting Started](getting-started.md) -- prerequisites, installation, first task
 
-## Execution Engine
+## Features
 
-| Document | Description |
-|----------|-------------|
-| [Task Execution](task-execution.md) | Sidecar execution engine, git worktree, PR creation |
-| [Batch Execution](batch-execution.md) | Batch operations, parallel/sequential, progress |
-| [Sidecar Architecture](sidecar-architecture.md) | Sidecar service overview, routes, services |
-| [OpenCode Agent](opencode-agent-integration.md) | OpenCode SDK, model catalog, agent execution |
+- [Kanban Board](kanban-board.md) -- drag-and-drop task board with four columns
+- [Task Management](task-management.md) -- creating, editing, labeling, and archiving tasks
+- [Task Execution](task-execution.md) -- running a single task through an AI agent
+- [Batch Execution](batch-execution.md) -- running multiple tasks in parallel or queue mode
+- [Brainstorm](brainstorm.md) -- AI-powered task generation from natural language goals
+- [God Mode](god-mode.md) -- floating quick-access input overlay
+- [Inbox](inbox.md) -- completed and cancelled task notifications
+- [Teams](teams.md) -- team management, invite codes, and scoped issue numbering
+- [Projects](projects.md) -- project tracking with status, dates, repo linking, and team associations
 
-## Infrastructure
+## Integrations
 
-| Document | Description |
-|----------|-------------|
-| [Real-time SSE](realtime-sse.md) | Server-sent events, reconnection, heartbeat |
-| [Inbox & Notifications](inbox-notifications.md) | Inbox system, read/unread tracking |
-| [Settings](settings-configuration.md) | Settings management, execution config |
-| [Desktop Integration](desktop-integration.md) | Tauri integration, deep linking, shell |
-| [NPM Package](npm-package.md) | CLI launcher, validation, feature flags |
+- [OpenCode Integration](opencode-integration.md) -- host-based AI agent integration
+- [GitHub Integration](github-integration.md) -- OAuth, repository management, PR creation
+
+## Configuration
+
+- [Settings](settings.md) -- execution limits, batch behavior, conflict handling
+
+## Technical Reference
+
+- [Architecture](architecture.md) -- monorepo structure, host-based execution, deployment
+- [Real-time Events](real-time-events.md) -- SSE event catalog
+- [API Reference](api-reference.md) -- all REST endpoints

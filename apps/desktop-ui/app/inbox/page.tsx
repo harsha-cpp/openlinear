@@ -1,214 +1,260 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { useRouter } from "next/navigation"
 import {
-  Inbox, Check, CheckCheck, GitPullRequest, ExternalLink,
-  Clock, GitMerge, Loader2, RefreshCw
+  Inbox, CheckCheck, AtSign, UserPlus, ArrowRightLeft,
+  MessageSquare, Bell
 } from "lucide-react"
 import { AppShell } from "@/components/layout/app-shell"
-import { cn, openExternal } from "@/lib/utils"
-import { formatDuration } from "@/types/task"
-import {
-  fetchInboxTasks, fetchInboxCount, markInboxRead, markAllInboxRead, refreshTaskPr,
-  type InboxTask
-} from "@/lib/api"
-import { useSSE, SSEEventType, SSEEventData } from "@/hooks/use-sse"
-import { API_URL } from "@/lib/api/client"
+import { cn } from "@/lib/utils"
+import { apiFetch } from "@/lib/api"
+import { getApiUrl, getAuthToken } from "@/lib/api/client"
+import { EmptyState } from "@/components/empty-state"
+import { Skeleton } from "@/components/ui/skeleton"
 
-const SSE_URL = `${API_URL}/api/events`
+type NotificationType = 'mention' | 'assignment' | 'status_change' | 'comment'
 
-interface InboxGroup {
-  type: "batch" | "single"
-  batchId: string | null
-  tasks: InboxTask[]
-  prUrl: string | null
-  latestUpdatedAt: string
+interface NotificationActor {
+  id: string
+  username: string
+  avatarUrl: string | null
 }
 
-function groupInboxTasks(tasks: InboxTask[]): InboxGroup[] {
-  const batchMap = new Map<string, InboxTask[]>()
-  const singles: InboxTask[] = []
+interface AppNotification {
+  id: string
+  userId: string
+  type: NotificationType
+  taskId: string | null
+  commentId: string | null
+  actorUserId: string | null
+  actor?: NotificationActor | null
+  body: string
+  readAt: string | null
+  createdAt: string
+}
 
-  for (const task of tasks) {
-    if (task.batchId) {
-      const existing = batchMap.get(task.batchId)
-      if (existing) {
-        existing.push(task)
-      } else {
-        batchMap.set(task.batchId, [task])
+interface NotificationsListResponse {
+  items: AppNotification[]
+  page: number
+  pageSize: number
+  total: number
+  hasMore: boolean
+  unreadCount: number
+}
+
+type FilterChip = 'all' | 'mention' | 'assignment' | 'status_change'
+
+const MS_DAY = 24 * 60 * 60 * 1000
+
+function startOfDay(d: Date): number {
+  const x = new Date(d)
+  x.setHours(0, 0, 0, 0)
+  return x.getTime()
+}
+
+type Bucket = 'today' | 'week' | 'older'
+
+function bucketFor(dateStr: string, now: number): Bucket {
+  const t = new Date(dateStr).getTime()
+  const todayStart = startOfDay(new Date(now))
+  if (t >= todayStart) return 'today'
+  if (t >= todayStart - 6 * MS_DAY) return 'week'
+  return 'older'
+}
+
+const BUCKET_LABEL: Record<Bucket, string> = {
+  today: 'Today',
+  week: 'This week',
+  older: 'Older',
+}
+
+const BUCKET_ORDER: Bucket[] = ['today', 'week', 'older']
+
+const relativeFmt = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
+
+function timeAgo(dateStr: string, now: number): string {
+  const diffSec = Math.round((new Date(dateStr).getTime() - now) / 1000)
+  const abs = Math.abs(diffSec)
+  if (abs < 60) return relativeFmt.format(diffSec, 'second')
+  if (abs < 3600) return relativeFmt.format(Math.round(diffSec / 60), 'minute')
+  if (abs < 86_400) return relativeFmt.format(Math.round(diffSec / 3600), 'hour')
+  if (abs < 7 * 86_400) return relativeFmt.format(Math.round(diffSec / 86_400), 'day')
+  if (abs < 30 * 86_400) return relativeFmt.format(Math.round(diffSec / (7 * 86_400)), 'week')
+  return new Date(dateStr).toLocaleDateString()
+}
+
+const TYPE_META: Record<NotificationType, {
+  label: string
+  Icon: typeof AtSign
+  color: string
+  bg: string
+}> = {
+  mention: {
+    label: '@mention',
+    Icon: AtSign,
+    color: 'text-amber-400',
+    bg: 'bg-amber-400/10',
+  },
+  assignment: {
+    label: 'Assigned',
+    Icon: UserPlus,
+    color: 'text-blue-400',
+    bg: 'bg-blue-400/10',
+  },
+  status_change: {
+    label: 'Status',
+    Icon: ArrowRightLeft,
+    color: 'text-violet-400',
+    bg: 'bg-violet-400/10',
+  },
+  comment: {
+    label: 'Comment',
+    Icon: MessageSquare,
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-400/10',
+  },
+}
+
+const FILTER_CHIPS: { id: FilterChip; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'mention', label: '@mentions' },
+  { id: 'assignment', label: 'Assignments' },
+  { id: 'status_change', label: 'Status changes' },
+]
+
+async function fetchNotifications(): Promise<NotificationsListResponse> {
+  return apiFetch<NotificationsListResponse>('/api/notifications?pageSize=100')
+}
+
+async function markNotificationRead(id: string): Promise<void> {
+  await apiFetch(`/api/notifications/${id}/read`, { method: 'PATCH' })
+}
+
+async function markAllNotificationsRead(): Promise<void> {
+  await apiFetch('/api/notifications/read-all', { method: 'POST' })
+}
+
+function readToken(): string | null {
+  if (typeof window === 'undefined') return null
+  return getAuthToken()
+}
+
+function useNotificationStream(onCreated: (n: AppNotification) => void): void {
+  const cbRef = useRef(onCreated)
+  useEffect(() => {
+    cbRef.current = onCreated
+  }, [onCreated])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const token = readToken()
+    if (!token) return
+    const url = new URL(`${getApiUrl()}/api/events`)
+    url.searchParams.set('token', token)
+    const es = new EventSource(url.toString())
+    const handler = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data) as AppNotification
+        cbRef.current(data)
+      } catch {
+        /* swallow malformed payloads */
       }
-    } else {
-      singles.push(task)
     }
-  }
-
-  const groups: InboxGroup[] = []
-
-  for (const [batchId, batchTasks] of batchMap) {
-    const prUrl = batchTasks.find(t => t.prUrl)?.prUrl ?? null
-    const latestUpdatedAt = batchTasks.reduce(
-      (latest, t) => (t.updatedAt > latest ? t.updatedAt : latest),
-      batchTasks[0]!.updatedAt
-    )
-    groups.push({ type: "batch", batchId, tasks: batchTasks, prUrl, latestUpdatedAt })
-  }
-
-  for (const task of singles) {
-    groups.push({
-      type: "single",
-      batchId: null,
-      tasks: [task],
-      prUrl: task.prUrl,
-      latestUpdatedAt: task.updatedAt,
-    })
-  }
-
-  groups.sort((a, b) => new Date(b.latestUpdatedAt).getTime() - new Date(a.latestUpdatedAt).getTime())
-  return groups
+    es.addEventListener('notification:created', handler as EventListener)
+    return () => {
+      es.removeEventListener('notification:created', handler as EventListener)
+      es.close()
+    }
+  }, [])
 }
 
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return "just now"
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
-}
-
-const priorityDots: Record<string, string> = {
-  low: "bg-emerald-700",
-  medium: "bg-yellow-700",
-  high: "bg-red-700",
-}
-
-function InboxTaskRow({
-  task,
-  onMarkRead,
-  onRefreshPr,
-  compact,
-  hidePrLink,
+function NotificationRow({
+  notification,
+  onClick,
+  now,
 }: {
-  task: InboxTask
-  onMarkRead: (id: string) => void
-  onRefreshPr: (id: string) => void
-  compact?: boolean
-  hidePrLink?: boolean
+  notification: AppNotification
+  onClick: (n: AppNotification) => void
+  now: number
 }) {
+  const meta = TYPE_META[notification.type]
+  const Icon = meta.Icon
+  const unread = notification.readAt === null
+  const actorName = notification.actor?.username ?? 'Someone'
+
   return (
-    <div
+    <button
+      onClick={() => onClick(notification)}
       className={cn(
-        "flex items-start sm:items-center gap-3 px-4 py-3 transition-colors group flex-wrap",
-        !compact && "hover:bg-white/[0.03]",
-        !task.inboxRead && "bg-white/[0.02]"
+        "w-full flex items-start gap-3 px-4 py-3 text-left transition-colors group",
+        "hover:bg-white/[0.04]",
+        unread && "bg-white/[0.02]"
       )}
     >
-      <div className={cn(
-        "w-2 h-2 rounded-full flex-shrink-0",
-        task.inboxRead ? "bg-transparent" : "bg-linear-accent"
+      <span className={cn(
+        "mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0",
+        unread ? "bg-linear-accent" : "bg-transparent"
       )} />
 
-      <div className={cn("w-2 h-2 rounded-full flex-shrink-0", priorityDots[task.priority])} />
-
-      {task.status === 'cancelled' && (
-        <span className="text-[10px] px-1.5 py-0.5 rounded border border-red-500/20 bg-red-500/10 text-red-400 flex-shrink-0">
-          Cancelled
-        </span>
-      )}
-
-      <div className="flex-1 min-w-0 w-full sm:w-auto">
-        <div className="flex items-center gap-2">
-          {task.identifier && (
-            <span className="text-[11px] text-linear-text-tertiary font-mono flex-shrink-0">
-              {task.identifier}
-            </span>
-          )}
-          <span className={cn(
-            "text-sm truncate",
-            task.inboxRead ? "text-linear-text-secondary" : "text-linear-text",
-            task.status === 'cancelled' && "line-through opacity-70"
-          )}>
-            {task.title}
-          </span>
-        </div>
-        {task.labels.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1">
-            {task.labels.map(label => (
-              <span
-                key={label.id}
-                className="text-[10px] px-1.5 py-0.5 rounded border border-white/10"
-                style={{ backgroundColor: `${label.color}20`, color: label.color }}
-              >
-                {label.name}
-              </span>
-            ))}
-          </div>
+      <div className={cn(
+        "w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0",
+        meta.bg
+      )}>
+        {notification.actor?.avatarUrl ? (
+          <img
+            src={notification.actor.avatarUrl}
+            alt={actorName}
+            className="w-7 h-7 rounded-full object-cover"
+          />
+        ) : (
+          <Icon className={cn("w-3.5 h-3.5", meta.color)} />
         )}
       </div>
 
-      {task.executionElapsedMs > 0 && (
-        <span className="text-[11px] text-linear-text-tertiary flex items-center gap-1 flex-shrink-0">
-          <Clock className="w-3 h-3" />
-          {formatDuration(task.executionElapsedMs)}
-        </span>
-      )}
-
-      {task.prUrl && !hidePrLink && (
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <button
-            onClick={(e) => { e.stopPropagation(); openExternal(task.prUrl!) }}
-            className="flex items-center gap-1 text-[11px] text-purple-400 hover:text-purple-300 font-medium transition-colors"
-          >
-            <GitPullRequest className="w-3 h-3" />
-            {task.prUrl.includes('/compare/') ? 'Compare' : 'PR'}
-            <ExternalLink className="w-2.5 h-2.5" />
-          </button>
-          {task.prUrl.includes('/compare/') && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onRefreshPr(task.id) }}
-              className="p-0.5 rounded hover:bg-white/[0.06] text-purple-400/60 hover:text-purple-300 transition-colors"
-              title="Check if PR was created"
-            >
-              <RefreshCw className="w-3 h-3" />
-            </button>
-          )}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={cn(
+            "text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded",
+            meta.bg, meta.color
+          )}>
+            {meta.label}
+          </span>
+          <span className={cn(
+            "text-sm truncate",
+            unread ? "text-linear-text" : "text-linear-text-secondary"
+          )}>
+            {notification.body}
+          </span>
         </div>
-      )}
-
-      <span className="text-[11px] text-linear-text-tertiary flex-shrink-0">
-        {timeAgo(task.updatedAt)}
-      </span>
-
-      {!task.inboxRead && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onMarkRead(task.id) }}
-          className="p-1 rounded hover:bg-white/[0.06] transition-all flex-shrink-0"
-          title="Mark as read"
-        >
-          <Check className="w-3.5 h-3.5 text-linear-text-tertiary" />
-        </button>
-      )}
-    </div>
+        <div className="text-[11px] text-linear-text-tertiary mt-0.5">
+          {actorName} · {timeAgo(notification.createdAt, now)}
+        </div>
+      </div>
+    </button>
   )
 }
 
 export default function InboxPage() {
-  const [tasks, setTasks] = useState<InboxTask[]>([])
+  const router = useRouter()
+  const [notifications, setNotifications] = useState<AppNotification[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [inboxStats, setInboxStats] = useState({ total: 0, unread: 0 })
+  const [filter, setFilter] = useState<FilterChip>('all')
+  const [now, setNow] = useState<number>(() => Date.now())
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(t)
+  }, [])
 
   const loadData = useCallback(async () => {
     try {
-      const [inboxTasks, count] = await Promise.all([
-        fetchInboxTasks(),
-        fetchInboxCount(),
-      ])
-      setTasks(inboxTasks)
-      setInboxStats(count)
+      const res = await fetchNotifications()
+      setNotifications(res.items)
+      setUnreadCount(res.unreadCount)
     } catch (err) {
-      console.error("Failed to load inbox:", err)
+      console.error("Failed to load notifications:", err)
     } finally {
       setLoading(false)
     }
@@ -218,58 +264,84 @@ export default function InboxPage() {
     loadData()
   }, [loadData])
 
-  const handleSSEEvent = useCallback((eventType: SSEEventType, data: SSEEventData) => {
-    if (eventType === 'batch:completed' && data.batchId && data.prUrl) {
-      setTasks(prev => prev.map(task =>
-        task.batchId === data.batchId ? { ...task, prUrl: data.prUrl as string } : task
-      ))
+  useNotificationStream((n) => {
+    setNotifications((prev) => {
+      if (prev.some((p) => p.id === n.id)) return prev
+      return [n, ...prev]
+    })
+    if (n.readAt === null) {
+      setUnreadCount((c) => c + 1)
     }
-    if (eventType === 'task:updated' || eventType === 'task:created' || eventType === 'batch:completed') {
-      loadData()
-    }
-  }, [loadData])
+  })
 
-  useSSE(SSE_URL, handleSSEEvent)
-
-  const handleMarkRead = async (taskId: string) => {
-    setTasks((prev: InboxTask[]) => prev.map(t => t.id === taskId ? { ...t, inboxRead: true } : t))
-    setInboxStats(prev => ({ ...prev, unread: Math.max(0, prev.unread - 1) }))
-    await markInboxRead(taskId)
-  }
-
-  const handleMarkAllRead = async () => {
-    setTasks((prev: InboxTask[]) => prev.map(t => ({ ...t, inboxRead: true })))
-    setInboxStats(prev => ({ ...prev, unread: 0 }))
-    await markAllInboxRead()
-  }
-
-  const handleRefreshPr = async (taskId: string) => {
-    try {
-      const result = await refreshTaskPr(taskId)
-      if (result.refreshed && result.prUrl) {
-        setTasks(prev => prev.map(t => (t.id === taskId ? { ...t, prUrl: result.prUrl } : t)))
+  const handleNotificationClick = useCallback(async (n: AppNotification) => {
+    if (n.readAt === null) {
+      const nowIso = new Date().toISOString()
+      setNotifications((prev) => prev.map((p) => p.id === n.id ? { ...p, readAt: nowIso } : p))
+      setUnreadCount((c) => Math.max(0, c - 1))
+      try {
+        await markNotificationRead(n.id)
+      } catch (err) {
+        console.error("Failed to mark notification read:", err)
       }
-    } catch (err) {
-      console.error("Failed to refresh PR:", err)
     }
-  }
 
-  const groups = groupInboxTasks(tasks)
+    if (n.taskId) {
+      const params = new URLSearchParams()
+      params.set('task', n.taskId)
+      router.push(`/?${params.toString()}`)
+      if (n.commentId) {
+        const cid = n.commentId
+        // wait for route change + child render before scrolling to anchor
+        setTimeout(() => {
+          const el = document.getElementById(`comment-${cid}`)
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }, 400)
+      }
+    }
+  }, [router])
+
+  const handleMarkAllRead = useCallback(async () => {
+    const nowIso = new Date().toISOString()
+    setNotifications((prev) => prev.map((p) => p.readAt ? p : { ...p, readAt: nowIso }))
+    setUnreadCount(0)
+    try {
+      await markAllNotificationsRead()
+    } catch (err) {
+      console.error("Failed to mark all read:", err)
+    }
+  }, [])
+
+  const filtered = useMemo(() => {
+    if (filter === 'all') return notifications
+    return notifications.filter((n) => n.type === filter)
+  }, [notifications, filter])
+
+  const grouped = useMemo(() => {
+    const groups: Record<Bucket, AppNotification[]> = { today: [], week: [], older: [] }
+    for (const n of filtered) {
+      groups[bucketFor(n.createdAt, now)].push(n)
+    }
+    return groups
+  }, [filtered, now])
 
   return (
     <AppShell>
-      <header className="h-14 border-b border-linear-border flex items-center pl-[72px] pr-4 sm:pr-6 lg:px-6 bg-linear-bg gap-2 sm:gap-4" data-tauri-drag-region>
+      <header
+        className="h-14 border-b border-linear-border flex items-center px-4 sm:px-6 bg-linear-bg gap-2 sm:gap-4"
+        data-tauri-drag-region
+      >
         <div className="flex items-center gap-3 min-w-0">
           <Inbox className="w-5 h-5 text-linear-text-secondary flex-shrink-0" />
           <h1 className="text-lg font-semibold truncate">Inbox</h1>
-          {inboxStats.unread > 0 && (
-            <span className="text-xs text-linear-text-tertiary bg-linear-bg-tertiary px-1.5 py-0.5 rounded">
-              {inboxStats.unread}
+          {unreadCount > 0 && (
+            <span className="text-xs text-linear-accent bg-linear-accent/10 px-1.5 py-0.5 rounded font-medium">
+              {unreadCount}
             </span>
           )}
         </div>
         <div className="flex-1 h-full" data-tauri-drag-region />
-        {inboxStats.unread > 0 && (
+        {unreadCount > 0 && (
           <button
             onClick={handleMarkAllRead}
             className="flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium text-linear-text-secondary hover:text-linear-text hover:bg-linear-bg-tertiary transition-colors"
@@ -280,84 +352,74 @@ export default function InboxPage() {
         )}
       </header>
 
-      <div className="flex-1 overflow-y-auto bg-[#111111]">
+      <div className="px-4 sm:px-6 py-3 border-b border-linear-border bg-linear-bg flex items-center gap-2 flex-wrap">
+        {FILTER_CHIPS.map((chip) => {
+          const active = filter === chip.id
+          return (
+            <button
+              key={chip.id}
+              onClick={() => setFilter(chip.id)}
+              className={cn(
+                "px-2.5 h-7 rounded-full text-xs font-medium transition-colors border",
+                active
+                  ? "bg-linear-accent/15 text-linear-accent border-linear-accent/40"
+                  : "border-linear-border text-linear-text-secondary hover:text-linear-text hover:bg-linear-bg-tertiary"
+              )}
+            >
+              {chip.label}
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="flex-1 overflow-y-auto bg-linear-bg">
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-5 h-5 animate-spin text-linear-text-tertiary" />
-          </div>
-        ) : groups.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-linear-text-tertiary">
-            <Inbox className="w-10 h-10 mb-3 opacity-40" />
-            <p className="text-sm">No completed tasks yet</p>
-            <p className="text-xs mt-1 opacity-60">Tasks will appear here when they&apos;re done</p>
-          </div>
-        ) : (
           <div className="divide-y divide-linear-border">
-            {groups.map((group) => {
-              if (group.type === "single") {
-                return (
-                  <InboxTaskRow
-                    key={group.tasks[0]!.id}
-                    task={group.tasks[0]!}
-                    onMarkRead={handleMarkRead}
-                    onRefreshPr={handleRefreshPr}
-                  />
-                )
-              }
-
-              const allRead = group.tasks.every(t => t.inboxRead)
-
-              return (
-                <div key={group.batchId} className={cn(
-                  "border-l-2 transition-colors",
-                  allRead ? "border-l-transparent" : "border-l-purple-500/40"
-                )}>
-                  <div className="flex items-center gap-2 px-4 py-2.5 bg-white/[0.015] flex-wrap">
-                    <GitMerge className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
-                    <span className="text-[11px] text-purple-400/80 font-medium uppercase tracking-wider">
-                      Parallel Batch · {group.tasks.length} tasks
-                    </span>
-                    <div className="flex-1" />
-
-                    {group.prUrl && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => openExternal(group.prUrl!)}
-                          className="flex items-center gap-1 text-[11px] text-purple-400 hover:text-purple-300 font-medium transition-colors"
-                        >
-                          <GitPullRequest className="w-3 h-3" />
-                          {group.prUrl.includes('/compare/') ? 'Compare' : 'Open PR'}
-                          <ExternalLink className="w-2.5 h-2.5" />
-                        </button>
-                        {group.prUrl.includes('/compare/') && (
-                          <button
-                            onClick={() => handleRefreshPr(group.tasks[0]!.id)}
-                            className="p-0.5 rounded hover:bg-white/[0.06] text-purple-400/60 hover:text-purple-300 transition-colors"
-                            title="Check if PR was created"
-                          >
-                            <RefreshCw className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    <span className="text-[11px] text-linear-text-tertiary">
-                      {timeAgo(group.latestUpdatedAt)}
-                    </span>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex items-start gap-3 px-4 py-3">
+                <Skeleton className="mt-1 w-1.5 h-1.5 rounded-full" />
+                <Skeleton className="w-7 h-7 rounded-full flex-shrink-0" />
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-3 w-14 rounded" />
+                    <Skeleton className="h-3 w-2/3 rounded" />
                   </div>
-                  <div className="divide-y divide-white/[0.04]">
-                    {group.tasks.map(task => (
-                      <InboxTaskRow
-                        key={task.id}
-                        task={task}
-                        onMarkRead={handleMarkRead}
-                        onRefreshPr={handleRefreshPr}
-                        compact
-                        hidePrLink
+                  <Skeleton className="h-2.5 w-32 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            icon={Bell}
+            title="You're all caught up"
+            description={
+              filter === 'all'
+                ? 'No notifications yet'
+                : 'No notifications match this filter'
+            }
+          />
+        ) : (
+          <div>
+            {BUCKET_ORDER.map((bucket) => {
+              const items = grouped[bucket]
+              if (items.length === 0) return null
+              return (
+                <section key={bucket}>
+                  <div className="px-4 sm:px-6 py-2 text-[11px] uppercase tracking-wider font-semibold text-linear-text-tertiary bg-linear-bg-secondary/40 sticky top-0 backdrop-blur">
+                    {BUCKET_LABEL[bucket]} · {items.length}
+                  </div>
+                  <div className="divide-y divide-linear-border">
+                    {items.map((n) => (
+                      <NotificationRow
+                        key={n.id}
+                        notification={n}
+                        onClick={handleNotificationClick}
+                        now={now}
                       />
                     ))}
                   </div>
-                </div>
+                </section>
               )
             })}
           </div>

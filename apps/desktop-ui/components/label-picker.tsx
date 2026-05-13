@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { X, ChevronDown, Tag } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
   Popover,
@@ -11,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
+import { EmptyState } from "@/components/empty-state"
 
 interface Label {
   id: string
@@ -25,14 +27,13 @@ interface LabelPickerProps {
   triggerClassName?: string
 }
 
-import { API_URL } from "@/lib/api/client"
-
-const API_BASE_URL = `${API_URL}/api`
+import { apiFetch, ApiError } from "@/lib/api/fetch"
 
 export function LabelPicker({ selectedIds, onChange, triggerClassName }: LabelPickerProps) {
   const [labels, setLabels] = useState<Label[]>([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchLabels()
@@ -41,16 +42,19 @@ export function LabelPicker({ selectedIds, onChange, triggerClassName }: LabelPi
   const fetchLabels = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_BASE_URL}/labels`)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch labels: ${response.statusText}`)
-      }
-      const data = await response.json()
-      // Sort by priority
-      const sortedLabels = data.sort((a: Label, b: Label) => a.priority - b.priority)
+      setLoadError(null)
+      const data = await apiFetch<Label[]>('/api/labels')
+      const sortedLabels = [...data].sort((a, b) => a.priority - b.priority)
       setLabels(sortedLabels)
     } catch (err) {
-      console.error("Error fetching labels:", err)
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Could not reach OpenLinear server.'
+      setLoadError(msg)
+      toast.error(`Failed to load labels: ${msg}`)
     } finally {
       setLoading(false)
     }
@@ -108,10 +112,26 @@ export function LabelPicker({ selectedIds, onChange, triggerClassName }: LabelPi
               <div className="p-4 text-center text-sm text-linear-text-tertiary">
                 Loading labels...
               </div>
-            ) : labels.length === 0 ? (
-              <div className="p-4 text-center text-sm text-linear-text-tertiary">
-                No labels available
+            ) : loadError ? (
+              <div className="p-3 flex flex-col items-center gap-2">
+                <div className="text-xs text-red-400 text-center">{loadError}</div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={fetchLabels}
+                  className="text-xs h-7"
+                >
+                  Retry
+                </Button>
               </div>
+            ) : labels.length === 0 ? (
+              <EmptyState
+                size="compact"
+                icon={Tag}
+                title="No labels available"
+                description="Create labels in Settings to tag tasks"
+              />
             ) : (
               labels.map((label) => (
                 <div
